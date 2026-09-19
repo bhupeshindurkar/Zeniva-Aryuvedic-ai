@@ -160,16 +160,22 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState(() => {
     try {
       if (initialState.role === 'doctor') {
-        const savedDoc = localStorage.getItem('zeniva_doctor_user') || localStorage.getItem('zeniva_registered_doctor');
+        const savedDoc = localStorage.getItem('zeniva_doctor_user') || localStorage.getItem('zeniva_registered_doctor') || localStorage.getItem('zeniva_current_user');
         if (savedDoc) {
           const parsed = JSON.parse(savedDoc);
           if (parsed && (parsed.role === 'doctor' || parsed.qualification)) return parsed;
         }
       } else if (initialState.role === 'patient') {
-        const savedPat = localStorage.getItem('zeniva_patient_user');
+        const savedPat = localStorage.getItem('zeniva_patient_user') || localStorage.getItem('zeniva_current_user');
         if (savedPat) {
           const parsed = JSON.parse(savedPat);
-          if (parsed && parsed.role === 'patient') return parsed;
+          if (parsed && (parsed.role === 'patient' || parsed.name || parsed.email)) {
+            return {
+              ...parsed,
+              role: 'patient',
+              isLoggedIn: parsed.isLoggedIn ?? true
+            };
+          }
         }
       } else if (initialState.role === 'admin') {
         return {
@@ -284,7 +290,6 @@ export default function App() {
 
   // Supabase Auth State & Profile Sync
   useEffect(() => {
-    // 1. Listen to Supabase Auth State Changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (session?.user) {
         try {
@@ -294,31 +299,45 @@ export default function App() {
             .eq('id', session.user.id)
             .single();
 
-          if (profile) {
-            const userRole = profile.role || currentRole;
-            const updatedUser = {
-              id: profile.id,
-              name: profile.full_name || session.user.user_metadata?.full_name || 'Zeniva User',
-              email: profile.email || session.user.email,
-              phone: profile.phone || '',
-              role: userRole,
-              city: profile.city || 'India',
-              prakriti: profile.prakriti || 'Stress & Sleep Wellness',
-              dosha: profile.prakriti || 'Stress & Sleep Wellness',
-              avatar: profile.avatar_url || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150',
-              status: profile.status || 'active',
-              isLoggedIn: true,
-              isRegistered: true,
-              auth_provider: 'supabase'
-            };
+          // Read local cache to retain custom fields, age, gender, custom avatar, etc.
+          let localPat = {};
+          try {
+            const raw = localStorage.getItem('zeniva_patient_user') || localStorage.getItem('zeniva_current_user');
+            if (raw) localPat = JSON.parse(raw);
+          } catch (e) {}
 
-            setCurrentUser(updatedUser);
-            localStorage.setItem('zeniva_current_user', JSON.stringify(updatedUser));
-            if (userRole === 'doctor') {
-              localStorage.setItem('zeniva_doctor_user', JSON.stringify(updatedUser));
-            } else if (userRole === 'patient') {
-              localStorage.setItem('zeniva_patient_user', JSON.stringify(updatedUser));
-            }
+          const userRole = profile?.role || localPat.role || currentRole || 'patient';
+          const updatedUser = {
+            ...localPat,
+            id: session.user.id,
+            name: profile?.full_name || session.user.user_metadata?.full_name || localPat.name || 'Zeniva Patient',
+            email: profile?.email || session.user.email || localPat.email,
+            phone: profile?.phone || session.user.user_metadata?.phone || localPat.phone || '',
+            role: userRole,
+            city: profile?.city || localPat.city || localPat.location || 'Nagpur, Maharashtra',
+            location: profile?.city || localPat.location || localPat.city || 'Nagpur, Maharashtra',
+            prakriti: profile?.prakriti || localPat.prakriti || 'Stress & Sleep Wellness Profile',
+            dosha: profile?.prakriti || localPat.dosha || 'Stress & Sleep Wellness Profile',
+            age: profile?.age || localPat.age || 25,
+            gender: profile?.gender || localPat.gender || 'Female',
+            bloodGroup: profile?.blood_group || localPat.bloodGroup || localPat.blood_group || 'B+',
+            blood_group: profile?.blood_group || localPat.blood_group || localPat.bloodGroup || 'B+',
+            diet: profile?.diet || localPat.diet || 'Vegan Whole Plant Foods',
+            agribalam: profile?.agribalam || localPat.agribalam || 'Madhyama Agni (Moderate Digestion)',
+            vikriti: profile?.vikriti || localPat.vikriti || '',
+            avatar: localPat.avatar || profile?.avatar_url || session.user.user_metadata?.avatar_url || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150',
+            status: profile?.status || localPat.status || 'active',
+            isLoggedIn: true,
+            isRegistered: true,
+            auth_provider: 'supabase'
+          };
+
+          setCurrentUser(updatedUser);
+          localStorage.setItem('zeniva_current_user', JSON.stringify(updatedUser));
+          if (userRole === 'doctor') {
+            localStorage.setItem('zeniva_doctor_user', JSON.stringify(updatedUser));
+          } else if (userRole === 'patient') {
+            localStorage.setItem('zeniva_patient_user', JSON.stringify(updatedUser));
           }
         } catch (e) {
           console.warn('Supabase auth state listener error:', e);
@@ -350,7 +369,7 @@ export default function App() {
         const savedPat = localStorage.getItem('zeniva_patient_user') || localStorage.getItem('zeniva_current_user');
         if (savedPat) {
           const parsed = JSON.parse(savedPat);
-          if (parsed && parsed.name) {
+          if (parsed && (parsed.name || parsed.email)) {
             setCurrentUser(prev => ({ ...prev, ...parsed, role: 'patient' }));
             activeIdentifier = parsed.phone || parsed.email || '';
           }
@@ -361,7 +380,7 @@ export default function App() {
         const savedDoc = localStorage.getItem('zeniva_doctor_user') || localStorage.getItem('zeniva_registered_doctor') || localStorage.getItem('zeniva_current_user');
         if (savedDoc) {
           const parsed = JSON.parse(savedDoc);
-          if (parsed && parsed.name) {
+          if (parsed && (parsed.name || parsed.qualification)) {
             setCurrentUser(prev => ({ ...prev, ...parsed, role: 'doctor' }));
             activeIdentifier = parsed.phone || parsed.email || '';
           }
@@ -374,7 +393,11 @@ export default function App() {
 
     if (!identifier) return;
 
-    fetch(`http://127.0.0.1:8000/api/user/profile/${encodeURIComponent(identifier)}?role=${currentRole}`)
+    const profileUrl = (typeof window !== 'undefined' && window.location.hostname !== 'localhost')
+      ? `/api/user/profile/${encodeURIComponent(identifier)}?role=${currentRole}`
+      : `http://127.0.0.1:8000/api/user/profile/${encodeURIComponent(identifier)}?role=${currentRole}`;
+
+    fetch(profileUrl)
       .then(res => res.ok ? res.json() : null)
       .then(data => {
         if (!data) return;
@@ -386,8 +409,8 @@ export default function App() {
           setCurrentUser(prev => {
             const effectiveAvatar = dbRecord.avatar || prev.avatar;
             const cleanName = currentRole === 'patient'
-              ? (dbRecord.name || prev.name || 'Bhupesh Indurkar').replace(/^Dr\.\s*/i, '')
-              : (dbRecord.name?.startsWith('Dr.') ? dbRecord.name : `Dr. ${dbRecord.name || prev.name || 'Bhupesh Indurkar'}`);
+              ? (dbRecord.name || prev.name || 'Patient').replace(/^Dr\.\s*/i, '')
+              : (dbRecord.name?.startsWith('Dr.') ? dbRecord.name : `Dr. ${dbRecord.name || prev.name || 'Doctor'}`);
 
             const merged = {
               ...prev,
@@ -410,7 +433,9 @@ export default function App() {
           });
         }
       })
-      .catch(err => console.warn("Database profile sync notice:", err));
+      .catch(err => {
+        // Silent catch for offline or static cloud deployments
+      });
   }, [currentRole]);
 
   const handleUpdateUser = (updated) => {

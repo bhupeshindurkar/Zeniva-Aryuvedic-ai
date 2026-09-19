@@ -4,6 +4,8 @@ import {
   Activity, Heart, Sparkles, Check, Edit3, Save, Calendar,
   Camera, Upload, Image as ImageIcon
 } from 'lucide-react';
+import { supabase } from '../lib/supabase';
+import { getApiUrl } from '../lib/api';
 
 export const MyProfileView = ({ currentUser = {}, onUpdateUser = () => {} }) => {
   const [isEditing, setIsEditing] = useState(false);
@@ -32,7 +34,7 @@ export const MyProfileView = ({ currentUser = {}, onUpdateUser = () => {} }) => 
   });
 
   useEffect(() => {
-    if (currentUser) {
+    if (currentUser && (currentUser.name || currentUser.email)) {
       setProfileData({
         name: currentUser.name || '',
         phone: currentUser.phone || '',
@@ -55,6 +57,41 @@ export const MyProfileView = ({ currentUser = {}, onUpdateUser = () => {} }) => 
   const formattedPhone = rawPhone.length === 10
     ? `+91 ${rawPhone.slice(0, 5)} ${rawPhone.slice(5)}`
     : (rawPhone ? `+91 ${rawPhone}` : 'Not registered');
+
+  // Helper to sync to Supabase & Backend
+  const syncProfileRemotely = async (updatedUser) => {
+    // 1. Supabase Profiles Table
+    try {
+      if (updatedUser.id || updatedUser.email) {
+        await supabase.from('profiles').upsert({
+          id: updatedUser.id,
+          full_name: updatedUser.name,
+          email: updatedUser.email,
+          phone: rawPhone || updatedUser.phone,
+          city: updatedUser.location || updatedUser.city,
+          prakriti: updatedUser.prakriti,
+          avatar_url: updatedUser.avatar,
+          age: updatedUser.age,
+          gender: updatedUser.gender,
+          blood_group: updatedUser.bloodGroup || updatedUser.blood_group,
+          diet: updatedUser.diet,
+          agribalam: updatedUser.agribalam,
+          vikriti: updatedUser.vikriti,
+          role: updatedUser.role || 'patient'
+        }, { onConflict: 'id' });
+      }
+    } catch (supaErr) {}
+
+    // 2. SQLite Backend (Local / Prod)
+    try {
+      const url = getApiUrl('/api/user/profile');
+      await fetch(url, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedUser)
+      });
+    } catch (backendErr) {}
+  };
 
   // Real Photo Upload Handler
   const handleImageUpload = (e) => {
@@ -80,14 +117,8 @@ export const MyProfileView = ({ currentUser = {}, onUpdateUser = () => {} }) => 
           } else {
             localStorage.setItem('zeniva_patient_user', JSON.stringify(updatedUser));
           }
-          await fetch('http://127.0.0.1:8000/api/user/profile', {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(updatedUser)
-          });
-        } catch (err) {
-          console.warn("Backend profile sync notice:", err);
-        }
+        } catch (err) {}
+        await syncProfileRemotely(updatedUser);
         setSaveSuccess(true);
         setTimeout(() => setSaveSuccess(false), 2500);
       };
@@ -113,14 +144,8 @@ export const MyProfileView = ({ currentUser = {}, onUpdateUser = () => {} }) => 
       } else {
         localStorage.setItem('zeniva_patient_user', JSON.stringify(updatedUser));
       }
-      await fetch('http://127.0.0.1:8000/api/user/profile', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updatedUser)
-      });
-    } catch (err) {
-      console.warn("Backend profile sync notice:", err);
-    }
+    } catch (err) {}
+    await syncProfileRemotely(updatedUser);
     setSaveSuccess(true);
     setTimeout(() => setSaveSuccess(false), 2500);
   };
