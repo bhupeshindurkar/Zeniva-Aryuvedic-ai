@@ -268,10 +268,19 @@ export const LoginPortal = ({
       // 2. Also try Supabase Auth password login if email provided
       if (!foundDoc && isEmail) {
         try {
-          const { data: authData } = await supabase.auth.signInWithPassword({
+          const { data: authData, error: supaErr } = await supabase.auth.signInWithPassword({
             email: identifier,
             password: signinPassword,
           });
+
+          if (supaErr) {
+            if (supaErr.message && supaErr.message.toLowerCase().includes('email not confirmed')) {
+              setErrorMessage(`⚠️ Email verification required! Please check your doctor email inbox at "${identifier}" and click the verification link.`);
+              setIsSubmitting(false);
+              return;
+            }
+          }
+
           if (authData?.user) {
             const { data: profile } = await supabase
               .from('profiles')
