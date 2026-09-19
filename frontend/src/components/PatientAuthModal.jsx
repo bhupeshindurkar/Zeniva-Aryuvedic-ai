@@ -340,33 +340,21 @@ export const PatientAuthModal = ({
       prakriti: doshaFocus,
       dosha: doshaFocus,
       avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150',
-      status: needsEmailVerification ? 'pending_verification' : 'active',
+      status: 'pending_verification',
       isRegistered: true,
-      isLoggedIn: !needsEmailVerification,
+      isLoggedIn: false,
       auth_provider: 'supabase'
     };
 
     try {
       localStorage.setItem('zeniva_patient_user', JSON.stringify(newPatient));
-      if (!needsEmailVerification) {
-        localStorage.setItem('zeniva_current_user', JSON.stringify(newPatient));
-      }
     } catch (e) {}
 
     setIsSubmitting(false);
 
-    // If verification email was sent, show verification screen
-    if (needsEmailVerification) {
-      setActiveTab('verify_email');
-      setSuccessMessage(`✓ Verification email sent to ${cleanEmail}! Please check your inbox.`);
-      return;
-    }
-
-    setSuccessMessage(`✓ Account created successfully for ${enteredName}! Loading Patient Portal...`);
-    setTimeout(() => {
-      onAuthSuccess(newPatient);
-      onClose();
-    }, 400);
+    // ALWAYS navigate to Verify Email view upon Sign Up
+    setActiveTab('verify_email');
+    setSuccessMessage(`✓ Verification email sent to ${cleanEmail}! Please check your inbox or spam folder.`);
   };
 
   // 3. RESEND VERIFICATION EMAIL
