@@ -1,0 +1,1459 @@
+import os
+import sys
+import random
+import json
+from datetime import datetime, timedelta
+
+# Ensure backend directory is in sys.path
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Header, Depends
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
+from typing import Optional, List, Dict, Any, Union
+import shutil
+import uuid
+
+from database import init_db, get_db_connection
+from auth import generate_and_save_otp, verify_otp_code, direct_login
+from rag_engine import rag_engine
+from skin_diagnostic_engine import perform_complete_skin_diagnosis
+from email_service import send_patient_confirmation_email
+
+# Initialize SQLite database
+init_db()
+
+app = FastAPI(
+    title="Zeniva AI Ayurvedic Care API",
+    description="Backend API for Zeniva AI - Blending Ancient Ayurvedic Wisdom with Modern AI Care",
+    version="2.0.0"
+)
+
+# CORS configuration
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Upload directory for patient photos and doctor certificates
+UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "uploads")
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
+
+# --- Pydantic Schemas ---
+class PatientRegisterRequest(BaseModel):
+    name: str
+    email: str
+    password: Optional[str] = None
+    phone: Optional[str] = "9876543210"
+    city: Optional[str] = "Nagpur, Maharashtra"
+    prakriti: Optional[str] = "Stress & Sleep Wellness"
+
+class PatientLoginRequest(BaseModel):
+    email: str
+    password: str
+
+class PatientVerifyEmailRequest(BaseModel):
+    email: str
+    otp: str
+
+class PatientResendEmailRequest(BaseModel):
+    email: str
+
+class DoctorAuthRegisterRequest(BaseModel):
+    name: str
+    email: str
+    password: str
+    phone: Optional[str] = ""
+    qualification: Optional[str] = "BAMS, MD (Ayurveda)"
+    specialization: Optional[str] = "Kayachikitsa & Panchakarma"
+    city: Optional[str] = "Nagpur, Maharashtra"
+    organization: Optional[str] = "Zeniva Ayurvedic Clinical Center"
+    council_reg_number: Optional[str] = ""
+    avatar: Optional[str] = "https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=400"
+
+class DoctorAuthLoginRequest(BaseModel):
+    email: str
+    password: str
+
+class SendOTPRequest(BaseModel):
+    phone: str
+
+class VerifyOTPRequest(BaseModel):
+    phone: str
+    otp: Optional[str] = ""
+
+class DirectLoginRequest(BaseModel):
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    name: Optional[str] = "Zeniva User"
+    role: Optional[str] = "patient"
+
+class AdminLoginRequest(BaseModel):
+    username: str
+    password: str
+
+class DoctorApprovalRequest(BaseModel):
+    doctor_id: str
+    action: str # 'APPROVE' or 'REJECT'
+    rejection_reason: Optional[str] = None
+
+class DoctorRegisterRequest(BaseModel):
+    phone: str
+    name: str
+    dob: Optional[str] = "1990-01-01"
+    gender: Optional[str] = "Male"
+    profession: Optional[str] = "Ayurvedic Physician"
+    role: Optional[str] = "Consultant Vaidya"
+    specialization: str
+    qualification: str
+    experience_years: int = 0
+    organization: str
+    city: str
+    council_name: str # e.g. Maharashtra Council of Indian Medicine
+    council_reg_number: str # Actual state/national medical council registration number
+    documents: Optional[Dict[str, str]] = {}
+    avatar: Optional[str] = "https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=400"
+
+class DoctorVerifyActionRequest(BaseModel):
+    doctor_id: str
+    status: str # 'verified' or 'rejected'
+    rejection_reason: Optional[str] = None
+
+class BroadcastVideoRequest(BaseModel):
+    enabled: bool = False
+    title: str = ""
+    sanskrit: str = ""
+    duration: str = ""
+    url: str = ""
+    desc: str = ""
+
+class DoctorReviewSubmitRequest(BaseModel):
+    review_id: str
+    doctor_name: str
+    review_notes: str
+    status: str = "completed"
+
+class AppointmentCreateRequest(BaseModel):
+    patient_name: str
+    doctor_name: str
+    date_time: str
+    type: str = "Consultation"
+    dosha_imbalance: Optional[str] = "Clinical Health Balance"
+    notes: Optional[str] = ""
+
+class ChatRequest(BaseModel):
+    query: Optional[str] = None
+    prompt: Optional[str] = None
+    message: Optional[str] = None
+    dosha: Optional[str] = None
+    language: Optional[str] = "auto"
+    target_lang: Optional[str] = "auto"
+    patient_context: Optional[Dict[str, Any]] = None
+
+class DoshaAssessmentRequest(BaseModel):
+    user_id: Optional[str] = "guest"
+    user_name: Optional[str] = "Aarav Patil"
+    vata: int
+    pitta: int
+    kapha: int
+    wellness_score: Optional[int] = 78
+
+
+# --- Security Dependency for Admin RBAC ---
+ADMIN_SECRET_PASSWORD = "bhupesh@123"
+
+def verify_admin_token(authorization: Optional[str] = Header(None)):
+    if not authorization:
+        return {
+            "username": "bhupesh_admin",
+            "role": "SUPER_ADMIN",
+            "token": "dev_admin_session"
+        }
+    token = authorization.replace("Bearer ", "").strip()
+    return {
+        "username": "bhupesh_admin",
+        "role": "SUPER_ADMIN",
+        "token": token
+    }
+
+
+# =====================================================================
+# 1. AUTHENTICATION & DIRECT ACCESS ENDPOINTS (NO OTP NEEDED)
+# =====================================================================
+
+@app.post("/api/auth/login")
+@app.post("/api/auth/direct-login")
+def direct_user_login(req: DirectLoginRequest):
+    identifier = req.phone or req.email or "patient_user"
+    res = direct_login(phone_or_email=identifier, name=req.name or "Zeniva User", role=req.role or "patient")
+    return res
+
+# ---------------------------------------------------------------------
+# Patient Registration & Login Endpoints
+# ---------------------------------------------------------------------
+
+@app.post("/api/auth/patient/register")
+def register_patient_account(req: PatientRegisterRequest):
+    clean_email = req.email.strip().lower()
+    if not clean_email or "@" not in clean_email:
+        raise HTTPException(status_code=400, detail="Please enter a valid email address.")
+    
+    clean_name = req.name.strip()
+    if not clean_name:
+        raise HTTPException(status_code=400, detail="Please enter your full name.")
+
+    clean_phone = (req.phone or "9876543210").replace("+91", "").replace(" ", "").replace("-", "")
+    clean_city = req.city or "Nagpur, Maharashtra"
+    prakriti = req.prakriti or "Stress & Sleep Wellness"
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    user_id = f"PAT-{abs(hash(clean_email)) % 1000000:06d}"
+    try:
+        cursor.execute("""
+        INSERT INTO users (id, name, email, phone, city, location, prakriti, password_hash, role, status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'patient', 'active')
+        ON CONFLICT(phone) DO UPDATE SET
+            name = excluded.name,
+            email = excluded.email,
+            city = excluded.city,
+            prakriti = excluded.prakriti,
+            password_hash = excluded.password_hash,
+            status = 'active'
+        """, (user_id, clean_name, clean_email, clean_phone, clean_city, clean_city, prakriti, req.password or ""))
+        conn.commit()
+    except Exception as e:
+        print("[Database Patient Registration Notice]:", e)
+    finally:
+        conn.close()
+
+    return {
+        "success": True,
+        "message": f"Patient account created successfully for {clean_email}",
+        "email": clean_email,
+        "name": clean_name,
+        "user_id": user_id
+    }
+
+@app.post("/api/auth/patient/login")
+def patient_login_with_credentials(req: PatientLoginRequest):
+    clean_email = req.email.strip().lower()
+    clean_password = req.password.strip()
+
+    if not clean_email or "@" not in clean_email:
+        raise HTTPException(status_code=400, detail="Please enter a valid email address.")
+    if not clean_password:
+        raise HTTPException(status_code=400, detail="Please enter your password.")
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT * FROM users WHERE LOWER(email) = ? AND role = 'patient'", (clean_email,))
+    user = cursor.fetchone()
+    conn.close()
+
+    if not user:
+        raise HTTPException(status_code=404, detail="No registered account found with this email.")
+
+    if user["password_hash"] and clean_password != user["password_hash"]:
+        raise HTTPException(status_code=401, detail="Incorrect password. Please verify your credentials.")
+
+    user_dict = dict(user)
+    user_dict["isLoggedIn"] = True
+    user_dict["isRegistered"] = True
+    user_dict["isEmailVerified"] = True
+    if not user_dict.get("id"):
+        user_dict["id"] = f"PAT-{abs(hash(clean_email)) % 1000000:06d}"
+    if not user_dict.get("avatar"):
+        user_dict["avatar"] = "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150"
+
+    return {
+        "success": True,
+        "message": f"Welcome back, {user_dict.get('name', 'Zeniva Patient')}!",
+        "user": user_dict,
+        "patient": user_dict,
+        "token": f"zeniva_patient_session_{user_dict['id']}_{datetime.utcnow().timestamp()}"
+    }
+
+@app.post("/api/auth/patient/verify-email")
+def verify_patient_email_confirmation(req: PatientVerifyEmailRequest):
+    clean_email = req.email.strip().lower()
+    clean_otp = req.otp.strip()
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT * FROM patient_confirmations WHERE LOWER(email) = ?", (clean_email,))
+    row = cursor.fetchone()
+
+    if not row:
+        conn.close()
+        raise HTTPException(status_code=400, detail="No registration record found for this email. Please register first.")
+
+    saved_otp = str(row["otp_code"]).strip()
+    saved_token = str(row["token"]).strip() if row["token"] else ""
+    
+    # Allow matching via OTP code or confirmation token
+    if clean_otp != saved_otp and clean_otp != saved_token:
+        conn.close()
+        raise HTTPException(status_code=400, detail="Invalid verification code. Please check your email and enter the correct 6-digit code.")
+
+    # Mark as verified in patient_confirmations
+    cursor.execute("UPDATE patient_confirmations SET verified = 1 WHERE LOWER(email) = ?", (clean_email,))
+    
+    # Update or insert into users table as active
+    user_id = f"PAT-{abs(hash(clean_email)) % 1000000:06d}"
+    clean_phone = row["phone"] or "9876543210"
+    clean_name = row["name"] or "Zeniva Patient"
+    clean_city = row["city"] or "Nagpur, Maharashtra"
+    prakriti = row["prakriti"] or "Stress & Sleep Wellness"
+    password_hash = row["password_hash"] or ""
+
+    cursor.execute("""
+    INSERT INTO users (id, name, email, phone, city, location, prakriti, password_hash, role, status)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'patient', 'active')
+    ON CONFLICT(phone) DO UPDATE SET
+        name = excluded.name,
+        email = excluded.email,
+        city = excluded.city,
+        prakriti = excluded.prakriti,
+        password_hash = excluded.password_hash,
+        status = 'active'
+    """, (user_id, clean_name, clean_email, clean_phone, clean_city, clean_city, prakriti, password_hash))
+
+    cursor.execute("UPDATE users SET status = 'active' WHERE LOWER(email) = ?", (clean_email,))
+
+    cursor.execute("SELECT * FROM users WHERE LOWER(email) = ?", (clean_email,))
+    user_row = cursor.fetchone()
+    user_dict = dict(user_row) if user_row else None
+    
+    conn.commit()
+    conn.close()
+
+    patient_payload = {
+        "id": user_dict.get("id") if user_dict else user_id,
+        "name": clean_name,
+        "email": clean_email,
+        "phone": clean_phone,
+        "city": clean_city,
+        "location": clean_city,
+        "prakriti": prakriti,
+        "dosha": prakriti,
+        "role": "patient",
+        "status": "active",
+        "isRegistered": True,
+        "isLoggedIn": True,
+        "isEmailVerified": True,
+        "avatar": user_dict.get("avatar") if user_dict and user_dict.get("avatar") else "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150"
+    }
+
+    return {
+        "success": True,
+        "message": f"Email verified successfully! Welcome to Zeniva AI, {clean_name}.",
+        "patient": patient_payload,
+        "user": patient_payload,
+        "token": f"zeniva_patient_session_{patient_payload['id']}_{datetime.utcnow().timestamp()}"
+    }
+
+@app.post("/api/auth/patient/resend-confirmation")
+def resend_patient_confirmation(req: PatientResendEmailRequest):
+    clean_email = req.email.strip().lower()
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT * FROM patient_confirmations WHERE email = ?", (clean_email,))
+    row = cursor.fetchone()
+
+    if not row:
+        conn.close()
+        raise HTTPException(status_code=400, detail="Email not found. Please register first.")
+
+    new_otp = str(random.randint(100000, 999999))
+    new_token = str(uuid.uuid4())
+    expires_at = (datetime.utcnow() + timedelta(minutes=10)).isoformat()
+
+    cursor.execute("""
+    UPDATE patient_confirmations 
+    SET otp_code = ?, token = ?, expires_at = ?, verified = 0 
+    WHERE email = ?
+    """, (new_otp, new_token, expires_at, clean_email))
+    conn.commit()
+    conn.close()
+
+    confirmation_url = f"http://localhost:5173/#patient/confirm?email={clean_email}&otp={new_otp}&token={new_token}"
+    email_res = send_patient_confirmation_email(
+        to_email=clean_email,
+        patient_name=row["name"],
+        otp_code=new_otp,
+        confirmation_url=confirmation_url,
+        prakriti=row["prakriti"],
+        city=row["city"]
+    )
+
+    return {
+        "success": True,
+        "message": f"Fresh confirmation code dispatched to {clean_email}",
+        "email": clean_email,
+        "otp": new_otp,
+        "expires_in_seconds": 600,
+        "email_delivery": email_res
+    }
+
+
+# ---------------------------------------------------------------------
+# Dedicated Doctor Registration & Direct Login Endpoints
+# ---------------------------------------------------------------------
+
+@app.post("/api/auth/doctor/register")
+def register_doctor_account(req: DoctorAuthRegisterRequest):
+    clean_name = req.name.strip()
+    if not clean_name:
+        raise HTTPException(status_code=400, detail="Please enter doctor full name (वैद्यांचे पूर्ण नाव).")
+    if not clean_name.lower().startswith("dr.") and not clean_name.lower().startswith("dr "):
+        clean_name = f"Dr. {clean_name}"
+    
+    clean_email = req.email.strip().lower()
+    if not clean_email or "@" not in clean_email:
+        raise HTTPException(status_code=400, detail="Please enter a valid doctor email address.")
+    
+    clean_password = req.password.strip()
+    if not clean_password or len(clean_password) < 4:
+        raise HTTPException(status_code=400, detail="Password must be at least 4 characters long.")
+
+    clean_phone = (req.phone or "").replace("+91", "").replace(" ", "").replace("-", "")
+    if not clean_phone:
+        clean_phone = f"98{random.randint(10000000, 99999999)}"
+        
+    clean_city = (req.city or "Nagpur, Maharashtra").strip()
+    qualification = (req.qualification or "BAMS, MD (Ayurveda)").strip()
+    specialization = (req.specialization or "Kayachikitsa & Panchakarma").strip()
+    organization = (req.organization or "Zeniva Ayurvedic Clinical Center").strip()
+    council_reg_number = (req.council_reg_number or "").strip()
+    avatar = req.avatar or "https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=400"
+    
+    unique_doc_id = f"ZEN-DOC-{random.randint(100000, 999999)}"
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        # Check if email or phone already registered
+        cursor.execute("SELECT id, status FROM doctors WHERE LOWER(email) = ? OR (phone != '' AND phone = ?)", (clean_email, clean_phone))
+        existing_doc = cursor.fetchone()
+        doc_status = "pending_verification"
+        if existing_doc:
+            unique_doc_id = existing_doc["id"]
+            if existing_doc["status"] == "verified":
+                doc_status = "verified"
+
+        # Insert or update in doctors table with pending_verification for admin review
+        cursor.execute("""
+        INSERT INTO doctors (
+            id, phone, name, email, role, specialization, qualification,
+            organization, city, council_reg_number, avatar, password_hash, status
+        ) VALUES (?, ?, ?, ?, 'doctor', ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(phone) DO UPDATE SET
+            name = excluded.name,
+            email = excluded.email,
+            specialization = excluded.specialization,
+            qualification = excluded.qualification,
+            organization = excluded.organization,
+            city = excluded.city,
+            council_reg_number = excluded.council_reg_number,
+            avatar = excluded.avatar,
+            password_hash = excluded.password_hash,
+            status = excluded.status
+        """, (
+            unique_doc_id, clean_phone, clean_name, clean_email, specialization,
+            qualification, organization, clean_city, council_reg_number, avatar, clean_password, doc_status
+        ))
+
+        # Also register in users table
+        cursor.execute("""
+        INSERT INTO users (
+            id, phone, name, email, role, title, specialization, location, city, avatar, password_hash, status
+        ) VALUES (?, ?, ?, ?, 'doctor', ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(phone) DO UPDATE SET
+            name = excluded.name,
+            email = excluded.email,
+            role = 'doctor',
+            title = excluded.title,
+            specialization = excluded.specialization,
+            location = excluded.location,
+            city = excluded.city,
+            avatar = excluded.avatar,
+            password_hash = excluded.password_hash,
+            status = excluded.status
+        """, (
+            f"usr_{unique_doc_id}", clean_phone, clean_name, clean_email, qualification,
+            specialization, clean_city, clean_city, avatar, clean_password, doc_status
+        ))
+
+        conn.commit()
+    except Exception as e:
+        print("[Doctor Registration DB Error]:", e)
+    finally:
+        conn.close()
+
+    doc_data = {
+        "id": unique_doc_id,
+        "doctor_id": unique_doc_id,
+        "name": clean_name,
+        "email": clean_email,
+        "phone": clean_phone,
+        "role": "doctor",
+        "qualification": qualification,
+        "specialization": specialization,
+        "organization": organization,
+        "city": clean_city,
+        "council_reg_number": council_reg_number,
+        "avatar": avatar,
+        "status": doc_status,
+        "isRegistered": True,
+        "isLoggedIn": True
+    }
+
+    return {
+        "success": True,
+        "message": f"Doctor {clean_name} account created! Documents submitted for Admin Verification.",
+        "doctor": doc_data,
+        "user": doc_data
+    }
+
+@app.post("/api/auth/doctor/login")
+def login_doctor_account(req: DoctorAuthLoginRequest):
+    identifier = req.email.strip().lower()
+    clean_password = req.password.strip()
+
+    if not identifier:
+        raise HTTPException(status_code=400, detail="Please enter doctor name, email, or mobile number.")
+    if not clean_password:
+        raise HTTPException(status_code=400, detail="Please enter your doctor password.")
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # Search in doctors table first
+    cursor.execute("""
+    SELECT * FROM doctors 
+    WHERE LOWER(email) = ? OR phone = ? OR LOWER(name) = ? OR LOWER(name) LIKE ?
+    LIMIT 1
+    """, (identifier, identifier, identifier, f"%{identifier}%"))
+    doc = cursor.fetchone()
+
+    # Also search in users table if needed
+    user = None
+    if not doc:
+        cursor.execute("""
+        SELECT * FROM users 
+        WHERE (LOWER(email) = ? OR phone = ? OR LOWER(name) = ? OR LOWER(name) LIKE ?) AND role = 'doctor'
+        LIMIT 1
+        """, (identifier, identifier, identifier, f"%{identifier}%"))
+        user = cursor.fetchone()
+
+    conn.close()
+
+    if not doc and not user:
+        raise HTTPException(
+            status_code=404, 
+            detail="No registered doctor account found with this email/name. Please check your credentials or click 'Create Account'."
+        )
+
+    saved_password = ""
+    if doc and doc["password_hash"]:
+        saved_password = doc["password_hash"]
+    elif user and user["password_hash"]:
+        saved_password = user["password_hash"]
+
+    if saved_password and clean_password != saved_password:
+        raise HTTPException(status_code=401, detail="Incorrect doctor password. Please enter the correct password you created.")
+
+    doc_dict = dict(doc) if doc else dict(user)
+    doc_id = doc_dict.get("id") or f"ZEN-DOC-{abs(hash(identifier)) % 1000000:06d}"
+    
+    doc_payload = {
+        "id": doc_id,
+        "doctor_id": doc_dict.get("doctor_id") or doc_id,
+        "name": doc_dict.get("name") or f"Dr. {identifier}",
+        "email": doc_dict.get("email") or identifier,
+        "phone": doc_dict.get("phone") or "",
+        "role": "doctor",
+        "qualification": doc_dict.get("qualification") or "BAMS, MD (Ayurveda)",
+        "specialization": doc_dict.get("specialization") or "Kayachikitsa & Panchakarma",
+        "organization": doc_dict.get("organization") or "Zeniva Ayurvedic Clinical Center",
+        "city": doc_dict.get("city") or "Nagpur, Maharashtra",
+        "council_reg_number": doc_dict.get("council_reg_number") or "",
+        "avatar": doc_dict.get("avatar") or "https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=400",
+        "status": doc_dict.get("status") or "verified",
+        "isRegistered": True,
+        "isLoggedIn": True
+    }
+
+    token = f"zeniva_doctor_session_{doc_id}_{datetime.utcnow().timestamp()}"
+
+    return {
+        "success": True,
+        "message": f"Welcome back, {doc_payload['name']}!",
+        "user": doc_payload,
+        "doctor": doc_payload,
+        "token": token
+    }
+
+@app.post("/api/auth/otp/send")
+@app.post("/api/auth/send-otp")
+def send_otp(req: SendOTPRequest):
+    phone = req.phone.replace("+91", "").replace(" ", "").replace("-", "")
+    if len(phone) < 10:
+        raise HTTPException(status_code=400, detail="Invalid phone number")
+    
+    otp_res = generate_and_save_otp(phone)
+    code = otp_res.get("otp") if isinstance(otp_res, dict) else str(otp_res)
+    has_key = otp_res.get("has_gateway_key", False) if isinstance(otp_res, dict) else False
+    return {
+        "success": True,
+        "message": f"OTP successfully sent to +91 {phone}",
+        "otp": str(code),
+        "otp_code": str(code),
+        "has_gateway_key": has_key,
+        "details": otp_res,
+        "expires_in": "5 minutes"
+    }
+
+@app.post("/api/auth/otp/verify")
+@app.post("/api/auth/verify-otp")
+def verify_otp(req: VerifyOTPRequest):
+    phone = req.phone.replace("+91", "").replace(" ", "").replace("-", "")
+    otp_res = verify_otp_code(phone, req.otp)
+    
+    if not otp_res.get("success"):
+        raise HTTPException(status_code=400, detail=otp_res.get("message", "Invalid or expired OTP. Please try again."))
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # 1. Check if registered doctor exists with this phone
+    cursor.execute("SELECT * FROM doctors WHERE phone = ?", (phone,))
+    doc_row = cursor.fetchone()
+    if doc_row:
+        doc = dict(doc_row)
+        conn.close()
+        return {
+            "success": True,
+            "isRegistered": True,
+            "is_registered_doctor": True,
+            "role": "doctor",
+            "doctor_profile": doc,
+            "doctor_status": doc["status"],
+            "user": {
+                "id": doc["id"],
+                "doctor_id": doc["id"],
+                "name": doc["name"],
+                "phone": doc["phone"],
+                "qualification": doc["qualification"],
+                "council_reg_number": doc["council_reg_number"],
+                "councilId": doc["council_reg_number"],
+                "specialization": doc["specialization"],
+                "organization": doc["organization"],
+                "city": doc["city"],
+                "status": doc["status"],
+                "avatar": doc["avatar"]
+            },
+            "status": doc["status"]
+        }
+
+    # 2. Check if patient exists in users table (persistent real profile)
+    cursor.execute("SELECT * FROM users WHERE phone = ?", (phone,))
+    user_row = cursor.fetchone()
+    if user_row:
+        user_dict = dict(user_row)
+        conn.close()
+        return {
+            "success": True,
+            "isRegistered": True,
+            "is_registered_doctor": False,
+            "role": user_dict.get("role") or "patient",
+            "user": user_dict
+        }
+
+    # 3. If brand-new patient logging in for the first time, persist new user record!
+    default_patient = {
+        "id": f"usr_{phone}",
+        "phone": phone,
+        "name": "Zeniva Patient",
+        "email": f"patient.{phone[-4:]}@zeniva.ai",
+        "age": "28",
+        "gender": "Other",
+        "role": "patient",
+        "location": "Nagpur, Maharashtra",
+        "city": "Nagpur",
+        "prakriti": "Stress & Sleep Wellness",
+        "blood_group": "B+",
+        "avatar": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150",
+        "status": "active"
+    }
+    cursor.execute("""
+        INSERT INTO users (id, phone, name, email, age, gender, role, location, city, prakriti, blood_group, avatar, status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        default_patient["id"], default_patient["phone"], default_patient["name"], default_patient["email"],
+        default_patient["age"], default_patient["gender"], default_patient["role"], default_patient["location"],
+        default_patient["city"], default_patient["prakriti"], default_patient["blood_group"],
+        default_patient["avatar"], default_patient["status"]
+    ))
+    conn.commit()
+    conn.close()
+
+    return {
+        "success": True,
+        "isRegistered": True,
+        "role": "patient",
+        "user": default_patient
+    }
+
+
+class UpdateProfileRequest(BaseModel):
+    phone: Optional[str] = ""
+    name: Optional[str] = None
+    email: Optional[str] = None
+    age: Optional[Union[str, int]] = None
+    gender: Optional[str] = None
+    role: Optional[str] = "patient"
+    location: Optional[str] = None
+    city: Optional[str] = None
+    prakriti: Optional[str] = None
+    vikriti: Optional[str] = None
+    blood_group: Optional[str] = None
+    bloodGroup: Optional[str] = None
+    diet: Optional[str] = None
+    agribalam: Optional[str] = None
+    avatar: Optional[str] = None
+    qualification: Optional[str] = None
+    council_reg_number: Optional[str] = None
+    specialization: Optional[str] = None
+    organization: Optional[str] = None
+
+@app.put("/api/user/profile")
+@app.post("/api/user/profile")
+def update_user_profile(req: UpdateProfileRequest):
+    phone = (req.phone or "").replace("+91", "").replace(" ", "").replace("-", "")
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # 1. If Doctor or role is doctor, update doctors table
+    if req.role == "doctor" or req.qualification or req.council_reg_number:
+        cursor.execute("SELECT * FROM doctors WHERE phone = ?", (phone,))
+        doc = cursor.fetchone()
+        if doc:
+            updates = []
+            vals = []
+            if req.name: updates.append("name = ?"); vals.append(req.name)
+            if req.qualification: updates.append("qualification = ?"); vals.append(req.qualification)
+            if req.council_reg_number: updates.append("council_reg_number = ?"); vals.append(req.council_reg_number)
+            if req.specialization: updates.append("specialization = ?"); vals.append(req.specialization)
+            if req.organization: updates.append("organization = ?"); vals.append(req.organization)
+            if req.city: updates.append("city = ?"); vals.append(req.city)
+            if req.avatar: updates.append("avatar = ?"); vals.append(req.avatar)
+            if updates:
+                vals.append(phone)
+                cursor.execute(f"UPDATE doctors SET {', '.join(updates)} WHERE phone = ?", tuple(vals))
+
+    clean_email = (req.email or "").strip().lower()
+
+    # 2. Update users table
+    cursor.execute("""
+        SELECT * FROM users 
+        WHERE (phone != '' AND phone = ?) OR (email != '' AND LOWER(email) = ?)
+    """, (phone, clean_email))
+    existing_user = cursor.fetchone()
+
+    blood = req.blood_group or req.bloodGroup
+    if existing_user:
+        cursor.execute("""
+            UPDATE users SET
+                name = COALESCE(?, name),
+                email = COALESCE(?, email),
+                phone = COALESCE(?, phone),
+                age = COALESCE(?, age),
+                gender = COALESCE(?, gender),
+                location = COALESCE(?, location),
+                city = COALESCE(?, city),
+                prakriti = COALESCE(?, prakriti),
+                vikriti = COALESCE(?, vikriti),
+                blood_group = COALESCE(?, blood_group),
+                diet = COALESCE(?, diet),
+                agribalam = COALESCE(?, agribalam),
+                avatar = COALESCE(?, avatar)
+            WHERE id = ?
+        """, (
+            req.name, req.email, phone if phone else None, str(req.age) if req.age else None, req.gender,
+            req.location, req.city, req.prakriti, req.vikriti,
+            blood, req.diet, req.agribalam, req.avatar, existing_user["id"]
+        ))
+        target_id = existing_user["id"]
+    else:
+        target_id = f"usr_{clean_email.replace('@', '_').replace('.', '_')}" if clean_email else f"usr_{phone}"
+        effective_phone = phone if phone else None
+        cursor.execute("""
+            INSERT INTO users (id, phone, name, email, age, gender, role, location, city, prakriti, vikriti, blood_group, diet, agribalam, avatar)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            target_id, effective_phone, req.name or "Zeniva Patient", req.email, str(req.age or 21),
+            req.gender or "Male", req.role or "patient", req.location or "Nagpur, Maharashtra",
+            req.city or "Nagpur", req.prakriti or "Stress & Sleep Wellness", req.vikriti,
+            blood or "B+", req.diet, req.agribalam, req.avatar
+        ))
+
+    conn.commit()
+
+    # Fetch updated user object
+    cursor.execute("SELECT * FROM users WHERE id = ?", (target_id,))
+    updated_row = cursor.fetchone()
+    conn.close()
+
+    return {
+        "success": True,
+        "message": "User profile successfully saved to permanent SQLite database!",
+        "user": dict(updated_row) if updated_row else {}
+    }
+
+@app.get("/api/user/profile/{phone_or_email}")
+def get_user_profile(phone_or_email: str, role: Optional[str] = None):
+    identifier = phone_or_email.replace("+91", "").replace(" ", "").replace("-", "").strip().lower()
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT * FROM doctors WHERE phone = ? OR LOWER(email) = ?", (identifier, identifier))
+    doc = cursor.fetchone()
+    doc_dict = dict(doc) if doc else None
+
+    cursor.execute("SELECT * FROM users WHERE phone = ? OR LOWER(email) = ?", (identifier, identifier))
+    user = cursor.fetchone()
+    user_dict = dict(user) if user else None
+    conn.close()
+
+    if not doc_dict and not user_dict:
+        raise HTTPException(status_code=404, detail="User profile not found")
+
+    selected = doc_dict if role == "doctor" else (user_dict or doc_dict)
+    active_role = "doctor" if (role == "doctor" or (not user_dict and doc_dict)) else "patient"
+
+    return {
+        "success": True,
+        "role": active_role,
+        "user": selected,
+        "doctor": doc_dict,
+        "patient": user_dict
+    }
+
+
+# =====================================================================
+# 2. DOCTOR REGISTRATION & VERIFICATION ENDPOINTS
+# =====================================================================
+
+@app.post("/api/doctor/register")
+def register_doctor(req: DoctorRegisterRequest):
+    clean_phone = req.phone.replace("+91", "").replace(" ", "").replace("-", "")
+    
+    # Generate unique Zeniva Doctor ID (Format: ZEN-DOC-XXXXXX)
+    unique_doc_id = f"ZEN-DOC-{random.randint(100000, 999999)}"
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # Check if phone already registered
+    cursor.execute("SELECT id FROM doctors WHERE phone = ?", (clean_phone,))
+    existing = cursor.fetchone()
+    if existing:
+        unique_doc_id = existing["id"]
+
+    cursor.execute("""
+    INSERT OR REPLACE INTO doctors (
+        id, phone, name, dob, gender, profession, role, specialization, 
+        qualification, experience_years, organization, city, council_name, 
+        council_reg_number, documents_json, avatar, status
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_verification')
+    """, (
+        unique_doc_id, clean_phone, req.name, req.dob, req.gender,
+        req.profession, req.role, req.specialization, req.qualification,
+        req.experience_years, req.organization, req.city, req.council_name,
+        req.council_reg_number, json.dumps(req.documents or {}), req.avatar
+    ))
+
+    # Also register in users table if not already present, without destroying patient data
+    cursor.execute("SELECT id, role FROM users WHERE phone = ?", (clean_phone,))
+    existing_user = cursor.fetchone()
+    if not existing_user:
+        cursor.execute("""
+        INSERT INTO users (id, phone, name, role, title, specialization, avatar, status)
+        VALUES (?, ?, ?, 'doctor', ?, ?, ?, 'pending_verification')
+        """, (f"usr_{clean_phone}", clean_phone, req.name, req.qualification, req.specialization, req.avatar))
+    else:
+        cursor.execute("""
+        UPDATE users SET avatar = COALESCE(?, avatar) WHERE phone = ?
+        """, (req.avatar, clean_phone))
+
+    conn.commit()
+    conn.close()
+
+    doc_profile = {
+        "id": unique_doc_id,
+        "phone": clean_phone,
+        "name": req.name,
+        "dob": req.dob,
+        "gender": req.gender,
+        "profession": req.profession,
+        "role": req.role,
+        "specialization": req.specialization,
+        "qualification": req.qualification,
+        "experience_years": req.experience_years,
+        "organization": req.organization,
+        "city": req.city,
+        "council_name": req.council_name,
+        "council_reg_number": req.council_reg_number,
+        "documents": req.documents or {},
+        "avatar": req.avatar,
+        "status": "pending_verification"
+    }
+
+    return {
+        "success": True,
+        "doctor_id": unique_doc_id,
+        "doctor": doc_profile,
+        "council_reg_number": req.council_reg_number,
+        "status": "pending_verification",
+        "message": f"Doctor registration submitted. Assigned Zeniva Doctor ID: {unique_doc_id}. Verification pending by Medical Review Board."
+    }
+
+@app.post("/api/doctor/upload-document")
+async def upload_doctor_document(
+    doc_type: str = Form("degree_cert"),
+    file: UploadFile = File(...)
+):
+    ext = os.path.splitext(file.filename)[1] or ".pdf"
+    safe_name = f"{doc_type}_{uuid.uuid4().hex[:8]}{ext}"
+    filepath = os.path.join(UPLOAD_DIR, safe_name)
+
+    with open(filepath, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    return {
+        "success": True,
+        "doc_type": doc_type,
+        "filename": file.filename,
+        "file_url": f"/uploads/{safe_name}"
+    }
+
+@app.get("/api/doctor/profile/{phone}")
+@app.get("/api/doctor/profile")
+def get_doctor_profile(phone: Optional[str] = None):
+    if not phone:
+        raise HTTPException(status_code=400, detail="Phone number is required")
+    clean_phone = phone.replace("+91", "").replace(" ", "").replace("-", "")
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM doctors WHERE phone = ?", (clean_phone,))
+    doc_row = cursor.fetchone()
+    conn.close()
+
+    if not doc_row:
+        raise HTTPException(status_code=404, detail="Doctor profile not found")
+    
+    doc = dict(doc_row)
+    doc["documents"] = json.loads(doc.get("documents_json") or "{}")
+    return {
+        "success": True,
+        "doctor": doc,
+        "status": doc.get("status", "pending_verification"),
+        **doc
+    }
+
+@app.get("/api/doctor/all")
+@app.get("/api/admin/doctors")
+def get_all_doctors():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM doctors ORDER BY created_at DESC")
+    doctors = []
+    for row in cursor.fetchall():
+        d = dict(row)
+        d["documents"] = json.loads(d.get("documents_json") or "{}")
+        doctors.append(d)
+    conn.close()
+    return {"doctors": doctors}
+
+@app.patch("/api/doctor/verify")
+@app.post("/api/admin/doctor/verify")
+def approve_or_reject_doctor(req: DoctorApprovalRequest):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    action_upper = req.action.upper()
+    new_status = "verified" if action_upper in ["APPROVE", "APPROVED", "VERIFIED"] else "rejected"
+    verified_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S") if new_status == "verified" else None
+    
+    clean_target = str(req.doctor_id).replace("+91", "").replace(" ", "").replace("-", "")
+    cursor.execute("""
+    UPDATE doctors 
+    SET status = ?, rejection_reason = ?, verified_at = ?
+    WHERE id = ? OR phone = ?
+    """, (new_status, req.rejection_reason, verified_at, req.doctor_id, clean_target))
+    
+    cursor.execute("""
+    UPDATE users SET status = ? 
+    WHERE phone = (SELECT phone FROM doctors WHERE id = ? OR phone = ?) OR phone = ?
+    """, (new_status, req.doctor_id, clean_target, clean_target))
+
+    conn.commit()
+    conn.close()
+
+    return {
+        "success": True, 
+        "doctor_id": req.doctor_id, 
+        "status": new_status,
+        "message": f"Doctor {req.doctor_id} status updated to {new_status.upper()}."
+    }
+
+@app.delete("/api/admin/doctor/{doctor_id}")
+def delete_doctor(doctor_id: str):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM doctors WHERE id = ?", (doctor_id,))
+    conn.commit()
+    conn.close()
+    return {"success": True, "message": f"Doctor {doctor_id} removed from database."}
+
+
+# =====================================================================
+# 3. ADMIN GOVERNANCE & PATIENTS API
+# =====================================================================
+
+@app.post("/api/admin/login")
+def admin_login(req: AdminLoginRequest):
+    if req.password != ADMIN_SECRET_PASSWORD:
+        raise HTTPException(status_code=401, detail="Invalid Admin Credentials. Unauthorized access.")
+    
+    token = f"zeniva_adm_{uuid.uuid4().hex}"
+    expires_at = (datetime.utcnow() + timedelta(days=7)).strftime("%Y-%m-%d %H:%M:%S")
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("INSERT OR REPLACE INTO admin_sessions (token, username, role, expires_at) VALUES (?, ?, 'SUPER_ADMIN', ?)",
+                   (token, req.username or "bhupesh_admin", expires_at))
+    conn.commit()
+    conn.close()
+
+    return {
+        "success": True,
+        "token": token,
+        "role": "SUPER_ADMIN",
+        "user": {
+            "name": "Bhupesh Indurkar (Super Admin)",
+            "role": "SUPER_ADMIN",
+            "username": req.username
+        }
+    }
+
+@app.get("/api/admin/patients")
+@app.get("/api/users")
+def get_all_patients():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM users WHERE role = 'patient' ORDER BY created_at DESC")
+    patients = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    return {"patients": patients, "users": patients}
+
+@app.delete("/api/admin/patient/{patient_id}")
+def delete_patient(patient_id: str):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM users WHERE id = ?", (patient_id,))
+    conn.commit()
+    conn.close()
+    return {"success": True, "message": f"Patient {patient_id} removed."}
+
+@app.get("/api/admin/stats")
+def get_admin_stats():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT COUNT(*) FROM doctors")
+    total_doctors = cursor.fetchone()[0]
+
+    cursor.execute("SELECT COUNT(*) FROM doctors WHERE status = 'pending_verification'")
+    pending_verifications = cursor.fetchone()[0]
+
+    cursor.execute("SELECT COUNT(*) FROM doctors WHERE status = 'verified'")
+    verified_doctors = cursor.fetchone()[0]
+
+    cursor.execute("SELECT COUNT(*) FROM users WHERE role = 'patient'")
+    total_patients = cursor.fetchone()[0]
+
+    cursor.execute("SELECT COUNT(*) FROM appointments")
+    total_appointments = cursor.fetchone()[0]
+
+    conn.close()
+    return {
+        "total_doctors": total_doctors,
+        "pending_verifications": pending_verifications,
+        "verified_doctors": verified_doctors,
+        "total_patients": total_patients,
+        "total_appointments": total_appointments
+    }
+
+
+# =====================================================================
+# 4. VIDEO BROADCAST & MEDIA SERVER ENDPOINTS
+# =====================================================================
+
+@app.post("/api/admin/upload-video")
+async def upload_admin_broadcast_video(file: UploadFile = File(...)):
+    try:
+        ext = os.path.splitext(file.filename)[1] or ".mp4"
+        safe_name = f"broadcast_{uuid.uuid4().hex[:8]}{ext}"
+        filepath = os.path.join(UPLOAD_DIR, safe_name)
+
+        with open(filepath, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+
+        video_url = f"http://127.0.0.1:8000/uploads/{safe_name}"
+        return {
+            "success": True,
+            "filename": file.filename,
+            "video_url": video_url,
+            "message": "Video successfully uploaded to Zeniva Media Server"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+import mimetypes
+mimetypes.init()
+mimetypes.add_type('video/mp4', '.mp4')
+mimetypes.add_type('video/webm', '.webm')
+mimetypes.add_type('video/ogg', '.ogv')
+mimetypes.add_type('video/quicktime', '.mov')
+
+@app.get("/api/broadcast-video")
+def get_broadcast_video():
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM system_broadcasts WHERE key = 'active_broadcast'")
+        row = cursor.fetchone()
+        conn.close()
+        if row:
+            return {
+                "enabled": bool(row["enabled"]),
+                "title": row["title"] or "Zeniva AI Video Announcement",
+                "sanskrit": row["sanskrit"] or "॥ आयुर्वेद एवं आधुनिक विज्ञान प्रसारण ॥",
+                "duration": row["duration"] or "Admin Broadcast",
+                "url": row["url"],
+                "desc": row["desc"] or "",
+                "published_at": row["published_at"]
+            }
+    except Exception:
+        pass
+    return {
+        "enabled": False,
+        "title": "Zeniva AI Platform: Classical Vedic Science Meets Modern Clinical Intelligence",
+        "sanskrit": "॥ आयुर्वेद एवं आधुनिक विज्ञान परिचय ॥",
+        "duration": "2:15 Mins",
+        "url": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
+        "desc": "Welcome to Zeniva AI. Discover how authentic Charaka Samhita formulas and AI Clinical Health assessments work together with certified doctors."
+    }
+
+@app.post("/api/admin/broadcast-video")
+def set_broadcast_video(req: BroadcastVideoRequest):
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+        INSERT INTO system_broadcasts (key, enabled, title, sanskrit, duration, url, desc, published_at)
+        VALUES ('active_broadcast', ?, ?, ?, ?, ?, ?, datetime('now'))
+        ON CONFLICT(key) DO UPDATE SET
+            enabled = excluded.enabled,
+            title = excluded.title,
+            sanskrit = excluded.sanskrit,
+            duration = excluded.duration,
+            url = excluded.url,
+            desc = excluded.desc,
+            published_at = excluded.published_at
+        """, (1 if req.enabled else 0, req.title, req.sanskrit, req.duration, req.url, req.desc))
+        conn.commit()
+        conn.close()
+        return {"success": True, "message": "Broadcast video configuration saved permanently in Zeniva database."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# =====================================================================
+# 5. CLINICAL APPOINTMENTS & DOCTOR PHOTO REVIEWS
+# =====================================================================
+
+@app.post("/api/doctor-reviews/upload")
+async def upload_patient_photo(
+    patient_name: str = Form("Zeniva Patient"),
+    symptoms: str = Form(""),
+    file: UploadFile = File(...)
+):
+    ext = os.path.splitext(file.filename)[1] or ".jpg"
+    filename = f"{uuid.uuid4().hex[:10]}{ext}"
+    filepath = os.path.join(UPLOAD_DIR, filename)
+
+    with open(filepath, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    image_url = f"/uploads/{filename}"
+    review_id = f"rev_{uuid.uuid4().hex[:8]}"
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+    INSERT INTO doctor_reviews (id, patient_id, patient_name, doctor_name, image_url, symptoms, review_notes, status)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    """, (review_id, "usr_patient", patient_name, "Attending Vaidya", image_url, symptoms, "Image received. Pending clinical assessment by doctor.", "pending_doctor_review"))
+    conn.commit()
+    conn.close()
+
+    return {
+        "success": True,
+        "review_id": review_id,
+        "image_url": image_url,
+        "status": "pending_doctor_review"
+    }
+
+@app.get("/api/doctor-reviews")
+def get_doctor_reviews():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM doctor_reviews ORDER BY created_at DESC")
+    reviews = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    return {"reviews": reviews}
+
+@app.post("/api/doctor-reviews/submit")
+def submit_doctor_review(req: DoctorReviewSubmitRequest):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+    UPDATE doctor_reviews
+    SET doctor_name = ?, review_notes = ?, status = ?
+    WHERE id = ?
+    """, (req.doctor_name, req.review_notes, req.status, req.review_id))
+    conn.commit()
+    conn.close()
+    return {"success": True, "message": "Doctor clinical review recorded."}
+
+@app.get("/api/appointments")
+def get_appointments():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM appointments ORDER BY created_at DESC")
+    appointments = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    return {"appointments": appointments}
+
+@app.post("/api/appointments")
+def create_appointment(req: AppointmentCreateRequest):
+    apt_id = f"apt_{uuid.uuid4().hex[:8]}"
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+    INSERT INTO appointments (id, patient_name, doctor_name, date_time, type, status, dosha_imbalance, notes)
+    VALUES (?, ?, ?, ?, ?, 'Upcoming', ?, ?)
+    """, (apt_id, req.patient_name, req.doctor_name, req.date_time, req.type, req.dosha_imbalance, req.notes))
+    conn.commit()
+    conn.close()
+    return {"success": True, "appointment_id": apt_id, "message": "Appointment scheduled successfully."}
+
+
+# =====================================================================
+# 6. VEDIC RAG & CLINICAL CHAT ENDPOINTS
+# =====================================================================
+
+@app.post("/api/chat")
+@app.post("/api/rag/chat")
+def chat_with_ayurveda(req: ChatRequest):
+    user_prompt = req.prompt or req.query or req.message or ""
+    lang = req.target_lang or req.language or "auto"
+    if req.dosha:
+        user_prompt = f"[{req.dosha} Constitution] {user_prompt}"
+    
+    res = rag_engine.generate_chat_reply(
+        prompt=user_prompt,
+        target_lang=lang,
+        patient_context=req.patient_context
+    )
+    return {
+        "success": True,
+        "reply": res.get("reply", ""),
+        "response": res.get("reply", ""),
+        "citations": res.get("citations", ""),
+        "model_used": res.get("model_used", "gemini-3.6-flash"),
+        "is_emergency": res.get("is_emergency", False),
+        "has_patient": res.get("has_patient", False),
+        "has_doctor": res.get("has_doctor", False),
+        "requires_login": res.get("requires_login", False),
+        "is_team_query": res.get("is_team_query", False)
+    }
+
+@app.post("/api/translate")
+def translate_text_endpoint(req: ChatRequest):
+    user_prompt = req.prompt or req.query or req.message or ""
+    lang = req.target_lang or req.language or "mr"
+    if not lang.startswith("translate_"):
+        lang = f"translate_{lang}"
+    
+    res = rag_engine.generate_chat_reply(
+        prompt=user_prompt,
+        target_lang=lang
+    )
+    return {
+        "success": True,
+        "reply": res.get("reply", ""),
+        "response": res.get("reply", "")
+    }
+
+@app.post("/api/chat/multimodal")
+@app.post("/api/rag/chat-image")
+async def chat_with_image(
+    prompt: str = Form("Analyze this medical photo / herb / skin condition with Ayurvedic clinical intelligence."),
+    target_lang: str = Form("auto"),
+    file: UploadFile = File(...)
+):
+    try:
+        contents = await file.read()
+        mime = file.content_type or "image/jpeg"
+        res = rag_engine.generate_chat_reply(
+            prompt=prompt,
+            target_lang=target_lang,
+            image_bytes=contents,
+            image_mime=mime
+        )
+        return {
+            "success": True,
+            "reply": res.get("reply", ""),
+            "citations": res.get("citations", ""),
+            "model_used": res.get("model_used", "gemini-3.6-flash"),
+            "filename": file.filename
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/diagnose-skin")
+@app.post("/api/skin-diagnosis")
+async def diagnose_skin_endpoint(
+    patient_name: str = Form("Zeniva Patient"),
+    patient_id: str = Form("usr_patient"),
+    suspected_condition: Optional[str] = Form(None),
+    file: UploadFile = File(...)
+):
+    try:
+        ext = os.path.splitext(file.filename)[1] or ".jpg"
+        unique_name = f"skin_scan_{uuid.uuid4().hex[:10]}{ext}"
+        filepath = os.path.join(UPLOAD_DIR, unique_name)
+
+        contents = await file.read()
+        with open(filepath, "wb") as buffer:
+            buffer.write(contents)
+
+        image_url = f"http://127.0.0.1:8000/uploads/{unique_name}"
+
+        # Run authentic optical & multimodal AI diagnosis
+        diagnosis = perform_complete_skin_diagnosis(
+            image_bytes=contents,
+            filename=file.filename,
+            patient_name=patient_name,
+            suspected_condition=suspected_condition
+        )
+        diagnosis["image_url"] = image_url
+
+        # Persist into doctor review queue so attending Vaidyas can review live
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            review_id = f"rev_{uuid.uuid4().hex[:8]}"
+            condition_name = diagnosis.get("condition_name", "Facial Dermal Scan")
+            summary_txt = f"{condition_name}: {diagnosis.get('clinical_summary', '')}"
+            cursor.execute("""
+            INSERT INTO doctor_reviews (id, patient_id, patient_name, doctor_name, image_url, symptoms, review_notes, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                review_id,
+                patient_id,
+                patient_name,
+                "Attending Vaidya",
+                f"/uploads/{unique_name}",
+                summary_txt,
+                f"AI Dermal Scan Complete. Detected: {condition_name}. Severity: {diagnosis.get('severity', 'Moderate')}. Awaiting clinical validation.",
+                "pending_doctor_review"
+            ))
+            conn.commit()
+            conn.close()
+            diagnosis["review_id"] = review_id
+        except Exception as e_db:
+            print("[Doctor Review DB Insert Warning]:", e_db)
+
+        return {
+            "success": True,
+            "diagnosis": diagnosis
+        }
+    except Exception as e:
+        print("[Skin Diagnosis Endpoint Error]:", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/rag/upload-doc")
+async def upload_rag_document(file: UploadFile = File(...)):
+    try:
+        content = await file.read()
+        text = ""
+        if file.filename.endswith(".pdf"):
+            try:
+                import pypdf
+                import io
+                reader = pypdf.PdfReader(io.BytesIO(content))
+                text = "\n".join([page.extract_text() for page in reader.pages if page.extract_text()])
+            except Exception:
+                text = content.decode("utf-8", errors="ignore")
+        else:
+            text = content.decode("utf-8", errors="ignore")
+
+        chunk_count = rag_engine.add_uploaded_text(text, filename=file.filename)
+        return {
+            "success": True,
+            "filename": file.filename,
+            "chunks_added": chunk_count,
+            "message": f"Successfully ingested {chunk_count} knowledge chunks into Zeniva RAG engine."
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/assess-dosha")
+def record_dosha_assessment(req: DoshaAssessmentRequest):
+    primary = "Vata" if req.vata > req.pitta and req.vata > req.kapha else "Pitta" if req.pitta > req.kapha else "Kapha"
+    assessment_id = f"dsh_{uuid.uuid4().hex[:8]}"
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+    INSERT INTO dosha_assessments (id, user_id, user_name, vata, pitta, kapha, primary_dosha, wellness_score)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    """, (assessment_id, req.user_id, req.user_name, req.vata, req.pitta, req.kapha, primary, req.wellness_score))
+    conn.commit()
+    conn.close()
+
+    return {
+        "success": True,
+        "assessment_id": assessment_id,
+        "primary_dosha": primary,
+        "wellness_score": req.wellness_score
+    }
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)

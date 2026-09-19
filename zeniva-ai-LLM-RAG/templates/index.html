@@ -1,0 +1,1516 @@
+<!DOCTYPE html>
+<html lang="mr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZENIVA - Ayurvedic AI Clinical Assistant</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary: #38bdf8;
+            --primary-glow: rgba(56, 189, 248, 0.4);
+            --pink: #ec4899;
+            --pink-glow: rgba(236, 72, 153, 0.5);
+            --gold: #fbbf24;
+            --emerald: #10b981;
+            --bg-dark: #070b14;
+            --card-bg: rgba(15, 23, 42, 0.88);
+            --chat-user: #0284c7;
+            --chat-ai: #1e293b;
+            --border: rgba(56, 189, 248, 0.25);
+            --text: #f8fafc;
+            --text-sub: #94a3b8;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+        
+        body { 
+            background: radial-gradient(circle at 50% 10%, #172554 0%, #030712 100%);
+            color: var(--text); 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            justify-content: center; 
+            min-height: 100vh; 
+            padding: 15px;
+            overflow-x: hidden;
+        }
+
+        .container { 
+            width: 100%; 
+            max-width: 760px; 
+            background: var(--card-bg); 
+            border-radius: 28px; 
+            padding: 24px; 
+            box-shadow: 0 25px 60px rgba(0, 0, 0, 0.75), 0 0 40px var(--primary-glow); 
+            text-align: center; 
+            border: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            backdrop-filter: blur(20px);
+            position: relative;
+        }
+
+        /* Top Bar & Navigation Hub */
+        .top-hub {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 8px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid rgba(56, 189, 248, 0.15);
+        }
+
+        .brand-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            font-weight: 800;
+            color: var(--primary);
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        .brand-title i {
+            color: var(--pink);
+            animation: pulse-icon 2s infinite;
+        }
+
+        @keyframes pulse-icon {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.2); }
+        }
+
+        .nav-tabs {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        .nav-btn {
+            background: linear-gradient(145deg, #1e293b, #0f172a);
+            color: #cbd5e1;
+            border: 1.5px solid rgba(56, 189, 248, 0.4);
+            padding: 7px 14px;
+            border-radius: 14px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 800;
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35), 0 0 10px rgba(56, 189, 248, 0.15);
+            transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        .nav-btn:hover {
+            background: linear-gradient(145deg, #0284c7, #0369a1);
+            color: #fff;
+            border-color: #38bdf8;
+            box-shadow: 0 0 18px rgba(56, 189, 248, 0.7);
+            transform: translateY(-2px);
+        }
+
+        .nav-btn.active {
+            background: linear-gradient(135deg, rgba(56, 189, 248, 0.35), rgba(236, 72, 153, 0.3));
+            color: #fff;
+            border-color: var(--primary);
+            box-shadow: 0 0 16px var(--primary-glow), inset 0 0 10px rgba(56, 189, 248, 0.25);
+        }
+
+        /* Holographic Avatar Pod */
+        .avatar-pod {
+            position: relative;
+            display: inline-block;
+            margin: 4px auto 6px;
+        }
+
+        .orbital-ring {
+            position: absolute;
+            top: -12px;
+            left: -12px;
+            width: 144px;
+            height: 144px;
+            border-radius: 50%;
+            border: 1px dashed var(--primary);
+            opacity: 0.55;
+            animation: rotateOrbit 12s linear infinite;
+            pointer-events: none;
+        }
+
+        .orbital-ring-2 {
+            position: absolute;
+            top: -6px;
+            left: -6px;
+            width: 132px;
+            height: 132px;
+            border-radius: 50%;
+            border: 2px solid transparent;
+            border-top-color: var(--pink);
+            border-bottom-color: var(--primary);
+            opacity: 0.75;
+            animation: rotateOrbitRev 8s linear infinite;
+            pointer-events: none;
+        }
+
+        @keyframes rotateOrbit {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        @keyframes rotateOrbitRev {
+            0% { transform: rotate(360deg); }
+            100% { transform: rotate(0deg); }
+        }
+
+        .avatar-wrapper {
+            position: relative;
+            width: 120px;
+            height: 120px;
+            margin: 0 auto;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            border: 3.5px solid var(--primary);
+            box-shadow: 0 0 25px rgba(56, 189, 248, 0.45), inset 0 0 15px rgba(0,0,0,0.5);
+            background: #0f172a;
+            transition: all 0.3s ease;
+        }
+
+        .avatar-img { 
+            width: 100%; 
+            height: 100%; 
+            border-radius: 50%; 
+            object-fit: cover; 
+            object-position: 50% 14%;
+            display: block; 
+            transition: transform 0.3s ease;
+        }
+
+        /* Speaking Animations */
+        .avatar-pod.speaking .avatar-wrapper {
+            border-color: var(--pink);
+            box-shadow: 0 0 35px var(--pink-glow), inset 0 0 15px rgba(236, 72, 153, 0.4);
+            animation: pulseAvatar 1s infinite alternate ease-in-out;
+        }
+
+        .avatar-pod.speaking .orbital-ring {
+            border-color: var(--pink);
+            opacity: 0.85;
+            animation-duration: 4s;
+        }
+
+        .avatar-pod.speaking .avatar-img {
+            animation: talkingMotion 0.35s infinite alternate ease-in-out;
+        }
+
+        @keyframes talkingMotion {
+            0% { transform: scale(1.02) translateY(0px) rotate(-0.5deg); }
+            100% { transform: scale(1.05) translateY(-2px) rotate(0.5deg); }
+        }
+
+        @keyframes pulseAvatar {
+            0% { transform: scale(1); box-shadow: 0 0 15px rgba(236, 72, 153, 0.4); }
+            100% { transform: scale(1.04); box-shadow: 0 0 35px rgba(236, 72, 153, 0.9); }
+        }
+
+        /* Soundwave Equalizer */
+        .soundwave {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            height: 16px;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+        .soundwave.active { opacity: 1; }
+
+        .bar {
+            width: 3.5px;
+            background: linear-gradient(to top, var(--primary), var(--pink));
+            border-radius: 3px;
+            height: 4px;
+        }
+        .soundwave.active .bar { animation: wave 0.7s infinite ease-in-out; }
+        .bar:nth-child(1) { animation-delay: 0.1s; }
+        .bar:nth-child(2) { animation-delay: 0.25s; }
+        .bar:nth-child(3) { animation-delay: 0.4s; }
+        .bar:nth-child(4) { animation-delay: 0.15s; }
+        .bar:nth-child(5) { animation-delay: 0.3s; }
+        .bar:nth-child(6) { animation-delay: 0.5s; }
+        .bar:nth-child(7) { animation-delay: 0.2s; }
+
+        @keyframes wave {
+            0%, 100% { height: 4px; }
+            50% { height: 16px; }
+        }
+
+        /* Status Badge */
+        .status-row {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            font-size: 12px;
+            color: var(--text-sub);
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 12px;
+            border-radius: 12px;
+            background: #0f172a;
+            border: 1px solid var(--border);
+            font-weight: 600;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #10b981;
+            box-shadow: 0 0 6px #10b981;
+        }
+
+        .status-badge.speaking .status-dot {
+            background: var(--pink);
+            box-shadow: 0 0 8px var(--pink);
+            animation: blink 0.8s infinite;
+        }
+
+        .status-badge.listening .status-dot {
+            background: #ef4444;
+            box-shadow: 0 0 8px #ef4444;
+            animation: blink 0.8s infinite;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+
+        h2 {
+            font-size: 20px;
+            font-weight: 800;
+            background: linear-gradient(135deg, var(--primary), var(--pink));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: 0.5px;
+        }
+
+        /* Views (Chat, Doctor Finder, Patient Profile, Analytics) */
+        .view-panel { display: none; }
+        .view-panel.active { display: flex; flex-direction: column; gap: 10px; }
+
+        /* Chat History Box */
+        .chat-container {
+            background: #0b0f19;
+            border-radius: 18px;
+            border: 1px solid var(--border);
+            padding: 16px;
+            min-height: 220px;
+            max-height: 310px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            text-align: left;
+            box-shadow: inset 0 2px 8px rgba(0,0,0,0.5);
+        }
+
+        .chat-container::-webkit-scrollbar { width: 6px; }
+        .chat-container::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+
+        .msg-bubble {
+            max-width: 85%;
+            padding: 10px 14px;
+            border-radius: 14px;
+            font-size: 14px;
+            line-height: 1.55;
+            word-wrap: break-word;
+            white-space: pre-wrap;
+        }
+
+        .msg-user {
+            align-self: flex-end;
+            background: var(--chat-user);
+            color: #fff;
+            border-bottom-right-radius: 4px;
+        }
+
+        .msg-ai {
+            align-self: flex-start;
+            background: var(--chat-ai);
+            color: #f1f5f9;
+            border-bottom-left-radius: 4px;
+            border: 1px solid rgba(56, 189, 248, 0.2);
+        }
+
+        /* Doctor Cards Grid */
+        .grid-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            gap: 10px;
+            max-height: 300px;
+            overflow-y: auto;
+            text-align: left;
+            padding: 4px;
+        }
+
+        .doctor-card {
+            background: #0f172a;
+            border: 1px solid #334155;
+            border-radius: 14px;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            transition: all 0.2s ease;
+        }
+
+        .doctor-card:hover {
+            border-color: var(--primary);
+            box-shadow: 0 0 15px var(--primary-glow);
+            transform: translateY(-2px);
+        }
+
+        .doc-name { font-size: 14px; font-weight: 700; color: #fff; }
+        .doc-spec { font-size: 12px; color: var(--primary); font-weight: 600; }
+        .doc-meta { font-size: 11px; color: var(--text-sub); }
+
+        .btn-book {
+            margin-top: 6px;
+            background: linear-gradient(135deg, #38bdf8 0%, #0284c7 100%);
+            color: #030712;
+            border: 1.5px solid #7dd3fc;
+            padding: 8px 12px;
+            border-radius: 10px;
+            font-size: 11.5px;
+            font-weight: 800;
+            cursor: pointer;
+            box-shadow: 0 0 14px rgba(56, 189, 248, 0.5);
+            transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+        }
+        .btn-book:hover {
+            background: linear-gradient(135deg, #ec4899 0%, #be185d 100%);
+            border-color: #f472b6;
+            color: #fff;
+            box-shadow: 0 0 20px rgba(236, 72, 153, 0.8);
+            transform: translateY(-2px);
+        }
+
+        /* Patient Health Card */
+        .patient-card {
+            background: #0f172a;
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 18px;
+            text-align: left;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .ehr-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+        }
+
+        .ehr-pill {
+            background: #1e293b;
+            padding: 8px;
+            border-radius: 10px;
+            border: 1px solid #334155;
+            text-align: center;
+        }
+        .ehr-pill span { font-size: 11px; color: var(--text-sub); display: block; }
+        .ehr-pill b { font-size: 13px; color: var(--primary); }
+
+        /* Controls Toolbar */
+        .controls-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 12px;
+            color: var(--text-sub);
+        }
+
+        .btn-small {
+            background: linear-gradient(145deg, #1e293b, #0f172a);
+            color: var(--primary);
+            border: 1.5px solid rgba(56, 189, 248, 0.5);
+            padding: 6px 12px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 800;
+            box-shadow: 0 0 10px rgba(56, 189, 248, 0.25);
+            transition: all 0.2s ease;
+        }
+        .btn-small:hover {
+            background: var(--primary);
+            color: #0b0f19;
+            box-shadow: 0 0 16px var(--primary-glow);
+            transform: translateY(-1px);
+        }
+
+        .btn-stop {
+            background: linear-gradient(145deg, #450a0a, #7f1d1d);
+            color: #fca5a5;
+            border: 1.5px solid #ef4444;
+            box-shadow: 0 0 12px rgba(239, 68, 68, 0.5);
+            display: none;
+        }
+        .btn-stop:hover {
+            background: #dc2626;
+            color: #fff;
+            box-shadow: 0 0 18px rgba(239, 68, 68, 0.8);
+        }
+
+        /* Quick Prompt Chips */
+        .chips-row {
+            display: flex;
+            gap: 6px;
+            overflow-x: auto;
+            padding: 2px;
+            scrollbar-width: none;
+        }
+        .chips-row::-webkit-scrollbar { display: none; }
+
+        .chip-btn {
+            background: linear-gradient(145deg, #1e293b, #0f172a);
+            border: 1.5px solid rgba(56, 189, 248, 0.45);
+            color: #f1f5f9;
+            padding: 6px 12px;
+            border-radius: 14px;
+            font-size: 11.5px;
+            font-weight: 700;
+            cursor: pointer;
+            white-space: nowrap;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4), 0 0 8px rgba(56, 189, 248, 0.15);
+            transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        .chip-btn:hover {
+            background: linear-gradient(135deg, rgba(56, 189, 248, 0.3), rgba(236, 72, 153, 0.25));
+            color: #fff;
+            border-color: var(--pink);
+            box-shadow: 0 0 15px var(--pink-glow);
+            transform: translateY(-2px);
+        }
+
+        /* Settings Drawer */
+        .settings-box {
+            display: none;
+            background: #0f172a;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 12px;
+            text-align: left;
+            font-size: 13px;
+        }
+        .settings-box.open { display: block; }
+        .set-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+        .set-row:last-child { margin-bottom: 0; }
+        .set-row select { background: #1e293b; color: #fff; border: 1px solid #475569; padding: 4px 8px; border-radius: 6px; }
+
+        /* Preview */
+        .preview-box {
+            display: none;
+            text-align: left;
+            margin-bottom: 8px;
+            gap: 8px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        .preview-box img {
+            max-height: 75px;
+            border-radius: 10px;
+            border: 2px solid var(--primary);
+            box-shadow: 0 0 10px var(--primary-glow);
+            object-fit: cover;
+        }
+
+        /* Input Controls */
+        .input-row {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+        }
+
+        input[type="text"] {
+            flex: 1;
+            padding: 12px 16px;
+            border-radius: 12px;
+            border: 1.5px solid rgba(56, 189, 248, 0.4);
+            background: #0f172a;
+            color: white;
+            outline: none;
+            font-size: 14px;
+            box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.5);
+            transition: all 0.2s ease;
+        }
+        input[type="text"]:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 14px rgba(56, 189, 248, 0.45);
+        }
+
+        .btn-act {
+            padding: 12px 16px;
+            border-radius: 12px;
+            cursor: pointer;
+            font-weight: 800;
+            font-size: 15px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            background: linear-gradient(145deg, #1e293b, #0f172a);
+            color: var(--primary);
+            border: 1.5px solid rgba(56, 189, 248, 0.5);
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4), 0 0 12px rgba(56, 189, 248, 0.25);
+            transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        .btn-act:hover {
+            background: linear-gradient(145deg, #0284c7, #0369a1);
+            color: #ffffff;
+            border-color: #38bdf8;
+            box-shadow: 0 0 20px rgba(56, 189, 248, 0.75);
+            transform: translateY(-2px) scale(1.05);
+        }
+
+        .btn-mic {
+            color: #38bdf8;
+            border-color: rgba(56, 189, 248, 0.6);
+            box-shadow: 0 0 14px rgba(56, 189, 248, 0.35);
+        }
+        .btn-mic:hover {
+            background: linear-gradient(135deg, #ec4899, #be185d);
+            border-color: #f472b6;
+            color: #fff;
+            box-shadow: 0 0 22px rgba(236, 72, 153, 0.85);
+            transform: translateY(-2px) scale(1.08);
+        }
+
+        .btn-send {
+            background: linear-gradient(135deg, #38bdf8 0%, #0284c7 100%);
+            color: #030712;
+            font-weight: 800;
+            letter-spacing: 0.5px;
+            border: 1.5px solid #7dd3fc;
+            box-shadow: 0 0 18px rgba(56, 189, 248, 0.65), 0 4px 12px rgba(0, 0, 0, 0.4);
+            padding: 12px 20px;
+        }
+        .btn-send:hover {
+            background: linear-gradient(135deg, #7dd3fc 0%, #38bdf8 100%);
+            box-shadow: 0 0 28px rgba(56, 189, 248, 0.95), 0 0 40px rgba(56, 189, 248, 0.45);
+            transform: translateY(-2px) scale(1.04);
+            color: #000;
+        }
+
+        .btn-mic.recording {
+            background: #ef4444 !important;
+            color: white !important;
+            border-color: #ef4444 !important;
+            box-shadow: 0 0 20px rgba(239, 68, 68, 0.9) !important;
+            animation: pulseRec 1s infinite;
+        }
+
+        @keyframes pulseRec {
+            0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+            70% { box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    
+    <!-- Top Hub Navigation -->
+    <div class="top-hub">
+        <div class="brand-title">
+            <i class="fa-solid fa-seedling"></i> ZENIVA CLINICAL AI
+        </div>
+        <div class="nav-tabs">
+            <button type="button" class="nav-btn active" id="tabChat" onclick="switchView('chat')">
+                <i class="fa-solid fa-comment-medical"></i> Chat
+            </button>
+            <button type="button" class="nav-btn" id="tabDoctors" onclick="switchView('doctors')">
+                <i class="fa-solid fa-user-doctor"></i> Doctors (200)
+            </button>
+            <button type="button" class="nav-btn" id="tabPatient" onclick="switchView('patient')">
+                <i class="fa-solid fa-id-card-clip"></i> Patient EHR
+            </button>
+            <button type="button" class="nav-btn" id="tabAnalytics" onclick="switchView('analytics')">
+                <i class="fa-solid fa-chart-pie"></i> Analytics
+            </button>
+        </div>
+    </div>
+
+    <!-- Holographic Avatar Pod with User Photo -->
+    <div class="avatar-pod" id="avatarPod">
+        <div class="orbital-ring"></div>
+        <div class="orbital-ring-2"></div>
+        <div class="avatar-wrapper" id="avatarWrapper">
+            <img class="avatar-img" id="avatarImg" 
+                 src="/static/zeniva_lady.jpg" 
+                 alt="ZENIVA Lady"
+                 onerror="this.src='https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=400'">
+        </div>
+    </div>
+    
+    <div class="soundwave" id="soundwave">
+        <div class="bar"></div>
+        <div class="bar"></div>
+        <div class="bar"></div>
+        <div class="bar"></div>
+        <div class="bar"></div>
+        <div class="bar"></div>
+        <div class="bar"></div>
+    </div>
+
+    <div class="status-row">
+        <div class="status-badge" id="statusBadge">
+            <div class="status-dot"></div>
+            <span id="statusText">🟢 Ready (सज्ज)</span>
+        </div>
+        <h2>ZENIVA AI CLINICAL ASSISTANT</h2>
+    </div>
+
+    <!-- VIEW 1: CHAT INTERACTION -->
+    <div class="view-panel active" id="viewChat">
+        <!-- Quick Prompt Chips -->
+        <div class="chips-row">
+            <button type="button" class="chip-btn" onclick="sendQuickPrompt('What is Prakriti and Dosha in Ayurveda?')">🌿 त्रिदोष व प्रकृती</button>
+            <button type="button" class="chip-btn" onclick="sendQuickPrompt('Find an Ayurvedic Doctor in Pune')">🩺 पुण्यात डॉक्टर शोधा</button>
+            <button type="button" class="chip-btn" onclick="sendQuickPrompt('Show patient profile P0001')">👤 रुग्ण P0001 माहिती</button>
+            <button type="button" class="chip-btn" onclick="sendQuickPrompt('What diet is recommended for Pitta Dosha?')">🥗 पित्त दोष आहार</button>
+            <button type="button" class="chip-btn" onclick="sendQuickPrompt('What is Ama and Agni in digestion?')">🔥 अग्नी व आम विचार</button>
+        </div>
+
+        <!-- Controls Bar -->
+        <div class="controls-bar">
+            <div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap;">
+                <button type="button" class="btn-small" onclick="toggleSettings()"><i class="fa-solid fa-gear"></i> Settings</button>
+                <button type="button" class="btn-small" onclick="replayLastReply()"><i class="fa-solid fa-volume-high"></i> Replay</button>
+                <button type="button" class="btn-small btn-stop" id="stopBtn" onclick="stopSpeaking()"><i class="fa-solid fa-stop"></i> Stop</button>
+
+                <!-- Target Language & Live Translation Mode -->
+                <div style="display: inline-flex; align-items: center; gap: 6px; background: #0f172a; border: 1.5px solid rgba(56, 189, 248, 0.45); padding: 4px 10px; border-radius: 12px; box-shadow: 0 0 10px rgba(56,189,248,0.2);">
+                    <span style="font-size: 11.5px; font-weight: 800; color: var(--primary);"><i class="fa-solid fa-language"></i> भाषा / Translate:</span>
+                    <select id="targetLangSelect" onchange="onTargetLangChange(this.value)" style="background: #1e293b; color: #fff; border: 1px solid #334155; padding: 3px 8px; border-radius: 8px; font-size: 11.5px; font-weight: 700; outline: none; cursor: pointer;">
+                        <option value="auto">🔄 Auto Detect (ज्या भाषेत विचाराल त्यात)</option>
+                        <option value="mr" selected>🇮🇳 मराठी (Pure Marathi)</option>
+                        <option value="hi">🇮🇳 हिन्दी (Pure Hindi)</option>
+                        <option value="en">🇬🇧 English (Pure English)</option>
+                        <option value="mr_to_en">🔁 Translate: Marathi ➔ English</option>
+                        <option value="en_to_mr">🔁 Translate: English ➔ Marathi</option>
+                        <option value="hi_to_mr">🔁 Translate: Hindi ➔ Marathi</option>
+                    </select>
+                </div>
+            </div>
+            <div id="speakInfo" style="color: var(--pink); font-weight: 700; font-size: 11.5px;"></div>
+        </div>
+
+        <!-- Settings Box -->
+        <div class="settings-box" id="settingsBox">
+            <div class="set-row">
+                <label>🎤 Mic Language (STT):</label>
+                <select id="sttLangSelect" onchange="updateSttLang(this.value)">
+                    <option value="mr-IN" selected>मराठी (mr-IN)</option>
+                    <option value="hi-IN">हिन्दी (hi-IN)</option>
+                    <option value="en-IN">English (India)</option>
+                    <option value="en-US">English (US)</option>
+                </select>
+            </div>
+            <div class="set-row">
+                <label>🔊 Female Voice (TTS):</label>
+                <select id="voiceSelect"></select>
+            </div>
+            <div class="set-row">
+                <label>👩 Avatar Style:</label>
+                <select id="avatarSelect" onchange="changeAvatar(this.value)">
+                    <option value="/static/zeniva_lady.jpg" selected>👩 Zeniva Lady (Your Photo)</option>
+                    <option value="https://media.giphy.com/media/26n6WywJyh39n1pBu/giphy.gif">👧 3D Animated Lady GIF</option>
+                    <option value="https://media.giphy.com/media/3o7TKSjRrfIPjeiVyM/giphy.gif">🤖 Cyber Hologram AI Lady</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Chat Messages Container -->
+        <div class="chat-container" id="chatContainer">
+            <div class="msg-bubble msg-ai" id="welcomeMsg">
+                नमस्कार! मी झेनिव्हा (ZENIVA), तुमची आयुर्वेदिक AI क्लिनिकल असिस्टंट. मी तुम्हाला त्रिदोष, प्रकृती, आहार, रुग्ण प्रोफाइल किंवा तज्ज्ञ वैद्यांच्या (Doctors) सल्ल्याबाबत कशी मदत करू शकते?
+            </div>
+        </div>
+
+        <!-- Image Preview -->
+        <div class="preview-box" id="previewBox">
+            <img id="imagePreview" src="" alt="Selected Preview">
+        </div>
+
+        <!-- Input Form -->
+        <form id="chatForm" onsubmit="event.preventDefault(); handleSend();">
+            <div class="input-row">
+                <input type="file" id="docInput" accept=".pdf,.txt,.csv" multiple style="display:none;" onchange="uploadDoc()">
+                <button type="button" class="btn-act" onclick="document.getElementById('docInput').click()" title="Upload Clinical PDF/CSV (RAG) - Multiple files supported">
+                    <i class="fa-solid fa-file-medical"></i>
+                </button>
+
+                <input type="file" id="imageInput" accept="image/*" multiple style="display:none;" onchange="previewImg()">
+                <button type="button" class="btn-act" onclick="document.getElementById('imageInput').click()" title="Upload Medical Images (Multiple supported)">
+                    <i class="fa-solid fa-camera"></i>
+                </button>
+
+                <button type="button" class="btn-act btn-mic" id="micBtn" onclick="toggleVoice()" title="Voice Input (Microphone)">
+                    <i class="fa-solid fa-microphone"></i>
+                </button>
+
+                <input type="text" id="userPrompt" placeholder="काहीतरी विचारा, रुग्णाचा ID टाका (उदा. P0001) किंवा बोला..." autocomplete="off">
+                
+                <button type="submit" class="btn-act btn-send" id="sendBtn">
+                    <i class="fa-solid fa-paper-plane"></i> Send
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- VIEW 2: DOCTOR FINDER (200 Doctors Database) -->
+    <div class="view-panel" id="viewDoctors">
+        <div style="display: flex; gap: 8px; justify-content: space-between; flex-wrap: wrap;">
+            <input type="text" id="docSearchCity" placeholder="City (e.g. Pune, Mumbai, Nashik)..." style="flex:1; min-width:140px; padding:8px 12px; border-radius:10px; background:#0f172a; color:#fff; border:1px solid var(--border);" oninput="filterDoctorList()">
+            <select id="docSearchSpec" style="padding:8px; border-radius:10px; background:#0f172a; color:#fff; border:1px solid var(--border);" onchange="filterDoctorList()">
+                <option value="">All Specializations</option>
+                <option value="Kayachikitsa">Kayachikitsa (Internal Med)</option>
+                <option value="Panchakarma">Panchakarma (Detox)</option>
+                <option value="Ayurvedic Dietetics">Ayurvedic Dietetics</option>
+                <option value="Yoga & Lifestyle">Yoga & Lifestyle</option>
+                <option value="Digestive Health">Digestive Health</option>
+            </select>
+        </div>
+        <div class="grid-container" id="doctorsGrid">
+            <!-- Rendered dynamically -->
+        </div>
+    </div>
+
+    <!-- VIEW 3: PATIENT EHR LOOKUP (2000 Patients) -->
+    <div class="view-panel" id="viewPatient">
+        <div style="display:flex; gap:8px;">
+            <input type="text" id="patientSearchId" placeholder="Enter Patient ID (e.g. P0001 to P2000)..." value="P0001" style="flex:1; padding:10px 14px; border-radius:12px; background:#0f172a; color:#fff; border:1px solid var(--border);">
+            <button type="button" class="btn-act btn-send" onclick="fetchPatientRecord()">Lookup EHR</button>
+        </div>
+        <div class="patient-card" id="patientDisplay">
+            <!-- Rendered dynamically -->
+        </div>
+    </div>
+
+    <!-- VIEW 4: CLINICAL ANALYTICS HUB -->
+    <div class="view-panel" id="viewAnalytics">
+        <div class="ehr-grid" style="grid-template-columns: repeat(4, 1fr);">
+            <div class="ehr-pill"><span>Total Patients</span><b style="color:var(--primary); font-size:16px;">2,000</b></div>
+            <div class="ehr-pill"><span>Ayurvedic Doctors</span><b style="color:var(--emerald); font-size:16px;">200</b></div>
+            <div class="ehr-pill"><span>RAG Knowledge Base</span><b style="color:var(--gold); font-size:16px;">11 Modules</b></div>
+            <div class="ehr-pill"><span>Conversations</span><b style="color:var(--pink); font-size:16px;">2,000</b></div>
+        </div>
+        <div style="background:#0f172a; border:1px solid var(--border); border-radius:14px; padding:14px; text-align:left; font-size:13px; line-height:1.7;">
+            <b style="color:var(--primary);"><i class="fa-solid fa-dna"></i> त्रिदोष विभाजन (Dosha Demographics):</b>
+            <div style="display:flex; gap:10px; margin-top:8px;">
+                <div style="flex:1; background:#1e293b; padding:10px; border-radius:8px; border-left:3px solid #38bdf8;">💨 <b>Vata:</b> 670 Patients (33.5%)</div>
+                <div style="flex:1; background:#1e293b; padding:10px; border-radius:8px; border-left:3px solid #f43f5e;">🔥 <b>Pitta:</b> 665 Patients (33.25%)</div>
+                <div style="flex:1; background:#1e293b; padding:10px; border-radius:8px; border-left:3px solid #10b981;">🌿 <b>Kapha:</b> 665 Patients (33.25%)</div>
+            </div>
+            <div style="margin-top:12px;">
+                <b style="color:var(--gold);"><i class="fa-solid fa-hospital-user"></i> शीर्ष क्लिनिकल वैशिष्ट्ये (Top Specializations):</b>
+                <p style="color:var(--text-sub); margin-top:4px;">Kayachikitsa (40 Doctors), Panchakarma (40 Doctors), Ayurvedic Dietetics (40 Doctors), Yoga & Lifestyle (40 Doctors), Digestive Health (40 Doctors).</p>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    // DOM Elements
+    const avatarPod = document.getElementById('avatarPod');
+    const avatarImg = document.getElementById('avatarImg');
+    const soundwave = document.getElementById('soundwave');
+    const statusBadge = document.getElementById('statusBadge');
+    const statusText = document.getElementById('statusText');
+    const chatContainer = document.getElementById('chatContainer');
+    const userPrompt = document.getElementById('userPrompt');
+    const sendBtn = document.getElementById('sendBtn');
+    const micBtn = document.getElementById('micBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const speakInfo = document.getElementById('speakInfo');
+    const voiceSelect = document.getElementById('voiceSelect');
+    const sttLangSelect = document.getElementById('sttLangSelect');
+    const settingsBox = document.getElementById('settingsBox');
+    const docInput = document.getElementById('docInput');
+    const imageInput = document.getElementById('imageInput');
+    const previewBox = document.getElementById('previewBox');
+    const imagePreview = document.getElementById('imagePreview');
+    const doctorsGrid = document.getElementById('doctorsGrid');
+    const patientDisplay = document.getElementById('patientDisplay');
+
+    let lastAiResponseText = "";
+    let isSending = false;
+    let currentSttLang = "mr-IN";
+    let allDoctorsList = [];
+
+    // ----------------------------------------------------
+    // 1. View Switching Hub
+    // ----------------------------------------------------
+    function switchView(viewName) {
+        document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.view-panel').forEach(p => p.classList.remove('active'));
+
+        if (viewName === 'chat') {
+            document.getElementById('tabChat').classList.add('active');
+            document.getElementById('viewChat').classList.add('active');
+        } else if (viewName === 'doctors') {
+            document.getElementById('tabDoctors').classList.add('active');
+            document.getElementById('viewDoctors').classList.add('active');
+            if (!allDoctorsList.length) loadDoctorsData();
+        } else if (viewName === 'patient') {
+            document.getElementById('tabPatient').classList.add('active');
+            document.getElementById('viewPatient').classList.add('active');
+            fetchPatientRecord();
+        } else if (viewName === 'analytics') {
+            document.getElementById('tabAnalytics').classList.add('active');
+            document.getElementById('viewAnalytics').classList.add('active');
+        }
+    }
+
+    async function loadDoctorsData() {
+        try {
+            const res = await fetch('/api/doctors');
+            const data = await res.json();
+            allDoctorsList = data.doctors || [];
+            renderDoctors(allDoctorsList);
+        } catch (e) {
+            console.error("Doctors fetch error:", e);
+        }
+    }
+
+    function filterDoctorList() {
+        const city = document.getElementById('docSearchCity').value.toLowerCase();
+        const spec = document.getElementById('docSearchSpec').value.toLowerCase();
+
+        const filtered = allDoctorsList.filter(d => {
+            const matchCity = !city || d.Location.toLowerCase().includes(city);
+            const matchSpec = !spec || d.Specialization.toLowerCase().includes(spec);
+            return matchCity && matchSpec;
+        });
+        renderDoctors(filtered);
+    }
+
+    function renderDoctors(docs) {
+        doctorsGrid.innerHTML = "";
+        if (!docs.length) {
+            doctorsGrid.innerHTML = "<p style='color:var(--text-sub);'>कोणतेही डॉक्टर सापडले नाहीत.</p>";
+            return;
+        }
+        docs.forEach(d => {
+            const card = document.createElement('div');
+            card.className = "doctor-card";
+            card.innerHTML = `
+                <div class="doc-name">${d.Doctor_Name} <span style="font-size:10px; color:var(--text-sub);">(${d.Doctor_ID})</span></div>
+                <div class="doc-spec">🌿 ${d.Specialization}</div>
+                <div class="doc-meta">🎓 ${d.Qualification} • ${d.Experience_Years} yrs exp</div>
+                <div class="doc-meta">📍 ${d.Location} • ⏰ ${d.Availability}</div>
+                <div class="doc-meta">🗣️ ${d.Languages}</div>
+                <button type="button" class="btn-book" onclick="bookAppointment('${d.Doctor_ID}', '${d.Doctor_Name}', '${d.Availability}')">
+                    <i class="fa-solid fa-calendar-check"></i> Book Consultation
+                </button>
+            `;
+            doctorsGrid.appendChild(card);
+        });
+    }
+
+    async function bookAppointment(docId, docName, timing) {
+        try {
+            const res = await fetch('/api/book_appointment', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ doctor_id: docId, doctor_name: docName, time_slot: timing })
+            });
+            const data = await res.json();
+            alert(data.message);
+            switchView('chat');
+            appendMessage('ai', data.message);
+            speakFullText(data.message);
+        } catch (e) {
+            alert("अपॉइंटमेंट बुकिंग अयशस्वी झाले.");
+        }
+    }
+
+    async function fetchPatientRecord() {
+        const pid = (document.getElementById('patientSearchId').value || 'P0001').trim();
+        try {
+            const res = await fetch(`/api/patient/${pid}`);
+            const data = await res.json();
+            if (data.success && data.patient) {
+                const p = data.patient;
+                patientDisplay.innerHTML = `
+                    <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #334155; padding-bottom:8px;">
+                        <div>
+                            <h3 style="color:#fff;">${p.Patient_Name} <span style="font-size:12px; color:var(--primary); font-weight:600;">[ID: ${p.Patient_ID}]</span></h3>
+                            <span style="font-size:12px; color:var(--text-sub);">${p.Age} yrs • ${p.Gender} • ${p.City}</span>
+                        </div>
+                        <span style="background:rgba(236,72,153,0.2); border:1px solid var(--pink); color:var(--pink); padding:4px 10px; border-radius:12px; font-size:11px; font-weight:700;">
+                            ${p.Classification}
+                        </span>
+                    </div>
+                    <div class="ehr-grid">
+                        <div class="ehr-pill"><span>Prakriti / प्रकृती</span><b>${p.Prakriti}</b></div>
+                        <div class="ehr-pill"><span>Agni (Digestive Fire)</span><b>${p.Agni}</b></div>
+                        <div class="ehr-pill"><span>Ama (Toxin Level)</span><b>${p.Ama}</b></div>
+                    </div>
+                    <div style="font-size:13px; line-height:1.6;">
+                        <b style="color:var(--primary);">🩺 लक्षणे (Symptoms):</b> ${p.Symptoms}<br>
+                        <b style="color:var(--emerald);">🥗 शिफारस केलेला आहार (Diet):</b> ${p.Diet}<br>
+                        <b style="color:var(--gold);">📋 जीवनशैली (Lifestyle):</b> Sleep: ${p.Sleep} • Stress: ${p.Stress} • Exercise: ${p.Exercise}
+                    </div>
+                `;
+            } else {
+                patientDisplay.innerHTML = `<p style="color:#f87171;">${data.message}</p>`;
+            }
+        } catch (e) {
+            patientDisplay.innerHTML = "<p style='color:#f87171;'>डेटा आणताना त्रुटी आली.</p>";
+        }
+    }
+
+    // ----------------------------------------------------
+    // 2. Text-to-Speech (TTS Engine) with Marathi Optimization
+    // ----------------------------------------------------
+    let speechQueue = [];
+    let currentChunkIdx = 0;
+    let isSpeaking = false;
+    let keepAliveTimer = null;
+
+    let userSelectedVoiceName = localStorage.getItem('zeniva_selected_voice') || "";
+
+    function populateVoices() {
+        if (!('speechSynthesis' in window)) return;
+        const voices = window.speechSynthesis.getVoices();
+        if (voices.length === 0) return;
+
+        const currentVal = userSelectedVoiceName || (voiceSelect ? voiceSelect.value : "");
+        voiceSelect.innerHTML = "";
+
+        let indianVoices = [];
+        let femaleVoices = [];
+        let maleVoices = [];
+        let otherVoices = [];
+
+        voices.forEach(v => {
+            const name = v.name.toLowerCase();
+            const lang = (v.lang || "").toLowerCase();
+            
+            const isIndian = lang.startsWith('mr') || lang.startsWith('hi') || lang.includes('in') ||
+                            name.includes('marathi') || name.includes('hindi') || name.includes('swara') ||
+                            name.includes('kalpana') || name.includes('heera') || name.includes('neerja') ||
+                            name.includes('hemant') || name.includes('ravi') || name.includes('kavya') ||
+                            name.includes('google हिन्दी') || name.includes('google मराठी');
+
+            const isFem = name.includes('female') || name.includes('zira') || name.includes('jenny') || 
+                          name.includes('aria') || name.includes('sonia') || name.includes('samantha') || 
+                          name.includes('woman') || name.includes('girl');
+
+            const isMale = name.includes('male') || name.includes('david') || name.includes('mark') || 
+                           name.includes('george') || name.includes('man') || name.includes('guy');
+
+            if (isIndian) indianVoices.push(v);
+            else if (isFem) femaleVoices.push(v);
+            else if (isMale) maleVoices.push(v);
+            else otherVoices.push(v);
+        });
+
+        if (indianVoices.length > 0) {
+            const grp = document.createElement('optgroup');
+            grp.label = "🇮🇳 Marathi & Indian Voices (मराठी/हिंदीसाठी सर्वोत्तम)";
+            indianVoices.forEach(v => {
+                const opt = document.createElement('option');
+                opt.value = v.name;
+                opt.textContent = v.name + " [" + v.lang + "]";
+                grp.appendChild(opt);
+            });
+            voiceSelect.appendChild(grp);
+        }
+
+        if (femaleVoices.length > 0) {
+            const grp = document.createElement('optgroup');
+            grp.label = "👩 English / Global Female Voices";
+            femaleVoices.forEach(v => {
+                const opt = document.createElement('option');
+                opt.value = v.name;
+                opt.textContent = v.name + " (" + v.lang + ")";
+                grp.appendChild(opt);
+            });
+            voiceSelect.appendChild(grp);
+        }
+
+        if (maleVoices.length > 0) {
+            const grp = document.createElement('optgroup');
+            grp.label = "👨 English / Global Male Voices";
+            maleVoices.forEach(v => {
+                const opt = document.createElement('option');
+                opt.value = v.name;
+                opt.textContent = v.name + " (" + v.lang + ")";
+                grp.appendChild(opt);
+            });
+            voiceSelect.appendChild(grp);
+        }
+
+        if (otherVoices.length > 0) {
+            const grp = document.createElement('optgroup');
+            grp.label = "🌐 Other System Voices";
+            otherVoices.forEach(v => {
+                const opt = document.createElement('option');
+                opt.value = v.name;
+                opt.textContent = v.name + " (" + v.lang + ")";
+                grp.appendChild(opt);
+            });
+            voiceSelect.appendChild(grp);
+        }
+
+        // Lock & Preserve User Selection (or default to best Indian voice for Marathi)
+        if (currentVal && voices.some(v => v.name === currentVal)) {
+            voiceSelect.value = currentVal;
+            userSelectedVoiceName = currentVal;
+        } else if (indianVoices.length > 0) {
+            let bestInd = indianVoices.find(v => v.lang.startsWith('mr') || v.name.toLowerCase().includes('swara') || v.name.toLowerCase().includes('marathi'));
+            if (!bestInd) bestInd = indianVoices.find(v => v.lang.startsWith('hi') || v.name.toLowerCase().includes('kalpana') || v.name.toLowerCase().includes('hindi'));
+            if (!bestInd) bestInd = indianVoices[0];
+            voiceSelect.value = bestInd.name;
+            userSelectedVoiceName = bestInd.name;
+        } else if (femaleVoices.length > 0) {
+            voiceSelect.value = femaleVoices[0].name;
+            userSelectedVoiceName = femaleVoices[0].name;
+        } else if (voices.length > 0) {
+            voiceSelect.value = voices[0].name;
+            userSelectedVoiceName = voices[0].name;
+        }
+    }
+
+    if ('speechSynthesis' in window) {
+        window.speechSynthesis.onvoiceschanged = populateVoices;
+        populateVoices();
+    }
+
+    if (voiceSelect) {
+        voiceSelect.addEventListener('change', function() {
+            userSelectedVoiceName = this.value;
+            localStorage.setItem('zeniva_selected_voice', this.value);
+            if (lastAiResponseText && isSpeaking) {
+                stopSpeaking();
+                speakFullText(lastAiResponseText);
+            }
+        });
+    }
+
+    function setAvatarState(state, info) {
+        avatarPod.classList.remove('speaking');
+        statusBadge.classList.remove('speaking', 'listening');
+        soundwave.classList.remove('active');
+
+        if (state === 'speaking') {
+            avatarPod.classList.add('speaking');
+            statusBadge.classList.add('speaking');
+            soundwave.classList.add('active');
+            statusText.innerText = "🟣 Speaking (बोलत आहे...)";
+            stopBtn.style.display = "inline-block";
+            speakInfo.innerText = info || "बोलत आहे...";
+        } else if (state === 'thinking') {
+            statusText.innerText = "🟡 Thinking (विचार करत आहे...)";
+            stopBtn.style.display = "none";
+            speakInfo.innerText = "";
+        } else if (state === 'listening') {
+            statusBadge.classList.add('listening');
+            statusText.innerText = "🔴 Listening (ऐकत आहे...)";
+            stopBtn.style.display = "none";
+            speakInfo.innerText = "बोलत रहा...";
+        } else {
+            statusText.innerText = "🟢 Ready (सज्ज)";
+            stopBtn.style.display = "none";
+            speakInfo.innerText = "";
+        }
+    }
+
+    function splitSentences(text) {
+        if (!text) return [];
+        // 1. Strip Code blocks & inline code
+        let clean = text.replace(/```[\s\S]*?```/g, ' ');
+        clean = clean.replace(/`([^`]+)`/g, '$1');
+        // 2. Strip URLs
+        clean = clean.replace(/https?:\/\/\S+/g, ' ');
+        // 3. Strip Emojis
+        clean = clean.replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE00}-\u{FE0F}]/gu, ' ');
+        // 4. Strip Markdown headers & formatting (###, **, *, _, ~, |, >)
+        clean = clean.replace(/#{1,6}\s*/g, ' ');
+        clean = clean.replace(/[*_~>|#]/g, ' ');
+        // 5. Clean list bullets (- , • )
+        clean = clean.replace(/^[\s]*[-•*]\s+/gm, ' ');
+        // 6. Clean bracketed English acronyms/IDs like [ID: P0001]
+        clean = clean.replace(/\[[^\]]+\]/g, ' ');
+        // 7. Collapse spaces
+        clean = clean.replace(/[ \t]+/g, ' ').trim();
+        
+        if (!clean) return [];
+        
+        // Split by natural sentence boundaries: Devanagari danda '।', '.', '!', '?', or newlines
+        let parts = clean.split(/([.!?।\n]+)/);
+        let res = [];
+        let buffer = "";
+        
+        for (let i = 0; i < parts.length; i++) {
+            let part = parts[i];
+            buffer += part;
+            // Short conversational chunks for crisp uninterrupted audio streaming
+            if (buffer.length > 65 || i % 2 === 1 || i === parts.length - 1) {
+                let trimmed = buffer.replace(/[\n\r]+/g, ' ').trim();
+                if (trimmed && trimmed.length > 1) res.push(trimmed);
+                buffer = "";
+            }
+        }
+        return res.length ? res : [clean];
+    }
+
+    function stopSpeaking() {
+        if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+        if (keepAliveTimer) clearInterval(keepAliveTimer);
+        isSpeaking = false;
+        speechQueue = [];
+        currentChunkIdx = 0;
+        setAvatarState('idle');
+    }
+
+    function speakFullText(text) {
+        stopSpeaking();
+        if (!text || !('speechSynthesis' in window)) return;
+        const chunks = splitSentences(text);
+        if (!chunks.length) return;
+
+        speechQueue = chunks;
+        currentChunkIdx = 0;
+        isSpeaking = true;
+        setAvatarState('speaking', "बोलत आहे (1/" + chunks.length + ")...");
+
+        playNextChunk();
+    }
+
+    function playNextChunk() {
+        if (!isSpeaking) return;
+        if (currentChunkIdx >= speechQueue.length) {
+            stopSpeaking();
+            return;
+        }
+
+        const chunk = speechQueue[currentChunkIdx];
+        setAvatarState('speaking', "बोलत आहे (" + (currentChunkIdx + 1) + "/" + speechQueue.length + ")...");
+
+        const utt = new SpeechSynthesisUtterance(chunk);
+        window._activeUtterance = utt; // Hold global reference to prevent V8 garbage collection
+
+        const voices = window.speechSynthesis.getVoices();
+        let chosenVoice = null;
+        
+        // 1. Strict user-selected voice binding (Never changes mid-sentence)
+        const selected = userSelectedVoiceName || (voiceSelect ? voiceSelect.value : "");
+        if (selected) {
+            chosenVoice = voices.find(x => x.name === selected);
+        }
+
+        const isDevanagari = /[\u0900-\u097F]/.test(chunk);
+
+        // 2. If no user voice selected, pick best matching language voice
+        if (!chosenVoice) {
+            if (isDevanagari) {
+                chosenVoice = voices.find(v => 
+                    v.lang.startsWith('mr') || 
+                    v.name.toLowerCase().includes('aarohi') || 
+                    v.name.toLowerCase().includes('swara') ||
+                    v.name.toLowerCase().includes('marathi') ||
+                    v.lang.startsWith('hi') || 
+                    v.name.toLowerCase().includes('kalpana') ||
+                    v.name.toLowerCase().includes('hindi') ||
+                    v.lang.includes('IN')
+                );
+            } else {
+                chosenVoice = voices.find(v => v.lang.startsWith('en'));
+            }
+        }
+
+        if (chosenVoice) {
+            utt.voice = chosenVoice;
+            utt.lang = chosenVoice.lang;
+        } else {
+            utt.lang = isDevanagari ? 'mr-IN' : 'en-IN';
+        }
+
+        utt.rate = isDevanagari ? 0.90 : 0.95;
+        utt.pitch = 1.05;
+
+        utt.onend = () => {
+            if (!isSpeaking) return;
+            currentChunkIdx++;
+            if (currentChunkIdx < speechQueue.length) playNextChunk();
+            else stopSpeaking();
+        };
+
+        utt.onerror = (e) => {
+            console.warn('TTS Utterance Error:', e);
+            if (!isSpeaking) return;
+            currentChunkIdx++;
+            if (currentChunkIdx < speechQueue.length) playNextChunk();
+            else stopSpeaking();
+        };
+
+        window.speechSynthesis.speak(utt);
+    }
+
+    function onTargetLangChange(val) {
+        const sttSel = document.getElementById('sttLangSelect');
+        if (val === 'mr' || val === 'en_to_mr' || val === 'hi_to_mr') {
+            updateSttLang('mr-IN');
+            if (sttSel) sttSel.value = 'mr-IN';
+            autoSelectBestVoice('mr');
+        } else if (val === 'hi') {
+            updateSttLang('hi-IN');
+            if (sttSel) sttSel.value = 'hi-IN';
+            autoSelectBestVoice('hi');
+        } else if (val === 'en' || val === 'mr_to_en') {
+            updateSttLang('en-IN');
+            if (sttSel) sttSel.value = 'en-IN';
+            autoSelectBestVoice('en');
+        }
+    }
+
+    function autoSelectBestVoice(targetCode) {
+        if (!('speechSynthesis' in window)) return;
+        const voices = window.speechSynthesis.getVoices();
+        let match = null;
+        if (targetCode === 'mr') {
+            match = voices.find(v => v.lang.startsWith('mr') || v.name.toLowerCase().includes('aarohi') || v.name.toLowerCase().includes('swara') || v.name.toLowerCase().includes('marathi'));
+        } else if (targetCode === 'hi') {
+            match = voices.find(v => v.lang.startsWith('hi') || v.name.toLowerCase().includes('kalpana') || v.name.toLowerCase().includes('hindi'));
+        } else if (targetCode === 'en') {
+            match = voices.find(v => v.name.includes('Zira') || v.name.includes('Jenny') || v.lang.startsWith('en'));
+        }
+        if (match && voiceSelect) {
+            voiceSelect.value = match.name;
+            userSelectedVoiceName = match.name;
+            localStorage.setItem('zeniva_selected_voice', match.name);
+        }
+    }
+
+    function replayLastReply() {
+        if (lastAiResponseText) speakFullText(lastAiResponseText);
+    }
+
+    function toggleSettings() {
+        settingsBox.classList.toggle('open');
+    }
+
+    function changeAvatar(url) {
+        avatarImg.src = url;
+    }
+
+    // ----------------------------------------------------
+    // 3. Chat & Clinical AI Handling
+    // ----------------------------------------------------
+    function appendMessage(sender, text) {
+        const div = document.createElement('div');
+        div.className = "msg-bubble " + (sender === 'user' ? 'msg-user' : 'msg-ai');
+        div.innerText = text;
+        chatContainer.appendChild(div);
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+    }
+
+    function sendQuickPrompt(promptText) {
+        userPrompt.value = promptText;
+        handleSend();
+    }
+
+    async function handleSend() {
+        const text = userPrompt.value.trim();
+        const files = imageInput.files;
+
+        if (!text && (!files || files.length === 0)) return;
+        if (isSending) return;
+
+        isSending = true;
+        sendBtn.disabled = true;
+        sendBtn.innerText = "⏳...";
+
+        stopSpeaking();
+        setAvatarState('thinking');
+
+        if (text) {
+            appendMessage('user', text);
+        } else if (files && files.length > 0) {
+            appendMessage('user', `📷 ${files.length} वैद्यकीय फोटो अपलोड केले (आयुर्वेदिक क्लिनिकल विश्लेषण सुरू आहे...)`);
+        }
+        userPrompt.value = "";
+
+        const targetLang = document.getElementById('targetLangSelect') ? document.getElementById('targetLangSelect').value : 'auto';
+
+        const formData = new FormData();
+        if (text) formData.append('prompt', text);
+        formData.append('target_lang', targetLang);
+
+        if (files && files.length > 0) {
+            for (let i = 0; i < files.length; i++) {
+                formData.append('image', files[i]);
+            }
+        }
+
+        try {
+            const res = await fetch('/chat', { method: 'POST', body: formData });
+            const data = await res.json();
+
+            if (data.reply) {
+                appendMessage('ai', data.reply);
+                lastAiResponseText = data.reply;
+                if (!data.error) speakFullText(data.reply);
+                else setAvatarState('idle');
+            } else {
+                appendMessage('ai', 'कोणताही प्रतिसाद आला नाही.');
+                setAvatarState('idle');
+            }
+        } catch (err) {
+            console.error(err);
+            appendMessage('ai', '⚠️ सर्व्हरशी संपर्क होऊ शकला नाही. कृपया Flask सर्व्हर चालू असल्याची खात्री करा.');
+            setAvatarState('idle');
+        } finally {
+            isSending = false;
+            sendBtn.disabled = false;
+            sendBtn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Send';
+            if (imageInput) imageInput.value = "";
+            previewBox.style.display = "none";
+            previewBox.innerHTML = "";
+        }
+    }
+
+    // ----------------------------------------------------
+    // 4. Speech-to-Text (STT Engine)
+    // ----------------------------------------------------
+    let recognition = null;
+    function initSpeechRecognition() {
+        if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+            const Rec = window.SpeechRecognition || window.webkitSpeechRecognition;
+            recognition = new Rec();
+            recognition.continuous = false;
+            recognition.interimResults = false;
+            recognition.lang = currentSttLang;
+
+            recognition.onstart = () => {
+                stopSpeaking();
+                micBtn.classList.add('recording');
+                setAvatarState('listening');
+            };
+
+            recognition.onresult = (e) => {
+                const t = e.results[0][0].transcript;
+                userPrompt.value = t;
+                micBtn.classList.remove('recording');
+                setAvatarState('idle');
+                handleSend();
+            };
+
+            recognition.onerror = (e) => {
+                console.warn('STT Error:', e);
+                micBtn.classList.remove('recording');
+                setAvatarState('idle');
+            };
+
+            recognition.onend = () => {
+                micBtn.classList.remove('recording');
+                setAvatarState('idle');
+            };
+        }
+    }
+    initSpeechRecognition();
+
+    function updateSttLang(lang) {
+        currentSttLang = lang;
+        if (recognition) {
+            recognition.lang = lang;
+        }
+    }
+
+    function toggleVoice() {
+        if (!recognition) {
+            alert('तुमचा ब्राऊझर व्हॉइस रेकग्निशन (STT) सपोर्ट करत नाही. कृपया Google Chrome किंवा Microsoft Edge वापरा.');
+            return;
+        }
+        stopSpeaking();
+        try { 
+            recognition.lang = currentSttLang;
+            recognition.start(); 
+        } catch(e) { 
+            try { recognition.stop(); } catch(err){}
+        }
+    }
+
+    // ----------------------------------------------------
+    // 5. Multi-File & Multi-Image Uploads
+    // ----------------------------------------------------
+    function previewImg() {
+        const files = imageInput.files;
+        previewBox.innerHTML = "";
+        if (files && files.length > 0) {
+            previewBox.style.display = "flex";
+            Array.from(files).forEach(file => {
+                const img = document.createElement('img');
+                img.src = URL.createObjectURL(file);
+                img.title = file.name;
+                previewBox.appendChild(img);
+            });
+        } else {
+            previewBox.style.display = "none";
+        }
+    }
+
+    async function uploadDoc() {
+        const files = docInput.files;
+        if (!files || files.length === 0) return;
+
+        setAvatarState('thinking');
+        const fileNames = Array.from(files).map(f => f.name).join(', ');
+        appendMessage('user', `📄 ${files.length} फाईल्स जोडत आहे: ${fileNames}`);
+
+        const formData = new FormData();
+        for (let i = 0; i < files.length; i++) {
+            formData.append('doc', files[i]);
+        }
+
+        try {
+            const res = await fetch('/upload_doc', { method: 'POST', body: formData });
+            const data = await res.json();
+            appendMessage('ai', data.message);
+            lastAiResponseText = data.message;
+            speakFullText(data.message);
+        } catch (err) {
+            console.error(err);
+            appendMessage('ai', '❌ दस्तऐवज अपलोड अयशस्वी झाले.');
+            setAvatarState('idle');
+        } finally {
+            docInput.value = "";
+        }
+    }
+</script>
+</body>
+</html>

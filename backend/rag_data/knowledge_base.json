@@ -1,0 +1,68 @@
+[
+  {
+    "id": "K001",
+    "title": "Tridosha Theory (त्रिदोष सिद्धांत)",
+    "source": "dosha.pdf",
+    "content": "Tridosha (त्रिदोष) is the fundamental principle of Ayurveda comprising Vata, Pitta, and Kapha.\n- Vata (वात) governs movement, respiration, circulation, and nervous system impulses.\n- Pitta (पित्त) governs digestion, metabolism, biochemical transformation, enzymatic action, and body heat.\n- Kapha (कफ) governs physical stability, structure, lubrication of joints, tissues, and natural immunity.\nHealth is a dynamic equilibrium of these three doshas, while imbalance (Doshic Vaishamya) causes disease."
+  },
+  {
+    "id": "K002",
+    "title": "Vata Dosha (वात दोष लक्षणे व आहार)",
+    "source": "vata.pdf",
+    "content": "Vata Dosha (वात दोष):\n- Qualities (गुणा): Dry (Ruksha), Light (Laghu), Cold (Sheeta), Rough (Khara), Subtle (Sukshma), Mobile (Chala).\n- Imbalance Symptoms: Anxiety, insomnia, dry skin, constipation, joint cracking, bloating, fluctuating appetite.\n- Diet & Remedies: Warm, freshly cooked, nourishing, unctuous meals (Ghee, sesame oil), sweet, sour, and salty tastes. Avoid dry, cold, and raw foods. Practice Abhyanga (warm oil massage) and maintain regular routine."
+  },
+  {
+    "id": "K003",
+    "title": "Pitta Dosha (पित्त दोष लक्षणे व आहार)",
+    "source": "pitta.pdf",
+    "content": "Pitta Dosha (पित्त दोष):\n- Qualities (गुणा): Hot (Ushna), Sharp (Tikshna), Liquid (Drava), Slightly Oily (Sasneha), Acidic (Amla).\n- Imbalance Symptoms: Hyperacidity, burning sensation (Daha), skin inflammation, excessive sweating, loose stools, irritability, headaches.\n- Diet & Remedies: Cooling, soothing, sweet, bitter, and astringent foods (Ghee, coconut water, coriander, mint, fennel). Avoid excessively spicy, salty, sour, fried, and fermented foods."
+  },
+  {
+    "id": "K004",
+    "title": "Kapha Dosha (कफ दोष लक्षणे व आहार)",
+    "source": "kapha.pdf",
+    "content": "Kapha Dosha (कफ दोष):\n- Qualities (गुणा): Heavy (Guru), Slow (Manda), Cold (Sheeta), Oily (Snigdha), Smooth (Shlakshna), Dense (Sandra).\n- Imbalance Symptoms: Lethargy, excessive sleepiness, sluggish metabolism, mucus congestion, water retention, heaviness.\n- Diet & Remedies: Light, warm, dry, pungent, bitter, and astringent foods (Ginger, black pepper, honey, barley, steamed vegetables). Avoid heavy, sweet, cold, oily, and dairy products. Regular vigorous exercise is vital."
+  },
+  {
+    "id": "K005",
+    "title": "Prakriti Assessment (प्रकृती विश्लेषण)",
+    "source": "prakriti.pdf",
+    "content": "Prakriti (प्रकृती) is an individual's unique biological constitution established at the time of conception and remains constant throughout life.\n- Vata Prakriti: Slender frame, quick movements, creative, sensitive to cold, light sleeper.\n- Pitta Prakriti: Moderate build, sharp intellect, strong appetite, sensitive to heat, ambitious.\n- Kapha Prakriti: Strong sturdy build, calm demeanor, deep sleeper, steady memory, high endurance.\nKnowing one's Prakriti allows personalized lifestyle and dietary optimization."
+  },
+  {
+    "id": "K006",
+    "title": "Vikriti & Imbalance (विकृती व दोष विषमता)",
+    "source": "vikriti.pdf",
+    "content": "Vikriti (विकृती) represents the current pathological state of doshic imbalance in comparison to the individual's baseline Prakriti.\n- When lifestyle, diet, seasons, or stress disturb doshic balance, Vikriti occurs.\n- Ayurvedic therapeutic interventions (Ahara, Vihara, Aushadhi, Panchakarma) aim to restore Vikriti back to the original Prakriti state."
+  },
+  {
+    "id": "K007",
+    "title": "Agni - Digestive & Metabolic Fire (अग्नी विचार)",
+    "source": "agni.pdf",
+    "content": "Agni (अग्नी) is the digestive and metabolic principle responsible for nutrient absorption, immunity, and vitality.\n- Sama Agni (सम अग्नी): Balanced digestion, proper hunger and assimilation (Healthy state).\n- Vishama Agni (विषम अग्नी): Irregular digestion associated with Vata imbalance (bloating, gas, irregular hunger).\n- Tikshna Agni (तीक्ष्ण अग्नी): Hyperactive, intense digestive fire associated with Pitta (burning, hyperacidity, loose stools).\n- Manda Agni (मंद अग्नी): Sluggish, slow digestion associated with Kapha (heaviness, low appetite, Ama formation)."
+  },
+  {
+    "id": "K008",
+    "title": "Ama & Detoxification (आम व विषनिवारण)",
+    "source": "ama.pdf",
+    "content": "Ama (आम) is toxic, undigested metabolic waste formed when Agni is weak (Mandagni).\n- Signs of Ama: White coating on tongue, foul breath, body stiffness, fatigue after meals, heaviness, cloudy urine, sluggish bowel movements.\n- Management: Deepana (appetite stimulants like Ginger/Cumin), Pachana (digestive herbs), fasting (Langhana), warm water sips, and Panchakarma therapies."
+  },
+  {
+    "id": "K009",
+    "title": "Ayurvedic Dietetics (आहार व पथ्य विचार)",
+    "source": "diet.pdf",
+    "content": "Ayurvedic Dietetics (आहार नियम):\n- Eat only when hungry, in a peaceful environment, avoiding overeating (fill 1/2 stomach with food, 1/4 with liquid, leave 1/4 empty for digestion).\n- Include Shad Rasa (6 tastes: Sweet, Sour, Salty, Pungent, Bitter, Astringent) in daily diet.\n- Seasonal eating (Ritucharya) and compatible food combinations (avoiding Viruddha Ahara like milk with citrus/fish)."
+  },
+  {
+    "id": "K010",
+    "title": "Doctor Consultations & Panchakarma (वैद्यकीय सल्ला व पंचकर्म)",
+    "source": "doctor_dataset.csv",
+    "content": "Ayurvedic Doctor Consultations & Therapies:\n- Kayachikitsa (General internal medicine)\n- Panchakarma (5-fold detoxification: Vamana, Virechana, Basti, Nasya, Raktamokshana)\n- Ayurvedic Dietetics (Customized nutritional planning based on Dosha, Agni, and seasons)\n- Yoga & Lifestyle (Pranayama, Asanas, and Dinacharya daily routine guidance)\n- Digestive Health (Managing IBS, hyperacidity, GERD, sluggish digestion, and Ama detoxification)."
+  },
+  {
+    "id": "K011",
+    "title": "Medical Emergency & Red Flag Protocol",
+    "source": "emergency.pdf",
+    "content": "EMERGENCY PROTOCOL (आपत्कालीन मार्गदर्शक तत्वे):\nFor severe acute conditions such as chest pain, shortness of breath, severe trauma, loss of consciousness, uncontrolled bleeding, or sudden paralysis:\nPlease seek immediate emergency hospital medical care (Dial 112 / 108) rather than relying on an AI assistant."
+  }
+]

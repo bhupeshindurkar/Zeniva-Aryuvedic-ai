@@ -1,0 +1,2164 @@
+import React, { useState, useEffect } from 'react';
+import { 
+  User, Users, Calendar, ClipboardList, HeartPulse, ArrowRight, 
+  ChevronRight, PlusCircle, Upload, MessageSquare, Share2, 
+  FileText, Activity, Clock, CheckCircle2, Search, Plus, X, 
+  Check, Stethoscope, Sparkles, Send, ShieldCheck, Edit3,
+  MapPin, Award, Building, BadgeCheck, Trophy, Bell, Mail,
+  HelpCircle, Settings, ChevronDown, CheckSquare, Trash2,
+  Edit, Save, Phone, Eye, Star, FileSpreadsheet, Download,
+  Headphones, Flame, Droplet, Wind, Shield, AlertCircle,
+  Navigation, Compass, ExternalLink, RefreshCw, Camera, Video
+} from 'lucide-react';
+import { MortarPestleGraphic, ZenivaLogo } from '../components/ZenivaIcons';
+
+export const DoctorDashboard = ({
+  activeTab = 'home',
+  currentUser = {},
+  onSelectTab = () => {},
+  onAddPrescription,
+  onOpenPhotoReview,
+  onViewSchedule,
+  onUpdateUser,
+  onOpenLogin,
+  onLogout
+}) => {
+  // Toast Alert Notification
+  const [toastMessage, setToastMessage] = useState('');
+  const showToast = (msg) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(''), 3000);
+  };
+
+  // State for Doctor Profile & Notification Dropdowns
+  const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+
+  // Doctor Details with Dr. prefix normalization
+  const rawName = currentUser.name || 'Doctor';
+  const doctorName = rawName.trim().startsWith('Dr.') ? rawName : `Dr. ${rawName}`;
+  const doctorTitle = currentUser.profession || 'Ayurvedic Physician';
+  const doctorAvatar = currentUser.avatar || 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=400';
+  const doctorId = currentUser.id || currentUser.doctor_id || 'ZEN-DOC-892144';
+  const councilReg = currentUser.councilId || currentUser.council_reg_number || 'AYU-MAH-8921';
+  const qualification = currentUser.qualification || 'BAMS, MD (Kayachikitsa)';
+  const specialization = currentUser.specialization || 'Kayachikitsa & Agni Detoxification';
+  const organization = currentUser.organization || 'Shri Dhanvantari Ayurvedic Clinic & Research Center';
+  const location = currentUser.location || currentUser.city || 'Nagpur, Maharashtra';
+
+  // Super Admin Rejection Alert Detection
+  const isRejected = currentUser.status === 'rejected';
+  const rejectionReason = currentUser.rejection_reason || 'Medical Council Registration credentials & degree certificates could not be verified against the state MCIM registry.';
+  const [showSmsBanner, setShowSmsBanner] = useState(true);
+  const [isLiveRejectionModalOpen, setIsLiveRejectionModalOpen] = useState(isRejected);
+
+  useEffect(() => {
+    if (isRejected) {
+      setIsLiveRejectionModalOpen(true);
+      setShowSmsBanner(true);
+    }
+  }, [isRejected, currentUser.rejection_reason]);
+
+  // Handle live doctor avatar change and persist to database and storage
+  const handleDoctorAvatarUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const base64Url = reader.result;
+      const updatedUser = {
+        ...currentUser,
+        avatar: base64Url,
+        role: 'doctor'
+      };
+      if (onUpdateUser) onUpdateUser(updatedUser);
+      showToast("Doctor profile photo updated successfully!");
+      try {
+        localStorage.setItem('zeniva_current_user', JSON.stringify(updatedUser));
+        localStorage.setItem('zeniva_doctor_user', JSON.stringify(updatedUser));
+        localStorage.setItem('zeniva_registered_doctor', JSON.stringify(updatedUser));
+        await fetch('http://127.0.0.1:8000/api/user/profile', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...updatedUser,
+            phone: (currentUser.phone || '8766903403').replace(/\D/g, '')
+          })
+        });
+      } catch (err) {
+        console.warn("Backend doctor avatar sync notice:", err);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // State for Quick Actions Modal
+  const [isPrescriptionModalOpen, setIsPrescriptionModalOpen] = useState(false);
+  const [selectedPatientForRx, setSelectedPatientForRx] = useState('Aarav Patil');
+  const [rxFormulation, setRxFormulation] = useState('Triphala Churna (3g at bedtime with warm water)');
+  const [rxDietAdvice, setRxDietAdvice] = useState('Warm freshly cooked meals, avoid fermented and cold foods.');
+
+  // State for Schedule & Appointments
+  const [scheduleList, setScheduleList] = useState([
+    { id: 1, time: '09:30 AM', name: 'Aarav Patil', condition: '⚡ Joint Mobility & Stamina', type: 'Consultation', status: 'Completed', avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120' },
+    { id: 2, time: '11:00 AM', name: 'Neha Kulkarni', condition: '🔥 Digestion & Acidity Relief', type: 'Follow-up', status: 'In-Progress', avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=120' },
+    { id: 3, time: '12:30 PM', name: 'Rohan Deshmukh', condition: '🍃 Immunity & Cold Defense', type: 'Consultation', status: 'Upcoming', avatar: 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?w=120' },
+    { id: 4, time: '03:00 PM', name: 'Sneha Gawande', condition: '🌙 Stress & Sleep Wellness', type: 'Follow-up', status: 'Upcoming', avatar: 'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=120' },
+    { id: 5, time: '04:30 PM', name: 'Mahesh Jadhav', condition: '🍃 Immunity & Energy Recharge', type: 'Consultation', status: 'Upcoming', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=120' },
+  ]);
+
+  // Patients Roster for Doctor
+  const [patientsRoster, setPatientsRoster] = useState([
+    { id: 'PAT-201', name: 'Aarav Patil', age: 34, gender: 'Male', phone: '9876543210', dosha: '⚡ Joint & Stamina Care', visits: 4, lastVisit: '28 Aug 2025', diagnosis: 'Joint Mobility & Digestive Support' },
+    { id: 'PAT-202', name: 'Neha Kulkarni', age: 29, gender: 'Female', phone: '9822011223', dosha: '🔥 Digestion & Acidity', visits: 2, lastVisit: '28 Aug 2025', diagnosis: 'Hyperacidity & Heartburn Relief' },
+    { id: 'PAT-203', name: 'Rohan Deshmukh', age: 42, gender: 'Male', phone: '9833044556', dosha: '🍃 Immunity & Respiratory', visits: 6, lastVisit: '27 Aug 2025', diagnosis: 'Seasonal Cough & Congestion' },
+    { id: 'PAT-204', name: 'Sneha Gawande', age: 38, gender: 'Female', phone: '9844066778', dosha: '🌙 Stress & Sleep Wellness', visits: 3, lastVisit: '26 Aug 2025', diagnosis: 'Stress Overthinking & Mild Joint Stiffness' },
+    { id: 'PAT-205', name: 'Mahesh Jadhav', age: 48, gender: 'Male', phone: '9855088990', dosha: '⚡ Energy & Detox Care', visits: 5, lastVisit: '25 Aug 2025', diagnosis: 'Chronic Fatigue & Sluggish Digestion' }
+  ]);
+
+  // Availability State
+  const [weeklyAvailability, setWeeklyAvailability] = useState({
+    monday: { active: true, morning: '09:00 AM - 01:00 PM', evening: '04:00 PM - 08:00 PM' },
+    tuesday: { active: true, morning: '09:00 AM - 01:00 PM', evening: '04:00 PM - 08:00 PM' },
+    wednesday: { active: true, morning: '09:00 AM - 01:00 PM', evening: '04:00 PM - 08:00 PM' },
+    thursday: { active: true, morning: '09:00 AM - 01:00 PM', evening: '04:00 PM - 08:00 PM' },
+    friday: { active: true, morning: '09:00 AM - 01:00 PM', evening: '04:00 PM - 08:00 PM' },
+    saturday: { active: true, morning: '09:00 AM - 02:00 PM', evening: 'Closed' },
+    sunday: { active: false, morning: 'Emergency Only', evening: 'Closed' }
+  });
+
+  // Reminders List
+  const [remindersList, setRemindersList] = useState([
+    { id: 1, title: 'Follow-up Call: Aarav Patil', time: 'Today, 05:00 PM', priority: 'High', note: 'Check joint pain relief after 7 days of Ashwagandha Ghrita' },
+    { id: 2, title: 'Panchakarma Protocol Review', time: 'Tomorrow, 10:00 AM', priority: 'Medium', note: 'Review Virechana cleansing chart for Sneha Gawande' },
+    { id: 3, title: 'State Medical Council CME Webinar', time: '30 Aug 2025, 03:00 PM', priority: 'Normal', note: 'Recent developments in Dravyaguna research' }
+  ]);
+
+  // Messages List
+  const [messagesList, setMessagesList] = useState([
+    { id: 1, sender: 'Aarav Patil', time: '10:15 AM', text: 'Namaste Doctor, the herbal tea has reduced my morning bloating significantly.', unread: true },
+    { id: 2, sender: 'Neha Kulkarni', time: 'Yesterday', text: 'Should I continue the cooling dietary plan for another week?', unread: false },
+    { id: 3, sender: 'Zeniva Clinical Support', time: '26 Aug', text: 'Your monthly verification credentials and telemetry have been verified.', unread: false }
+  ]);
+
+  // Doctor Location & Chamber Details State (with LocalStorage persistence)
+  const [chamberDetails, setChamberDetails] = useState(() => {
+    try {
+      const saved = localStorage.getItem('zeniva_doctor_chamber_location');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return {
+      clinicName: currentUser.organization || 'Shri Dhanvantari Ayurvedic Clinic & Research Center',
+      street: 'Plot 45, Ayurvedic Enclave, Central Avenue Road, Ramdaspeth',
+      landmark: 'Near Vedic Wellness Center & Shivaji Garden',
+      city: currentUser.city || 'Nagpur',
+      state: 'Maharashtra',
+      pincode: '440010',
+      country: 'India',
+      phone: currentUser.phone || '8766903403',
+      emergencyPhone: '+91 98123 45567',
+      timings: 'Mon - Sat: 09:00 AM - 01:00 PM & 04:00 PM - 08:00 PM',
+      consultationFee: '₹500 (Initial) / ₹300 (Follow-up)',
+      facilities: ['Nadi Pariksha Chamber', 'Panchakarma Detox Unit', 'Herbal Pharmacy', 'Tele-Consultation Studio'],
+      latitude: '21.1458',
+      longitude: '79.0882'
+    };
+  });
+
+  const [isLocating, setIsLocating] = useState(false);
+
+  const handleDetectLiveLocation = () => {
+    if (!navigator.geolocation) {
+      showToast('Geolocation is not supported by your browser.');
+      return;
+    }
+    setIsLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+        setChamberDetails(prev => ({
+          ...prev,
+          latitude: lat.toFixed(5),
+          longitude: lng.toFixed(5)
+        }));
+        try {
+          const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
+          const data = await res.json();
+          if (data && data.address) {
+            const addr = data.address;
+            setChamberDetails(prev => ({
+              ...prev,
+              street: [addr.road, addr.suburb, addr.neighbourhood].filter(Boolean).join(', ') || prev.street,
+              city: addr.city || addr.town || addr.village || addr.county || prev.city,
+              state: addr.state || prev.state,
+              pincode: addr.postcode || prev.pincode
+            }));
+          }
+        } catch (e) {}
+        setIsLocating(false);
+        showToast('Live GPS location detected successfully! ✓');
+      },
+      (error) => {
+        setIsLocating(false);
+        showToast('Could not fetch GPS location: ' + error.message);
+      }
+    );
+  };
+
+  const handleSaveChamberLocation = (e) => {
+    e.preventDefault();
+    try {
+      localStorage.setItem('zeniva_doctor_chamber_location', JSON.stringify(chamberDetails));
+    } catch (err) {}
+    showToast('Chamber & Clinic Location saved successfully! ✓');
+  };
+
+  const handleSaveRx = (e) => {
+    e.preventDefault();
+    showToast(`Prescription for ${selectedPatientForRx} created and dispatched!`);
+    setIsPrescriptionModalOpen(false);
+  };
+
+  const isMainDashboard = activeTab === 'home' || activeTab === 'doc_dashboard' || activeTab === 'dashboard';
+
+  return (
+    <div className="p-6 sm:p-8 max-w-[1450px] mx-auto space-y-6 select-none bg-[#FAF7F2] min-h-screen font-sans">
+      
+      {/* Action Notification Toast */}
+      {toastMessage && (
+        <div className="fixed top-5 right-5 z-50 p-4 rounded-2xl bg-purple-950 text-white font-bold text-xs flex items-center gap-3 shadow-2xl animate-in slide-in-from-top-3 border border-purple-800">
+          <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />
+          <span>{toastMessage}</span>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 1. TOP HEADER (EXACT REPLICA OF REFERENCE SCREENSHOT)                      */}
+      {/* ========================================================================= */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-1">
+        
+        {/* Left: Namaste Doctor Greeting with Purple Leaf */}
+        <div>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl sm:text-3xl font-serif font-bold text-[#1C1917] tracking-tight">
+              Namaste, {doctorName}
+            </h1>
+            <span className="text-purple-600 text-xl font-serif">🪻</span>
+          </div>
+          <p className="text-xs text-[#78716C] mt-1 font-medium">
+            Here's what's happening in your practice today.
+          </p>
+        </div>
+
+        {/* Right: Search Bar + Notification Bell + Doctor Profile Pill */}
+        <div className="flex items-center gap-4">
+          
+          {/* Rounded Pill Search Bar */}
+          <div className="relative w-64 sm:w-72">
+            <input
+              type="text"
+              placeholder="Search patients, appointments..."
+              className="w-full pl-4 pr-10 py-2.5 rounded-full text-xs bg-white border border-[#EBE3D5] text-[#1C1917] placeholder-[#A8A29E] focus:outline-none focus:ring-2 focus:ring-purple-600/20 shadow-2xs"
+            />
+            <button className="absolute right-3 top-1/2 -translate-y-1/2 text-[#78716C] hover:text-[#5B3E8C]">
+              <Search className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Notification Bell with Badge & Dropdown */}
+          <div className="relative">
+            <button 
+              onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
+              className="relative w-10 h-10 rounded-full bg-white border border-[#EBE3D5] flex items-center justify-center text-[#44403C] hover:bg-stone-50 transition-colors cursor-pointer shadow-2xs focus:outline-none"
+            >
+              <Bell className="w-4 h-4" />
+              <span className={`absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full text-white text-[9px] font-bold flex items-center justify-center ${
+                isRejected ? 'bg-red-600 animate-bounce' : 'bg-[#5B3E8C]'
+              }`}>
+                {isRejected ? '!' : '3'}
+              </span>
+            </button>
+
+            {/* Notification Center Dropdown */}
+            {isNotificationsOpen && (
+              <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-3xl shadow-xl border border-[#EBE3D5] py-3 z-50 animate-in fade-in slide-in-from-top-2">
+                <div className="px-4 py-2 border-b border-stone-100 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Bell className="w-4 h-4 text-[#5B3E8C]" />
+                    <h3 className="text-xs font-bold text-stone-900">Notifications & Admin Alerts</h3>
+                  </div>
+                  <span className="text-[10px] text-stone-400 font-medium">{isRejected ? '4 notifications' : '3 notifications'}</span>
+                </div>
+
+                <div className="divide-y divide-stone-100 max-h-80 overflow-y-auto">
+                  {/* Rejection Notification if status is rejected */}
+                  {isRejected && (
+                    <div className="p-3.5 bg-red-50/80 hover:bg-red-50 transition-colors space-y-2">
+                      <div className="flex items-start gap-2.5">
+                        <div className="w-7 h-7 rounded-xl bg-red-100 text-red-700 flex items-center justify-center shrink-0 mt-0.5">
+                          <AlertCircle className="w-4 h-4" />
+                        </div>
+                        <div className="flex-1 text-xs">
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-red-900">Super Admin Review: Rejected</span>
+                            <span className="text-[9px] text-red-600 font-bold">Just now</span>
+                          </div>
+                          <p className="text-[11px] text-stone-700 mt-1 leading-snug">
+                            <strong>Reason:</strong> {rejectionReason}
+                          </p>
+                          <div className="mt-2 flex items-center gap-2">
+                            <button
+                              onClick={() => {
+                                onSelectTab('doc_qualification');
+                                setIsNotificationsOpen(false);
+                              }}
+                              className="px-2.5 py-1 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold text-[10px] cursor-pointer"
+                            >
+                              Fix & Re-upload Now
+                            </button>
+                            <span className="text-[10px] text-stone-500 font-mono">📱 Fast2SMS Sent</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="p-3.5 hover:bg-stone-50 transition-colors flex items-start gap-2.5">
+                    <div className="w-7 h-7 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center shrink-0 mt-0.5">
+                      <Calendar className="w-4 h-4" />
+                    </div>
+                    <div className="flex-1 text-xs">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-stone-900">Consultation Scheduled</span>
+                        <span className="text-[9px] text-stone-400">20m ago</span>
+                      </div>
+                      <p className="text-[11px] text-stone-600 mt-0.5">
+                        Patient Aarav Patil booked Nadi Pariksha consultation for today at 02:00 PM.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="p-3.5 hover:bg-stone-50 transition-colors flex items-start gap-2.5">
+                    <div className="w-7 h-7 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center shrink-0 mt-0.5">
+                      <ShieldCheck className="w-4 h-4" />
+                    </div>
+                    <div className="flex-1 text-xs">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-stone-900">Clinical Protocol Update</span>
+                        <span className="text-[9px] text-stone-400">1h ago</span>
+                      </div>
+                      <p className="text-[11px] text-stone-600 mt-0.5">
+                        Varsha Ritu seasonal detoxification guidelines updated in RAG database.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Doctor Profile Pill with Dropdown */}
+          <div className="relative">
+            <button 
+              onClick={() => setIsProfileDropdownOpen(!isProfileDropdownOpen)}
+              className="flex items-center gap-3 bg-white pl-2 pr-3.5 py-1.5 rounded-full border border-[#EBE3D5] cursor-pointer hover:bg-stone-50 transition-all shadow-2xs focus:outline-none"
+            >
+              <img
+                src={doctorAvatar}
+                alt={doctorName}
+                className="w-8 h-8 rounded-full object-cover border border-purple-200"
+              />
+              <div className="text-left hidden sm:block">
+                <p className="text-xs font-bold text-[#1C1917] leading-tight">{doctorName}</p>
+                <p className="text-[10px] text-[#78716C] leading-none mt-0.5">{doctorTitle}</p>
+              </div>
+              <ChevronDown className="w-3.5 h-3.5 text-[#78716C]" />
+            </button>
+
+            {/* Dropdown Menu */}
+            {isProfileDropdownOpen && (
+              <div className="absolute right-0 mt-2 w-72 bg-white rounded-3xl shadow-xl border border-[#EBE3D5] py-2.5 z-50 animate-in fade-in slide-in-from-top-2">
+                <div className="px-4 py-2 border-b border-stone-100 flex items-center gap-3">
+                  <img src={doctorAvatar} alt={doctorName} className="w-10 h-10 rounded-2xl object-cover border border-purple-200" />
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-stone-900 truncate">{doctorName}</p>
+                    <p className="text-[10px] text-[#5B3E8C] font-semibold truncate">{qualification}</p>
+                    <p className="text-[9px] text-stone-400 font-mono">Reg: {councilReg}</p>
+                  </div>
+                </div>
+
+                <div className="p-2 space-y-1">
+                  {/* View / Edit Personal Details */}
+                  <button
+                    onClick={() => {
+                      onSelectTab('doc_personal_details');
+                      setIsProfileDropdownOpen(false);
+                    }}
+                    className="w-full px-3.5 py-2.5 rounded-2xl text-left flex items-center gap-2.5 text-xs text-stone-700 hover:bg-purple-50 hover:text-[#5B3E8C] font-medium transition-colors cursor-pointer"
+                  >
+                    <User className="w-4 h-4 text-purple-700" />
+                    <div>
+                      <p className="font-bold leading-tight">My Doctor Profile</p>
+                      <p className="text-[10px] text-stone-500">View & Edit Personal Details</p>
+                    </div>
+                  </button>
+
+                  {/* Switch Account / Doctor Login */}
+                  <button
+                    onClick={() => {
+                      setIsProfileDropdownOpen(false);
+                      if (onOpenLogin) onOpenLogin('doctor');
+                    }}
+                    className="w-full px-3.5 py-2.5 rounded-2xl text-left flex items-center gap-2.5 text-xs text-stone-700 hover:bg-purple-50 hover:text-[#5B3E8C] font-medium transition-colors cursor-pointer"
+                  >
+                    <Stethoscope className="w-4 h-4 text-[#5B3E8C]" />
+                    <div>
+                      <p className="font-bold text-[#1C1917] leading-tight">Switch Account</p>
+                      <p className="text-[10px] text-stone-500">Login with another Doctor Account</p>
+                    </div>
+                  </button>
+
+                  {/* Logout */}
+                  <button
+                    onClick={() => {
+                      setIsProfileDropdownOpen(false);
+                      if (onLogout) onLogout();
+                    }}
+                    className="w-full px-3.5 py-2 rounded-2xl text-left flex items-center gap-2.5 text-xs text-red-600 hover:bg-red-50 font-bold transition-colors cursor-pointer"
+                  >
+                    <X className="w-4 h-4 text-red-500" />
+                    <span>Logout</span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+        </div>
+
+      </div>
+
+      {/* Super Admin Rejection Alert Banner (Prominently alerts doctor on Dashboard) */}
+      {isRejected && (
+        <div className="bg-red-50 border-2 border-red-200 rounded-3xl p-4 sm:p-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-xs animate-in fade-in slide-in-from-top-3">
+          <div className="flex items-start gap-3.5">
+            <div className="w-10 h-10 rounded-2xl bg-red-100 text-red-700 flex items-center justify-center shrink-0 mt-0.5">
+              <AlertCircle className="w-6 h-6" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="px-2.5 py-0.5 rounded-full bg-red-600 text-white text-[10px] font-bold uppercase tracking-wider">
+                  Admin Action: Rejected
+                </span>
+                <span className="text-[11px] text-stone-500 font-mono">📱 Fast2SMS Sent</span>
+              </div>
+              <h3 className="text-sm font-bold text-stone-900 mt-1">
+                Your Doctor Qualification / Credentials Were Not Approved by Super Admin
+              </h3>
+              <p className="text-xs text-red-900 font-medium mt-0.5">
+                <strong>Reason:</strong> "{rejectionReason}"
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0 w-full md:w-auto">
+            <button
+              onClick={() => onSelectTab('doc_qualification')}
+              className="w-full md:w-auto px-5 py-2.5 rounded-2xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs shadow-sm transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+            >
+              <span>Fix & Re-upload Documents</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Floating Simulated Phone SMS Push Notification Popup */}
+      {isRejected && showSmsBanner && (
+        <div className="fixed top-5 right-5 z-50 max-w-sm w-full bg-stone-900 text-white rounded-3xl p-4 shadow-2xl border border-stone-700 space-y-2 animate-in slide-in-from-top-4 duration-300">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="w-6 h-6 rounded-lg bg-green-500 text-white flex items-center justify-center text-xs">
+                💬
+              </span>
+              <div>
+                <p className="text-[11px] font-bold text-stone-200">MESSAGES • Fast2SMS</p>
+                <p className="text-[9px] text-stone-400">To: +91 {currentUser.phone || '8766903403'}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-1">
+              <span className="text-[9px] text-stone-400">now</span>
+              <button 
+                onClick={() => setShowSmsBanner(false)}
+                className="p-1 rounded-full text-stone-400 hover:text-white cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+
+          <div className="bg-stone-800/80 p-2.5 rounded-2xl border border-stone-700 text-xs space-y-1">
+            <p className="font-bold text-amber-300">Zeniva Clinical Review Board Alert:</p>
+            <p className="text-[11px] text-stone-200 leading-snug">
+              Dr. {rawName}, your qualification documents were rejected by Admin. Reason: {rejectionReason}
+            </p>
+          </div>
+
+          <div className="flex justify-end">
+            <button
+              onClick={() => {
+                setShowSmsBanner(false);
+                onSelectTab('doc_qualification');
+              }}
+              className="text-[11px] font-bold text-purple-300 hover:text-purple-200 underline cursor-pointer"
+            >
+              Open & Resolve Now →
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Real-Time Live Rejection Modal Popup (Jumps on Doctor's screen in Real-Time when Admin Rejects) */}
+      {isRejected && isLiveRejectionModalOpen && (
+        <div className="fixed inset-0 z-50 bg-stone-900/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-lg rounded-3xl p-6 sm:p-8 shadow-2xl border-2 border-red-300 space-y-5 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-stone-100 pb-3">
+              <div className="flex items-center gap-2.5 text-red-600 font-bold">
+                <div className="w-9 h-9 rounded-2xl bg-red-100 flex items-center justify-center">
+                  <AlertCircle className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-serif font-bold text-stone-900">Admin Review Alert</h3>
+                  <p className="text-[10px] text-stone-500 font-normal">Super Admin Clinical Board Notification</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setIsLiveRejectionModalOpen(false)} 
+                className="p-1.5 rounded-full hover:bg-stone-100 text-stone-400 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-red-50 border border-red-200 text-xs space-y-2 text-left">
+              <div className="flex items-center justify-between">
+                <span className="px-2.5 py-0.5 rounded-full bg-red-600 text-white text-[10px] font-bold uppercase tracking-wider">
+                  Review Status: Rejected ✕
+                </span>
+                <span className="text-[10px] text-red-700 font-semibold font-mono">Just Now</span>
+              </div>
+              <p className="text-stone-800 text-xs font-semibold pt-1">
+                Dear {doctorName}, your submitted qualification certificates / Medical Council credentials were reviewed by the Super Admin and not approved.
+              </p>
+              <div className="p-3 bg-white rounded-xl border border-red-200 text-[11px] text-red-950 font-medium">
+                <strong className="text-stone-600 block text-[10px] uppercase font-bold mb-0.5">Admin's Official Feedback:</strong>
+                "{rejectionReason}"
+              </div>
+            </div>
+
+            <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200 text-[11px] text-amber-900 flex items-start gap-2 text-left">
+              <span className="text-base shrink-0">📱</span>
+              <div>
+                <span className="font-bold">Fast2SMS Notification Dispatched:</span>
+                <p className="text-stone-600 mt-0.5">
+                  An instant SMS alert with resolution link has been delivered to your mobile: <strong className="font-mono text-stone-900">+91 {currentUser.phone || '8766903403'}</strong>.
+                </p>
+              </div>
+            </div>
+
+            <div className="pt-2 flex flex-col sm:flex-row items-center justify-end gap-2.5">
+              <button 
+                type="button" 
+                onClick={() => setIsLiveRejectionModalOpen(false)} 
+                className="w-full sm:w-auto px-4 py-2.5 rounded-xl text-stone-600 hover:bg-stone-100 font-bold text-xs cursor-pointer"
+              >
+                Dismiss
+              </button>
+              <button 
+                type="button" 
+                onClick={() => {
+                  setIsLiveRejectionModalOpen(false);
+                  onSelectTab('doc_qualification');
+                }}
+                className="w-full sm:w-auto px-6 py-3 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs cursor-pointer shadow-md flex items-center justify-center gap-1.5"
+              >
+                <span>Re-upload & Fix Credentials</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 2. MAIN DASHBOARD TAB VIEW (EXACT REPLICA OF REFERENCE SCREENSHOT)        */}
+      {/* ========================================================================= */}
+      {isMainDashboard && (
+        <div className="space-y-6 animate-in fade-in duration-200">
+          
+          {/* --------------------------------------------------------------------- */}
+          {/* Top 4 KPI Stat Cards                                                  */}
+          {/* --------------------------------------------------------------------- */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 sm:gap-5">
+            
+            {/* Card 1: Total Patients */}
+            <div 
+              onClick={() => onSelectTab('doc_patients')}
+              className="bg-white rounded-3xl p-5 border border-[#EBE3D5] shadow-xs flex items-center gap-4 hover:shadow-md transition-all cursor-pointer"
+            >
+              <div className="w-12 h-12 rounded-2xl bg-[#F3EFF9] text-[#5B3E8C] flex items-center justify-center shrink-0">
+                <Users className="w-6 h-6" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold font-serif text-[#1C1917] leading-tight">248</p>
+                <p className="text-xs font-medium text-[#78716C] mt-0.5">Total Patients</p>
+                <p className="text-[10px] text-[#5B3E8C] font-bold mt-0.5">↑ 18 this month</p>
+              </div>
+            </div>
+
+            {/* Card 2: Today's Appointments */}
+            <div 
+              onClick={() => onSelectTab('doc_appointments')}
+              className="bg-white rounded-3xl p-5 border border-[#EBE3D5] shadow-xs flex items-center gap-4 hover:shadow-md transition-all cursor-pointer"
+            >
+              <div className="w-12 h-12 rounded-2xl bg-[#FEF3C7] text-[#D97706] flex items-center justify-center shrink-0">
+                <Calendar className="w-6 h-6" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold font-serif text-[#1C1917] leading-tight">18</p>
+                <p className="text-xs font-medium text-[#78716C] mt-0.5">Today's Appointments</p>
+                <p className="text-[10px] text-[#D97706] font-bold mt-0.5 flex items-center gap-1 hover:underline">
+                  View schedule →
+                </p>
+              </div>
+            </div>
+
+            {/* Card 3: Follow-ups Due */}
+            <div 
+              onClick={() => onSelectTab('doc_consultations')}
+              className="bg-white rounded-3xl p-5 border border-[#EBE3D5] shadow-xs flex items-center gap-4 hover:shadow-md transition-all cursor-pointer"
+            >
+              <div className="w-12 h-12 rounded-2xl bg-[#F3EFF9] text-[#5B3E8C] flex items-center justify-center shrink-0">
+                <ClipboardList className="w-6 h-6" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold font-serif text-[#1C1917] leading-tight">36</p>
+                <p className="text-xs font-medium text-[#78716C] mt-0.5">Follow-ups Due</p>
+                <p className="text-[10px] text-[#5B3E8C] font-bold mt-0.5 flex items-center gap-1 hover:underline">
+                  View all →
+                </p>
+              </div>
+            </div>
+
+            {/* Card 4: Treatment Success Rate */}
+            <div 
+              onClick={() => onSelectTab('doc_treatments')}
+              className="bg-white rounded-3xl p-5 border border-[#EBE3D5] shadow-xs flex items-center gap-4 hover:shadow-md transition-all cursor-pointer"
+            >
+              <div className="w-12 h-12 rounded-2xl bg-[#EDF0E6] text-[#1E5039] flex items-center justify-center shrink-0">
+                <HeartPulse className="w-6 h-6" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold font-serif text-[#1C1917] leading-tight">92%</p>
+                <p className="text-xs font-medium text-[#78716C] mt-0.5">Treatment Success Rate</p>
+                <p className="text-[10px] text-[#78716C] font-medium mt-0.5">This month</p>
+              </div>
+            </div>
+
+          </div>
+
+          {/* --------------------------------------------------------------------- */}
+          {/* Middle Row & Right Column Grid Layout                                 */}
+          {/* --------------------------------------------------------------------- */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+            
+            {/* Left 8 Columns (Today's Overview + Patient Flow + Top Health Concerns) */}
+            <div className="lg:col-span-8 space-y-5">
+              
+              {/* Row of 3 Cards: Today's Overview, Patient Flow, Top Health Concerns */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                
+                {/* Card 1: Today's Overview (Donut Ring + Mortar Graphic) */}
+                <div className="bg-white rounded-3xl p-5 border border-[#EBE3D5] shadow-xs flex flex-col justify-between space-y-4 hover:shadow-md transition-all">
+                  <h3 className="text-xs font-bold text-[#1C1917] tracking-tight">Today's Overview</h3>
+
+                  <div className="flex items-center gap-3">
+                    
+                    {/* Donut Ring with Mortar Pestle inside */}
+                    <div className="relative w-22 h-22 shrink-0 flex items-center justify-center">
+                      <svg className="w-22 h-22 -rotate-90" viewBox="0 0 36 36">
+                        <circle cx="18" cy="18" r="14" fill="none" stroke="#EBE3D5" strokeWidth="3.5" />
+                        <circle cx="18" cy="18" r="14" fill="none" stroke="#5B3E8C" strokeWidth="3.5" strokeDasharray="45 55" strokeDashoffset="0" strokeLinecap="round" />
+                        <circle cx="18" cy="18" r="14" fill="none" stroke="#3B82F6" strokeWidth="3.5" strokeDasharray="20 80" strokeDashoffset="-45" strokeLinecap="round" />
+                        <circle cx="18" cy="18" r="14" fill="none" stroke="#D97706" strokeWidth="3.5" strokeDasharray="25 75" strokeDashoffset="-65" strokeLinecap="round" />
+                      </svg>
+                      <div className="absolute inset-0 flex items-center justify-center p-4">
+                        <MortarPestleGraphic className="w-10 h-10" />
+                      </div>
+                    </div>
+
+                    {/* Breakdown items */}
+                    <div className="space-y-1 text-[11px] text-[#44403C] flex-1">
+                      <div className="flex items-center justify-between">
+                        <span className="flex items-center gap-1.5"><User className="w-3 h-3 text-[#5B3E8C]" /> Consultations Today</span>
+                        <span className="font-bold text-[#1C1917]">12</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="flex items-center gap-1.5"><Users className="w-3 h-3 text-blue-600" /> New Patients</span>
+                        <span className="font-bold text-[#1C1917]">5</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="flex items-center gap-1.5"><ClipboardList className="w-3 h-3 text-[#D97706]" /> Follow-ups</span>
+                        <span className="font-bold text-[#1C1917]">7</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="flex items-center gap-1.5"><FileText className="w-3 h-3 text-amber-700" /> Treatments Planned</span>
+                        <span className="font-bold text-[#1C1917]">4</span>
+                      </div>
+                    </div>
+
+                  </div>
+
+                  <button 
+                    onClick={() => onSelectTab('doc_consultations')}
+                    className="text-[11px] font-bold text-[#5B3E8C] hover:underline flex items-center justify-center gap-1 pt-2 border-t border-stone-100 cursor-pointer"
+                  >
+                    <span>View Full Overview</span>
+                    <ArrowRight className="w-3 h-3" />
+                  </button>
+                </div>
+
+                {/* Card 2: Patient Flow (This Week) */}
+                <div className="bg-white rounded-3xl p-5 border border-[#EBE3D5] shadow-xs flex flex-col justify-between space-y-3 hover:shadow-md transition-all">
+                  <h3 className="text-xs font-bold text-[#1C1917] tracking-tight">Patient Flow <span className="text-[10px] text-[#78716C] font-normal">(This Week)</span></h3>
+
+                  {/* 7-Day Line Chart */}
+                  <div className="space-y-1">
+                    <div className="h-20 w-full relative flex items-end">
+                      <svg className="w-full h-full overflow-visible" viewBox="0 0 200 70">
+                        <line x1="0" y1="10" x2="200" y2="10" stroke="#F5EFEB" strokeDasharray="2" />
+                        <line x1="0" y1="35" x2="200" y2="35" stroke="#F5EFEB" strokeDasharray="2" />
+                        <line x1="0" y1="60" x2="200" y2="60" stroke="#F5EFEB" strokeDasharray="2" />
+                        <path
+                          d="M 10 50 Q 40 30 70 45 T 130 35 T 160 38 T 190 15"
+                          fill="none"
+                          stroke="#5B3E8C"
+                          strokeWidth="2.5"
+                          strokeLinecap="round"
+                        />
+                        <circle cx="10" cy="50" r="3" fill="#5B3E8C" />
+                        <circle cx="40" cy="35" r="3" fill="#5B3E8C" />
+                        <circle cx="70" cy="45" r="3" fill="#5B3E8C" />
+                        <circle cx="100" cy="40" r="3" fill="#5B3E8C" />
+                        <circle cx="130" cy="35" r="3" fill="#5B3E8C" />
+                        <circle cx="160" cy="38" r="3" fill="#5B3E8C" />
+                        <circle cx="190" cy="15" r="3.5" fill="#5B3E8C" stroke="#FAF5FF" strokeWidth="2" />
+                      </svg>
+                    </div>
+                    
+                    <div className="flex justify-between text-[9px] text-[#A8A29E] font-medium px-1">
+                      <span>Mon</span>
+                      <span>Tue</span>
+                      <span>Wed</span>
+                      <span>Thu</span>
+                      <span>Fri</span>
+                      <span>Sat</span>
+                      <span>Sun</span>
+                    </div>
+                  </div>
+
+                  {/* Lavender Alert Banner */}
+                  <div className="p-2.5 rounded-2xl bg-[#F3EFF9] text-[10px] text-[#5B3E8C] font-semibold flex items-center justify-between">
+                    <span>Your patient engagement is 15% higher this week!</span>
+                    <span>🪻</span>
+                  </div>
+                </div>
+
+                {/* Card 3: Top Health Concerns */}
+                <div className="bg-white rounded-3xl p-5 border border-[#EBE3D5] shadow-xs flex flex-col justify-between space-y-4 hover:shadow-md transition-all">
+                  <h3 className="text-xs font-bold text-[#1C1917] tracking-tight">Top Health Concerns</h3>
+
+                  <div className="space-y-2.5 text-[11px]">
+                    
+                    <div className="flex items-center justify-between">
+                      <span className="flex items-center gap-2 text-[#44403C]">
+                        <span className="w-5 h-5 rounded-lg bg-orange-100 text-orange-700 flex items-center justify-center text-[10px]">🫚</span>
+                        Digestive Issues
+                      </span>
+                      <span className="font-bold text-[#1C1917]">42%</span>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <span className="flex items-center gap-2 text-[#44403C]">
+                        <span className="w-5 h-5 rounded-lg bg-green-100 text-green-700 flex items-center justify-center text-[10px]">🌿</span>
+                        Stress & Anxiety
+                      </span>
+                      <span className="font-bold text-[#1C1917]">25%</span>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <span className="flex items-center gap-2 text-[#44403C]">
+                        <span className="w-5 h-5 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center text-[10px]">💧</span>
+                        Skin Problems
+                      </span>
+                      <span className="font-bold text-[#1C1917]">18%</span>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <span className="flex items-center gap-2 text-[#44403C]">
+                        <span className="w-5 h-5 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center text-[10px]">🦴</span>
+                        Joint Pain
+                      </span>
+                      <span className="font-bold text-[#1C1917]">15%</span>
+                    </div>
+
+                  </div>
+
+                  <button 
+                    onClick={() => onSelectTab('doc_reports_analytics')}
+                    className="text-[11px] font-bold text-[#5B3E8C] hover:underline flex items-center justify-center gap-1 pt-2 border-t border-stone-100 cursor-pointer"
+                  >
+                    <span>View All Insights</span>
+                    <ArrowRight className="w-3 h-3" />
+                  </button>
+                </div>
+
+              </div>
+
+              {/* ----------------------------------------------------------------- */}
+              {/* Bottom Large Ayurvedic Image & Quote Banner Card                  */}
+              {/* ----------------------------------------------------------------- */}
+              <div className="rounded-3xl overflow-hidden border border-[#EBE3D5] shadow-xs grid grid-cols-1 md:grid-cols-12 min-h-[260px]">
+                
+                {/* Left Side: Deep Plum Quote Panel */}
+                <div className="md:col-span-5 bg-gradient-to-br from-[#2E1838] to-[#1D0C26] text-white p-7 sm:p-8 flex flex-col justify-center space-y-4 relative">
+                  <div className="w-10 h-0.5 bg-[#E5C07B] rounded-full"></div>
+                  
+                  <blockquote className="font-serif text-base sm:text-lg leading-relaxed text-purple-100/95 italic">
+                    “Ayurveda is not just treatment, it’s a way of living in harmony with nature and yourself.”
+                  </blockquote>
+
+                  <div className="flex items-center gap-2 text-[#E5C07B] text-xs font-semibold">
+                    <span>🪷</span>
+                    <span className="tracking-wide">Classical Ayurvedic Wisdom</span>
+                  </div>
+                </div>
+
+                {/* Right Side: High Quality Ayurvedic Photography Banner */}
+                <div className="md:col-span-7 relative h-56 md:h-auto overflow-hidden bg-purple-950">
+                  <img
+                    src="/ayurveda_doctor_banner.jpg"
+                    alt="Ayurvedic Herbs and Vessels"
+                    className="w-full h-full object-cover object-center transform hover:scale-105 transition-transform duration-700"
+                    onError={(e) => {
+                      e.target.src = 'https://images.unsplash.com/photo-1608571423902-eed4a5ad8108?w=800';
+                    }}
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-r from-[#1D0C26]/40 via-transparent to-transparent"></div>
+                </div>
+
+              </div>
+
+              {/* ----------------------------------------------------------------- */}
+              {/* Active Clinical OPD Queue & Patient Vitals Matrix                */}
+              {/* ----------------------------------------------------------------- */}
+              <div className="bg-white rounded-3xl p-5 sm:p-6 border border-[#EBE3D5] shadow-xs space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-stone-100 pb-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-9 h-9 rounded-2xl bg-purple-100 text-[#5B3E8C] flex items-center justify-center font-bold shadow-2xs">
+                      <Activity className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-serif font-bold text-stone-900">
+                        Active Clinical Consultations & Patient Vitals (सक्रिय रोगी निगरानी पटल)
+                      </h3>
+                      <p className="text-[11px] text-stone-500">
+                        Live OPD queue with Nadi pulse, digestive Agni balam, and one-click Ayurvedic prescriptions.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-900 font-bold text-[10px] flex items-center gap-1 border border-emerald-200">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse"></span>
+                      <span>OPD Live Queue (3 Waiting)</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => onSelectTab('doc_patients')}
+                      className="text-[11px] font-bold text-[#5B3E8C] hover:underline flex items-center gap-1 cursor-pointer"
+                    >
+                      <span>Full Directory</span>
+                      <ArrowRight className="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Patient Rows */}
+                <div className="divide-y divide-stone-100 text-xs">
+                  {patientsRoster.slice(0, 3).map((pat, idx) => (
+                    <div key={pat.id} className="py-3 flex flex-col md:flex-row md:items-center justify-between gap-3 hover:bg-purple-50/20 transition-colors rounded-xl px-2 -mx-2">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="relative shrink-0">
+                          <img 
+                            src={scheduleList[idx]?.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120'} 
+                            alt={pat.name} 
+                            className="w-10 h-10 rounded-2xl object-cover border border-purple-200 shadow-2xs" 
+                          />
+                          <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-500 border-2 border-white"></span>
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <h4 className="font-bold text-stone-900 text-xs truncate">{pat.name}</h4>
+                            <span className="text-[10px] text-stone-400 font-mono">({pat.age}y, {pat.gender})</span>
+                            <span className="px-2 py-0.2 rounded-md bg-purple-100 text-purple-900 text-[10px] font-bold shrink-0">
+                              {pat.dosha}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-[#5B3E8C] font-semibold mt-0.5 truncate">
+                            Condition: <span className="text-stone-700 font-normal">{pat.diagnosis}</span>
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Vitals & Clinical Indicators */}
+                      <div className="flex items-center gap-3.5 text-[11px] text-stone-600 shrink-0">
+                        <div className="text-center">
+                          <span className="text-[9px] uppercase font-bold text-stone-400 block">Pulse Rhythm</span>
+                          <span className="font-mono font-bold text-stone-800">{idx === 0 ? '72 bpm (Steady)' : idx === 1 ? '82 bpm (Active)' : '68 bpm (Calm)'}</span>
+                        </div>
+                        <div className="text-center">
+                          <span className="text-[9px] uppercase font-bold text-stone-400 block">Digestive Agni</span>
+                          <span className="font-semibold text-amber-800">{idx === 0 ? 'Optimal Digestion' : idx === 1 ? 'Hyperactive / Acidic' : 'Sluggish Digestion'}</span>
+                        </div>
+                        <div className="text-center">
+                          <span className="text-[9px] uppercase font-bold text-stone-400 block">Blood Pressure</span>
+                          <span className="font-mono text-stone-800">{idx === 0 ? '120/80' : idx === 1 ? '128/84' : '118/76'}</span>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 pl-2 border-l border-stone-200">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedPatientForRx(pat.name);
+                              setIsPrescriptionModalOpen(true);
+                            }}
+                            className="px-2.5 py-1.5 rounded-xl bg-purple-700 hover:bg-purple-800 text-white font-bold text-[10px] flex items-center gap-1 cursor-pointer transition-all shadow-2xs"
+                          >
+                            <MortarPestleGraphic className="w-3 h-3" />
+                            <span>Prescribe</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => showToast(`Opening live video consultation room with ${pat.name}...`)}
+                            className="p-1.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 cursor-pointer transition-colors"
+                            title="Start Video Consultation"
+                          >
+                            <Video className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* ----------------------------------------------------------------- */}
+              {/* AI Clinical Decision Support & Herbal Formulations               */}
+              {/* ----------------------------------------------------------------- */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="p-4 rounded-3xl bg-gradient-to-br from-[#FAF8F5] to-purple-50/40 border border-[#EBE3D5] space-y-2 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="flex items-center gap-1.5 font-bold text-purple-950">
+                      <Sparkles className="w-4 h-4 text-purple-700" />
+                      <span>Charaka AI Clinical Co-Pilot</span>
+                    </span>
+                    <span className="px-2 py-0.5 rounded bg-purple-100 text-purple-900 font-mono text-[9px] font-bold">98.4% Match</span>
+                  </div>
+                  <p className="text-stone-700 leading-relaxed text-[11px]">
+                    Detected elevated <strong>Stress & Joint Discomfort patterns</strong> across recent consultation cases. Classical recommended herb synergy: <em>Ashwagandha Rasayana (3g) + Dashamoola Kwatha (30ml)</em> with warm cow's milk.
+                  </p>
+                  <div className="pt-2 border-t border-purple-100 flex items-center justify-between text-[10px]">
+                    <span className="text-stone-500">Charaka Samhita Chikitsa Sthana Ch. 28</span>
+                    <button 
+                      type="button"
+                      onClick={() => onSelectTab('doc_herbal_recommendations')}
+                      className="font-bold text-purple-700 hover:underline cursor-pointer"
+                    >
+                      Apply Herb Protocol →
+                    </button>
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-3xl bg-gradient-to-br from-[#FAF8F5] to-amber-50/40 border border-[#EBE3D5] space-y-2 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="flex items-center gap-1.5 font-bold text-amber-950">
+                      <Award className="w-4 h-4 text-amber-600" />
+                      <span>Seasonal Varsha Ritucharya Notice</span>
+                    </span>
+                    <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-900 font-mono text-[9px] font-bold">Active Protocol</span>
+                  </div>
+                  <p className="text-stone-700 leading-relaxed text-[11px]">
+                    Monsoon atmospheric moisture impairs <em>digestive metabolism & gut fire</em>. Advise incoming patients to avoid cold unpasteurized curd, heavy fermented grains, and advocate warm boiled water with dry ginger (Shunthi).
+                  </p>
+                  <div className="pt-2 border-t border-amber-100 flex items-center justify-between text-[10px]">
+                    <span className="text-stone-500">Ritucharya Advisory 2026</span>
+                    <button 
+                      type="button"
+                      onClick={() => onSelectTab('doc_treatment_plans')}
+                      className="font-bold text-amber-800 hover:underline cursor-pointer"
+                    >
+                      View Diet Protocols →
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+            {/* Right 4 Columns (Today's Schedule + Quick Actions + Practice Insights) */}
+            <div className="lg:col-span-4 space-y-5">
+              
+              {/* Card 1: Today's Schedule (Matching Reference Screen Exactly) */}
+              <div className="bg-white rounded-3xl overflow-hidden border border-[#EBE3D5] shadow-xs">
+                
+                {/* Purple Schedule Header */}
+                <div className="bg-[#5B3E8C] text-white p-4 px-5 flex items-center justify-between">
+                  <div className="flex items-center gap-2 font-serif font-bold text-sm">
+                    <Calendar className="w-4 h-4 text-purple-200" />
+                    <span>Today's Schedule</span>
+                  </div>
+                  <button 
+                    onClick={() => onSelectTab('doc_appointments')}
+                    className="text-[11px] text-purple-200 hover:text-white flex items-center gap-1 font-semibold cursor-pointer"
+                  >
+                    <span>View All</span>
+                    <ArrowRight className="w-3 h-3" />
+                  </button>
+                </div>
+
+                {/* List of 5 Appointments */}
+                <div className="p-4 divide-y divide-stone-100">
+                  {scheduleList.map((item) => (
+                    <div key={item.id} className="py-3 first:pt-1 last:pb-1 flex items-center justify-between gap-3">
+                      
+                      <div className="flex items-center gap-3 min-w-0">
+                        <span className="text-[10px] font-mono font-bold text-[#78716C] shrink-0 w-16">
+                          {item.time}
+                        </span>
+
+                        <img
+                          src={item.avatar}
+                          alt={item.name}
+                          className="w-7 h-7 rounded-full object-cover shrink-0 border border-stone-200"
+                        />
+
+                        <div className="min-w-0 truncate">
+                          <p className="text-xs font-bold text-[#1C1917] truncate leading-tight">{item.name}</p>
+                          <p className="text-[10px] text-[#78716C] truncate leading-none mt-0.5">{item.condition}</p>
+                        </div>
+                      </div>
+
+                      <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-bold shrink-0 ${
+                        item.type === 'Consultation'
+                          ? 'bg-[#F3EFF9] text-[#5B3E8C]'
+                          : 'bg-[#FEF3C7] text-[#D97706]'
+                      }`}>
+                        {item.type}
+                      </span>
+
+                    </div>
+                  ))}
+                </div>
+
+                {/* View Full Schedule Footer Link */}
+                <button 
+                  onClick={() => onSelectTab('doc_appointments')}
+                  className="w-full text-[11px] font-bold text-[#5B3E8C] hover:underline flex items-center justify-center gap-1.5 py-3 border-t border-stone-100 bg-stone-50/50 cursor-pointer"
+                >
+                  <span>View Full Schedule</span>
+                  <ArrowRight className="w-3 h-3" />
+                </button>
+              </div>
+
+              {/* Card 2: Quick Actions (4 Action Tiles) */}
+              <div className="bg-white rounded-3xl p-5 border border-[#EBE3D5] shadow-xs space-y-3.5">
+                <h3 className="text-xs font-bold text-[#1C1917] tracking-tight">Quick Actions</h3>
+
+                <div className="grid grid-cols-4 gap-2.5">
+                  
+                  {/* Action 1: Add Prescription */}
+                  <button 
+                    onClick={() => setIsPrescriptionModalOpen(true)}
+                    className="p-3 rounded-2xl bg-[#FAF8F5] hover:bg-[#F3EFF9] border border-[#EBE3D5] flex flex-col items-center justify-center text-center gap-1.5 transition-all cursor-pointer group"
+                  >
+                    <div className="w-8 h-8 rounded-xl bg-purple-100 text-[#5B3E8C] flex items-center justify-center">
+                      <MortarPestleGraphic className="w-4 h-4" />
+                    </div>
+                    <span className="text-[9px] font-bold text-[#44403C] leading-tight group-hover:text-[#5B3E8C]">Add Prescription</span>
+                  </button>
+
+                  {/* Action 2: Upload Reports */}
+                  <button 
+                    onClick={() => { onOpenPhotoReview && onOpenPhotoReview(); showToast('Upload reports modal opened'); }}
+                    className="p-3 rounded-2xl bg-[#FAF8F5] hover:bg-[#F3EFF9] border border-[#EBE3D5] flex flex-col items-center justify-center text-center gap-1.5 transition-all cursor-pointer group"
+                  >
+                    <div className="w-8 h-8 rounded-xl bg-purple-100 text-[#5B3E8C] flex items-center justify-center">
+                      <FileText className="w-4 h-4" />
+                    </div>
+                    <span className="text-[9px] font-bold text-[#44403C] leading-tight group-hover:text-[#5B3E8C]">Upload Reports</span>
+                  </button>
+
+                  {/* Action 3: Send Message */}
+                  <button 
+                    onClick={() => onSelectTab('doc_messages')}
+                    className="p-3 rounded-2xl bg-[#FAF8F5] hover:bg-[#F3EFF9] border border-[#EBE3D5] flex flex-col items-center justify-center text-center gap-1.5 transition-all cursor-pointer group"
+                  >
+                    <div className="w-8 h-8 rounded-xl bg-purple-100 text-[#5B3E8C] flex items-center justify-center">
+                      <Mail className="w-4 h-4" />
+                    </div>
+                    <span className="text-[9px] font-bold text-[#44403C] leading-tight group-hover:text-[#5B3E8C]">Send Message</span>
+                  </button>
+
+                  {/* Action 4: Share Guide */}
+                  <button 
+                    onClick={() => onSelectTab('doc_herbal_recommendations')}
+                    className="p-3 rounded-2xl bg-[#FAF8F5] hover:bg-[#F3EFF9] border border-[#EBE3D5] flex flex-col items-center justify-center text-center gap-1.5 transition-all cursor-pointer group"
+                  >
+                    <div className="w-8 h-8 rounded-xl bg-purple-100 text-[#5B3E8C] flex items-center justify-center">
+                      <Share2 className="w-4 h-4" />
+                    </div>
+                    <span className="text-[9px] font-bold text-[#44403C] leading-tight group-hover:text-[#5B3E8C]">Share Guide</span>
+                  </button>
+
+                </div>
+              </div>
+
+              {/* Card 3: Practice Insights (Donut Breakdown) */}
+              <div className="bg-white rounded-3xl p-5 border border-[#EBE3D5] shadow-xs space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-bold text-[#1C1917] tracking-tight">Practice Insights</h3>
+                  <span className="text-[10px] text-[#78716C] font-semibold flex items-center gap-0.5">
+                    This Month <ChevronDown className="w-3 h-3" />
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between gap-4">
+                  
+                  {/* Donut Chart */}
+                  <div className="relative w-24 h-24 shrink-0">
+                    <svg className="w-24 h-24 -rotate-90" viewBox="0 0 36 36">
+                      <circle cx="18" cy="18" r="14" fill="none" stroke="#EBE3D5" strokeWidth="4" />
+                      <circle cx="18" cy="18" r="14" fill="none" stroke="#2E1E55" strokeWidth="4" strokeDasharray="51 49" strokeDashoffset="0" strokeLinecap="round" />
+                      <circle cx="18" cy="18" r="14" fill="none" stroke="#633AA0" strokeWidth="4" strokeDasharray="25 75" strokeDashoffset="-51" strokeLinecap="round" />
+                      <circle cx="18" cy="18" r="14" fill="none" stroke="#D88D43" strokeWidth="4" strokeDasharray="17 83" strokeDashoffset="-76" strokeLinecap="round" />
+                      <circle cx="18" cy="18" r="14" fill="none" stroke="#9E9E9E" strokeWidth="4" strokeDasharray="7 93" strokeDashoffset="-93" strokeLinecap="round" />
+                    </svg>
+                  </div>
+
+                  {/* Legend */}
+                  <div className="space-y-1.5 text-[11px] text-[#44403C] flex-1">
+                    <div className="flex items-center justify-between">
+                      <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#2E1E55]"></span> Consultations</span>
+                      <span className="font-bold text-[#1C1917]">256</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#633AA0]"></span> Follow-ups</span>
+                      <span className="font-bold text-[#1C1917]">128</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#D88D43]"></span> New Patients</span>
+                      <span className="font-bold text-[#1C1917]">86</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#9E9E9E]"></span> Others</span>
+                      <span className="font-bold text-[#1C1917]">32</span>
+                    </div>
+                  </div>
+
+                </div>
+
+                <button 
+                  onClick={() => onSelectTab('doc_reports_analytics')}
+                  className="text-[11px] font-bold text-[#5B3E8C] hover:underline flex items-center justify-center gap-1 pt-2 border-t border-stone-100 w-full cursor-pointer"
+                >
+                  <span>View Detailed Analytics</span>
+                  <ArrowRight className="w-3 h-3" />
+                </button>
+              </div>
+
+            </div>
+
+          </div>
+
+          {/* --------------------------------------------------------------------- */}
+          {/* Bottom Footer Banner (Healing Through Ayurveda)                       */}
+          {/* --------------------------------------------------------------------- */}
+          <div className="bg-[#1C1030] text-white rounded-3xl p-5 sm:p-6 border border-purple-900/60 shadow-md flex flex-col sm:flex-row items-center justify-between gap-4">
+            
+            <div className="flex items-center gap-3.5">
+              <div className="w-10 h-10 rounded-2xl bg-purple-800/80 text-[#E5C07B] flex items-center justify-center shrink-0">
+                <ZenivaLogo className="w-6 h-6" />
+              </div>
+              <div>
+                <h4 className="text-sm sm:text-base font-serif font-bold text-white leading-tight">
+                  Healing Through Ayurveda, Empowering Lives
+                </h4>
+                <p className="text-xs text-purple-200/80 mt-0.5">
+                  Ancient wisdom. Modern care. Better health.
+                </p>
+              </div>
+            </div>
+
+            <button 
+              onClick={() => onSelectTab('doc_treatment_plans')}
+              className="px-5 py-2.5 rounded-xl bg-purple-900/80 hover:bg-purple-800 text-xs font-bold text-white border border-purple-700/60 shadow-sm flex items-center gap-2 cursor-pointer shrink-0"
+            >
+              <span>Explore Premium Features</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+
+          </div>
+
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 3. PROFILE SUB-PAGES (Personal Details, Qualification, Experience, etc.)  */}
+      {/* ========================================================================= */}
+
+      {/* --- PAGE: Personal Details --- */}
+      {activeTab === 'doc_personal_details' && (
+        <div className="bg-white rounded-3xl p-6 sm:p-8 border border-[#EBE3D5] shadow-xs space-y-6 animate-in fade-in">
+          <div className="border-b border-stone-100 pb-4">
+            <div className="flex items-center gap-2 text-xs font-bold text-[#5B3E8C] uppercase tracking-wider">
+              <User className="w-4 h-4" />
+              <span>Doctor Profile</span>
+            </div>
+            <h2 className="text-xl font-serif font-bold text-stone-900 mt-1">Personal Details & Clinical Identity</h2>
+            <p className="text-xs text-stone-500 mt-0.5">Manage your public profile, contact details, bio, and statutory registration numbers.</p>
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-center gap-6 p-5 rounded-3xl bg-[#FAF8F5] border border-stone-200">
+            <div className="relative group shrink-0">
+              <img 
+                src={doctorAvatar} 
+                alt={doctorName} 
+                className="w-24 h-24 rounded-3xl object-cover border-3 border-purple-300 shadow-md group-hover:opacity-90 transition-opacity" 
+                onError={(e) => { e.currentTarget.src = 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=400'; }}
+              />
+              <label 
+                className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 text-white rounded-3xl opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer p-1"
+                title="Click to update doctor profile photo"
+              >
+                <Camera className="w-5 h-5 text-amber-300" />
+                <span className="text-[10px] font-bold mt-1 text-center">Change Photo</span>
+                <input 
+                  type="file" 
+                  accept="image/*" 
+                  className="hidden" 
+                  onChange={handleDoctorAvatarUpload} 
+                />
+              </label>
+            </div>
+            <div className="space-y-1 text-center sm:text-left flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="text-lg font-serif font-bold text-stone-900">{doctorName}</h3>
+                <span className="px-2.5 py-0.5 bg-green-100 text-green-800 rounded-full text-[10px] font-bold flex items-center gap-1 border border-green-200">
+                  <ShieldCheck className="w-3 h-3 text-green-700" />
+                  <span>Verified Ayurvedic Physician</span>
+                </span>
+              </div>
+              <p className="text-xs font-semibold text-[#5B3E8C]">{qualification} · {specialization}</p>
+              <div className="flex flex-wrap gap-2 pt-1">
+                <span className="px-2.5 py-0.5 bg-purple-100 text-purple-900 rounded-md font-mono text-[10px] font-bold">System ID: {doctorId}</span>
+                <span className="px-2.5 py-0.5 bg-stone-200 text-stone-800 rounded-md font-mono text-[10px] font-bold">Council Reg: {councilReg}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+            <div className="p-4 rounded-2xl bg-stone-50 border border-stone-200 space-y-1">
+              <span className="font-bold text-stone-400 uppercase text-[10px]">Registered Phone</span>
+              <p className="font-bold text-stone-900">+91 {currentUser.phone || '8766903403'}</p>
+            </div>
+            <div className="p-4 rounded-2xl bg-stone-50 border border-stone-200 space-y-1">
+              <span className="font-bold text-stone-400 uppercase text-[10px]">Clinical Organization</span>
+              <p className="font-bold text-stone-900">{organization}</p>
+            </div>
+            <div className="p-4 rounded-2xl bg-stone-50 border border-stone-200 space-y-1">
+              <span className="font-bold text-stone-400 uppercase text-[10px]">Practice City & State</span>
+              <p className="font-bold text-stone-900">{location}</p>
+            </div>
+            <div className="p-4 rounded-2xl bg-stone-50 border border-stone-200 space-y-1">
+              <span className="font-bold text-stone-400 uppercase text-[10px]">Medical State Board</span>
+              <p className="font-bold text-stone-900">Maharashtra Council of Indian Medicine (MCIM)</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- PAGE: Doctor Qualification --- */}
+      {activeTab === 'doc_qualification' && (
+        <div className="bg-white rounded-3xl p-6 sm:p-8 border border-[#EBE3D5] shadow-xs space-y-6 animate-in fade-in">
+          <div className="border-b border-stone-100 pb-4">
+            <div className="flex items-center gap-2 text-xs font-bold text-[#5B3E8C] uppercase tracking-wider">
+              <Award className="w-4 h-4" />
+              <span>Educational Credentials</span>
+            </div>
+            <h2 className="text-xl font-serif font-bold text-stone-900 mt-1">Doctor Qualification & Degrees</h2>
+            <p className="text-xs text-stone-500 mt-0.5">Verified medical qualifications, degrees, and academic honours.</p>
+          </div>
+
+          <div className="space-y-4">
+            <div className="p-5 rounded-2xl border border-purple-200 bg-[#FAF8F5] space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="px-2.5 py-0.5 rounded-full bg-green-100 text-green-800 text-[10px] font-bold">Verified Degree ✓</span>
+                <span className="text-[11px] font-mono text-stone-400">Passing Year: 2011</span>
+              </div>
+              <h3 className="text-base font-bold text-stone-900">Bachelor of Ayurvedic Medicine & Surgery (BAMS)</h3>
+              <p className="text-xs text-stone-600">Government Ayurved College & Hospital, Nagpur (MUHS University)</p>
+            </div>
+
+            <div className="p-5 rounded-2xl border border-purple-200 bg-[#FAF8F5] space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="px-2.5 py-0.5 rounded-full bg-green-100 text-green-800 text-[10px] font-bold">Verified Post-Graduate ✓</span>
+                <span className="text-[11px] font-mono text-stone-400">Passing Year: 2014</span>
+              </div>
+              <h3 className="text-base font-bold text-stone-900">MD in Kayachikitsa (Internal Medicine)</h3>
+              <p className="text-xs text-stone-600">Tilak Ayurved Mahavidyalaya, Pune · Gold Medalist in Clinical Diagnostics</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- PAGE: Experience --- */}
+      {activeTab === 'doc_experience' && (
+        <div className="bg-white rounded-3xl p-6 sm:p-8 border border-[#EBE3D5] shadow-xs space-y-6 animate-in fade-in">
+          <div className="border-b border-stone-100 pb-4">
+            <div className="flex items-center gap-2 text-xs font-bold text-[#5B3E8C] uppercase tracking-wider">
+              <Calendar className="w-4 h-4" />
+              <span>Clinical Timeline</span>
+            </div>
+            <h2 className="text-xl font-serif font-bold text-stone-900 mt-1">Clinical Experience (14+ Years)</h2>
+            <p className="text-xs text-stone-500 mt-0.5">Historical hospital attachments, clinical leadership roles, and patient care track record.</p>
+          </div>
+
+          <div className="space-y-4 border-l-2 border-purple-200 ml-4 pl-6">
+            <div className="relative">
+              <span className="absolute -left-[31px] top-1.5 w-3.5 h-3.5 rounded-full bg-[#5B3E8C] border-2 border-white"></span>
+              <span className="text-[10px] font-mono text-purple-900 font-bold">2018 - Present (7 Years)</span>
+              <h3 className="text-sm font-bold text-stone-900 mt-0.5">Chief Ayurvedic Consultant & Medical Director</h3>
+              <p className="text-xs text-stone-600">Zeniva Ayurvedic Health Center, Pune · Managed over 12,000+ clinical consultations.</p>
+            </div>
+
+            <div className="relative pt-4">
+              <span className="absolute -left-[31px] top-5.5 w-3.5 h-3.5 rounded-full bg-stone-300 border-2 border-white"></span>
+              <span className="text-[10px] font-mono text-stone-500 font-bold">2014 - 2018 (4 Years)</span>
+              <h3 className="text-sm font-bold text-stone-900 mt-0.5">Senior Resident Vaidya (Kayachikitsa)</h3>
+              <p className="text-xs text-stone-600">Shri Dhanvantari Ayurvedic Hospital & Research Center, Mumbai.</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- PAGE: Specialization --- */}
+      {activeTab === 'doc_specialization' && (
+        <div className="bg-white rounded-3xl p-6 sm:p-8 border border-[#EBE3D5] shadow-xs space-y-6 animate-in fade-in">
+          <div className="border-b border-stone-100 pb-4">
+            <div className="flex items-center gap-2 text-xs font-bold text-[#5B3E8C] uppercase tracking-wider">
+              <Trophy className="w-4 h-4" />
+              <span>Areas of Practice</span>
+            </div>
+            <h2 className="text-xl font-serif font-bold text-stone-900 mt-1">Clinical Specialization & Expertise</h2>
+            <p className="text-xs text-stone-500 mt-0.5">Key diagnostic and therapeutic modalities practiced in your Ayurvedic chamber.</p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+            <div className="p-4 rounded-2xl border border-purple-200 bg-purple-50/40 space-y-1.5">
+              <span className="text-lg">🌿</span>
+              <h3 className="text-sm font-bold text-stone-900">Kayachikitsa (Internal Medicine)</h3>
+              <p className="text-xs text-stone-600">Deep Ama detox, chronic metabolic disorders, and Agni restoration.</p>
+            </div>
+
+            <div className="p-4 rounded-2xl border border-green-200 bg-green-50/40 space-y-1.5">
+              <span className="text-lg">🫀</span>
+              <h3 className="text-sm font-bold text-stone-900">Nadi Pariksha (Pulse Diagnosis)</h3>
+              <p className="text-xs text-stone-600">Root-cause assessment of clinical health imbalances via classical pulse analysis.</p>
+            </div>
+
+            <div className="p-4 rounded-2xl border border-amber-200 bg-amber-50/40 space-y-1.5">
+              <span className="text-lg">🥣</span>
+              <h3 className="text-sm font-bold text-stone-900">Panchakarma Detoxification</h3>
+              <p className="text-xs text-stone-600">Vamana, Virechana, Basti, Nasya, and Raktamokshana therapies.</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- PAGE: Successful Treatments --- */}
+      {activeTab === 'doc_treatments' && (
+        <div className="bg-white rounded-3xl p-6 sm:p-8 border border-[#EBE3D5] shadow-xs space-y-6 animate-in fade-in">
+          <div className="border-b border-stone-100 pb-4">
+            <div className="flex items-center gap-2 text-xs font-bold text-[#5B3E8C] uppercase tracking-wider">
+              <ShieldCheck className="w-4 h-4" />
+              <span>Clinical Outcomes</span>
+            </div>
+            <h2 className="text-xl font-serif font-bold text-stone-900 mt-1">Successful Treatments & Recovery Logs</h2>
+            <p className="text-xs text-stone-500 mt-0.5">Documented patient recoveries, metabolic normalization rates, and reviews.</p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="p-5 rounded-2xl bg-[#FAF8F5] border border-stone-200 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-purple-900">Case #842: Chronic Hyperacidity (GERD)</span>
+                <span className="text-[10px] font-bold text-green-700 bg-green-100 px-2 py-0.5 rounded-full">100% Cured</span>
+              </div>
+              <p className="text-xs text-stone-600">Patient recovered completely after 6 weeks of Kamadudha Rasa and cooling digestive diet.</p>
+            </div>
+
+            <div className="p-5 rounded-2xl bg-[#FAF8F5] border border-stone-200 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-purple-900">Case #919: Chronic Joint Stiffness (Osteoarthritis)</span>
+                <span className="text-[10px] font-bold text-green-700 bg-green-100 px-2 py-0.5 rounded-full">Pain Reduced 85%</span>
+              </div>
+              <p className="text-xs text-stone-600">Janu Basti protocol + Yogaraj Guggulu therapy restored knee mobility without surgery.</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 4. PRACTICE SUB-PAGES (Location, Availability)                            */}
+      {/* ========================================================================= */}
+
+      {/* --- PAGE: Location & Live Map --- */}
+      {activeTab === 'doc_location' && (
+        <div className="bg-white rounded-3xl p-6 sm:p-8 border border-[#EBE3D5] shadow-xs space-y-6 animate-in fade-in">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-stone-100 pb-4">
+            <div>
+              <div className="flex items-center gap-2 text-xs font-bold text-[#5B3E8C] uppercase tracking-wider">
+                <MapPin className="w-4 h-4" />
+                <span>Chamber Locations & Live Geocoding</span>
+              </div>
+              <h2 className="text-xl font-serif font-bold text-stone-900 mt-1">Clinical Locations & Interactive Chamber Map</h2>
+              <p className="text-xs text-stone-500 mt-0.5">Physical consultation clinics, live GPS navigation, and patient OPD appointment directions.</p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2.5">
+              <button
+                type="button"
+                onClick={handleDetectLiveLocation}
+                disabled={isLocating}
+                className="px-4 py-2 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-800 text-xs font-bold flex items-center gap-2 cursor-pointer border border-stone-300 transition-all shadow-xs"
+                title="Detect Current GPS Location"
+              >
+                <Compass className={`w-4 h-4 text-purple-700 ${isLocating ? 'animate-spin' : ''}`} />
+                <span>{isLocating ? 'Locating GPS...' : 'Detect My Location'}</span>
+              </button>
+
+              <a
+                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                  `${chamberDetails.clinicName}, ${chamberDetails.street}, ${chamberDetails.city}, ${chamberDetails.state}`
+                )}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-4 py-2 rounded-xl bg-[#5B3E8C] hover:bg-[#4A2F75] text-white text-xs font-bold flex items-center gap-2 cursor-pointer shadow-md transition-all group"
+                title="Open in Google Maps Navigation"
+              >
+                <Navigation className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                <span>Open Google Maps</span>
+              </a>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            
+            {/* Left Column: Interactive Chamber Location Form (5 Cols) */}
+            <form onSubmit={handleSaveChamberLocation} className="lg:col-span-5 space-y-4 text-xs">
+              <div className="p-4 rounded-2xl bg-[#FAF8F5] border border-stone-200 space-y-3.5">
+                <h3 className="font-bold text-stone-900 flex items-center gap-2 text-xs uppercase tracking-wider">
+                  <Building className="w-4 h-4 text-[#5B3E8C]" />
+                  <span>Clinic & Chamber Details</span>
+                </h3>
+
+                <div>
+                  <label className="font-bold text-stone-700 block mb-1">Ayurvedic Clinic / Hospital Name:</label>
+                  <input
+                    type="text"
+                    required
+                    value={chamberDetails.clinicName}
+                    onChange={(e) => setChamberDetails({ ...chamberDetails, clinicName: e.target.value })}
+                    placeholder="e.g. Shri Dhanvantari Ayurvedic Clinic"
+                    className="w-full p-2.5 rounded-xl border border-stone-200 bg-white text-stone-900 font-semibold focus:ring-2 focus:ring-purple-600/30 outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-bold text-stone-700 block mb-1">Street Address / Area:</label>
+                  <input
+                    type="text"
+                    required
+                    value={chamberDetails.street}
+                    onChange={(e) => setChamberDetails({ ...chamberDetails, street: e.target.value })}
+                    placeholder="e.g. Plot 45, Ayurvedic Enclave, Ramdaspeth"
+                    className="w-full p-2.5 rounded-xl border border-stone-200 bg-white text-stone-900 focus:ring-2 focus:ring-purple-600/30 outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-bold text-stone-700 block mb-1">Landmark / Locality (Optional):</label>
+                  <input
+                    type="text"
+                    value={chamberDetails.landmark}
+                    onChange={(e) => setChamberDetails({ ...chamberDetails, landmark: e.target.value })}
+                    placeholder="e.g. Near Vedic Wellness Center"
+                    className="w-full p-2.5 rounded-xl border border-stone-200 bg-white text-stone-900 focus:ring-2 focus:ring-purple-600/30 outline-none"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="font-bold text-stone-700 block mb-1">City:</label>
+                    <input
+                      type="text"
+                      required
+                      value={chamberDetails.city}
+                      onChange={(e) => setChamberDetails({ ...chamberDetails, city: e.target.value })}
+                      placeholder="e.g. Nagpur"
+                      className="w-full p-2.5 rounded-xl border border-stone-200 bg-white text-stone-900 font-bold focus:ring-2 focus:ring-purple-600/30 outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="font-bold text-stone-700 block mb-1">State:</label>
+                    <input
+                      type="text"
+                      required
+                      value={chamberDetails.state}
+                      onChange={(e) => setChamberDetails({ ...chamberDetails, state: e.target.value })}
+                      placeholder="e.g. Maharashtra"
+                      className="w-full p-2.5 rounded-xl border border-stone-200 bg-white text-stone-900 font-bold focus:ring-2 focus:ring-purple-600/30 outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="font-bold text-stone-700 block mb-1">Pin Code:</label>
+                    <input
+                      type="text"
+                      required
+                      value={chamberDetails.pincode}
+                      onChange={(e) => setChamberDetails({ ...chamberDetails, pincode: e.target.value })}
+                      placeholder="e.g. 440010"
+                      className="w-full p-2.5 rounded-xl border border-stone-200 bg-white text-stone-900 font-mono focus:ring-2 focus:ring-purple-600/30 outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="font-bold text-stone-700 block mb-1">OPD Phone (+91):</label>
+                    <input
+                      type="text"
+                      required
+                      value={chamberDetails.phone}
+                      onChange={(e) => setChamberDetails({ ...chamberDetails, phone: e.target.value })}
+                      placeholder="e.g. 8766903403"
+                      className="w-full p-2.5 rounded-xl border border-stone-200 bg-white text-stone-900 font-mono focus:ring-2 focus:ring-purple-600/30 outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="font-bold text-stone-700 block mb-1">OPD Timings:</label>
+                  <input
+                    type="text"
+                    value={chamberDetails.timings}
+                    onChange={(e) => setChamberDetails({ ...chamberDetails, timings: e.target.value })}
+                    placeholder="e.g. Mon - Sat: 09:00 AM - 01:00 PM & 04:00 PM - 08:00 PM"
+                    className="w-full p-2.5 rounded-xl border border-stone-200 bg-white text-stone-900 focus:ring-2 focus:ring-purple-600/30 outline-none"
+                  />
+                </div>
+
+                <div className="pt-2">
+                  <button
+                    type="submit"
+                    className="w-full py-3 bg-[#5B3E8C] hover:bg-[#4A2F75] text-white font-bold rounded-xl flex items-center justify-center gap-2 cursor-pointer shadow-md transition-all"
+                  >
+                    <Save className="w-4 h-4" />
+                    <span>Save Chamber & Clinic Location</span>
+                  </button>
+                </div>
+              </div>
+            </form>
+
+            {/* Right Column: Live Real Map Embed & Location Card (7 Cols) */}
+            <div className="lg:col-span-7 space-y-4">
+              
+              {/* Real Map Container */}
+              <div className="rounded-3xl border border-stone-200 overflow-hidden shadow-md bg-stone-100 relative h-[380px] sm:h-[420px]">
+                <iframe
+                  title="Doctor Clinic Location Map"
+                  src={`https://maps.google.com/maps?q=${encodeURIComponent(
+                    `${chamberDetails.clinicName}, ${chamberDetails.street}, ${chamberDetails.city}, ${chamberDetails.state}, ${chamberDetails.pincode}`
+                  )}&t=&z=15&ie=UTF8&iwloc=&output=embed`}
+                  className="w-full h-full border-0"
+                  loading="lazy"
+                  allowFullScreen
+                />
+
+                {/* Floating Map Overlay Badge */}
+                <div className="absolute top-3 left-3 bg-white/95 backdrop-blur-md px-3.5 py-2 rounded-2xl border border-stone-200 shadow-md flex items-center gap-2.5 text-xs">
+                  <div className="w-3 h-3 rounded-full bg-emerald-500 animate-ping shrink-0" />
+                  <div>
+                    <p className="font-bold text-stone-900 leading-tight">{chamberDetails.clinicName}</p>
+                    <p className="text-[10px] text-stone-500 font-mono">{chamberDetails.city}, {chamberDetails.state}</p>
+                  </div>
+                </div>
+
+                <a
+                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                    `${chamberDetails.clinicName}, ${chamberDetails.street}, ${chamberDetails.city}, ${chamberDetails.state}`
+                  )}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="absolute bottom-3 right-3 px-3 py-1.5 rounded-xl bg-white/95 backdrop-blur-md text-stone-800 text-[11px] font-bold shadow-md hover:bg-white flex items-center gap-1.5 border border-stone-200 transition-all cursor-pointer"
+                >
+                  <ExternalLink className="w-3.5 h-3.5 text-purple-700" />
+                  <span>Full Screen Map</span>
+                </a>
+              </div>
+
+              {/* Clinic Chamber Summary Card */}
+              <div className="p-4 rounded-2xl bg-[#FAF8F5] border border-stone-200 space-y-2.5 text-xs">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <MapPin className="w-4 h-4 text-emerald-700" />
+                    <span className="font-bold text-stone-900">Verified Clinical Chamber Location</span>
+                  </div>
+                  <span className="px-2.5 py-0.5 rounded-full bg-green-100 text-green-800 text-[10px] font-bold">
+                    GPS Active ✓
+                  </span>
+                </div>
+
+                <p className="text-stone-700 leading-snug">
+                  <strong>Address:</strong> {chamberDetails.street}, {chamberDetails.landmark ? chamberDetails.landmark + ', ' : ''}{chamberDetails.city}, {chamberDetails.state} - {chamberDetails.pincode}
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                  <div className="p-2 rounded-xl bg-white border border-stone-100 flex items-center gap-2">
+                    <Phone className="w-3.5 h-3.5 text-purple-700" />
+                    <span><strong>OPD Phone:</strong> +91 {chamberDetails.phone}</span>
+                  </div>
+                  <div className="p-2 rounded-xl bg-white border border-stone-100 flex items-center gap-2">
+                    <Clock className="w-3.5 h-3.5 text-amber-700" />
+                    <span><strong>Consultation Fee:</strong> {chamberDetails.consultationFee}</span>
+                  </div>
+                </div>
+
+                {/* Available Ayurvedic Facilities */}
+                <div className="pt-1">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-stone-400 block mb-1.5">Available Chamber Facilities:</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {chamberDetails.facilities.map((fac, idx) => (
+                      <span key={idx} className="px-2.5 py-0.5 rounded-md bg-purple-50 text-purple-800 border border-purple-200/60 text-[10px] font-semibold flex items-center gap-1">
+                        <Check className="w-3 h-3 text-emerald-600" />
+                        {fac}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* --- PAGE: Availability --- */}
+      {activeTab === 'doc_availability' && (
+        <div className="bg-white rounded-3xl p-6 sm:p-8 border border-[#EBE3D5] shadow-xs space-y-6 animate-in fade-in">
+          <div className="border-b border-stone-100 pb-4">
+            <div className="flex items-center gap-2 text-xs font-bold text-[#5B3E8C] uppercase tracking-wider">
+              <Clock className="w-4 h-4" />
+              <span>OPD Schedule</span>
+            </div>
+            <h2 className="text-xl font-serif font-bold text-stone-900 mt-1">Weekly Doctor Availability & Shifts</h2>
+            <p className="text-xs text-stone-500 mt-0.5">Set working hours, shift slots, and instant leave status.</p>
+          </div>
+
+          <div className="space-y-3 text-xs">
+            {Object.entries(weeklyAvailability).map(([day, slot]) => (
+              <div key={day} className="p-3.5 rounded-2xl bg-stone-50 border border-stone-200 flex items-center justify-between">
+                <span className="font-bold text-stone-900 uppercase w-28">{day}</span>
+                <span className="text-stone-600 font-mono">Morning: {slot.morning}</span>
+                <span className="text-stone-600 font-mono">Evening: {slot.evening}</span>
+                <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${slot.active ? 'bg-green-100 text-green-800' : 'bg-stone-200 text-stone-600'}`}>
+                  {slot.active ? 'Available' : 'Off Duty'}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 5. MANAGE SUB-PAGES (Appointments, Patients, Consultations, etc.)         */}
+      {/* ========================================================================= */}
+
+      {/* --- PAGE: Appointments --- */}
+      {activeTab === 'doc_appointments' && (
+        <div className="bg-white rounded-3xl p-6 sm:p-8 border border-[#EBE3D5] shadow-xs space-y-6 animate-in fade-in">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-stone-100 pb-4">
+            <div>
+              <div className="flex items-center gap-2 text-xs font-bold text-[#5B3E8C] uppercase tracking-wider">
+                <Calendar className="w-4 h-4" />
+                <span>Appointments Desk</span>
+              </div>
+              <h2 className="text-xl font-serif font-bold text-stone-900 mt-1">Scheduled Consultations & Patient Appointments</h2>
+            </div>
+            <button 
+              onClick={() => setIsPrescriptionModalOpen(true)}
+              className="px-4 py-2 bg-[#5B3E8C] text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+            >
+              <Plus className="w-4 h-4" /> Add Appointment
+            </button>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="text-[10px] text-stone-400 border-b border-stone-100 font-semibold uppercase tracking-wider">
+                  <th className="pb-3">Time</th>
+                  <th className="pb-3">Patient Name</th>
+                  <th className="pb-3">Health Concern</th>
+                  <th className="pb-3">Type</th>
+                  <th className="pb-3">Status</th>
+                  <th className="pb-3 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-stone-100 text-xs">
+                {scheduleList.map((item) => (
+                  <tr key={item.id} className="hover:bg-purple-50/20">
+                    <td className="py-3 font-mono font-bold text-purple-900">{item.time}</td>
+                    <td className="py-3 font-bold text-stone-900">{item.name}</td>
+                    <td className="py-3 text-stone-600">{item.condition}</td>
+                    <td className="py-3"><span className="px-2 py-0.5 rounded-full bg-purple-100 text-purple-900 text-[10px] font-bold">{item.type}</span></td>
+                    <td className="py-3"><span className="px-2 py-0.5 rounded-full bg-green-100 text-green-900 text-[10px] font-bold">{item.status}</span></td>
+                    <td className="py-3 text-right">
+                      <button 
+                        onClick={() => showToast(`Opening consultation notes for ${item.name}`)}
+                        className="px-3 py-1 bg-stone-100 hover:bg-purple-100 text-purple-900 rounded-lg text-[10px] font-bold cursor-pointer"
+                      >
+                        Start Chamber
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* --- PAGE: Patients --- */}
+      {activeTab === 'doc_patients' && (
+        <div className="bg-white rounded-3xl p-6 sm:p-8 border border-[#EBE3D5] shadow-xs space-y-6 animate-in fade-in">
+          <div className="border-b border-stone-100 pb-4">
+            <div className="flex items-center gap-2 text-xs font-bold text-[#5B3E8C] uppercase tracking-wider">
+              <Users className="w-4 h-4" />
+              <span>Patient Directory</span>
+            </div>
+            <h2 className="text-xl font-serif font-bold text-stone-900 mt-1">My Registered Patients (248 Total)</h2>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="text-[10px] text-stone-400 border-b border-stone-100 font-semibold uppercase tracking-wider">
+                  <th className="pb-3">Patient ID</th>
+                  <th className="pb-3">Name</th>
+                  <th className="pb-3">Age / Gender</th>
+                  <th className="pb-3">Dosha Balance</th>
+                  <th className="pb-3">Visits</th>
+                  <th className="pb-3">Last Visit</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-stone-100 text-xs">
+                {patientsRoster.map((p) => (
+                  <tr key={p.id} className="hover:bg-purple-50/20">
+                    <td className="py-3 font-mono font-bold text-purple-900">{p.id}</td>
+                    <td className="py-3 font-bold text-stone-900">{p.name}</td>
+                    <td className="py-3 text-stone-600">{p.age} yrs / {p.gender}</td>
+                    <td className="py-3"><span className="px-2 py-0.5 bg-amber-100 text-amber-900 rounded-md text-[10px] font-bold">{p.dosha}</span></td>
+                    <td className="py-3 font-bold text-stone-800">{p.visits}</td>
+                    <td className="py-3 font-mono text-stone-600">{p.lastVisit}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* --- PAGE: Consultations --- */}
+      {activeTab === 'doc_consultations' && (
+        <div className="bg-white rounded-3xl p-6 sm:p-8 border border-[#EBE3D5] shadow-xs space-y-6 animate-in fade-in">
+          <div className="border-b border-stone-100 pb-4">
+            <div className="flex items-center gap-2 text-xs font-bold text-[#5B3E8C] uppercase tracking-wider">
+              <Stethoscope className="w-4 h-4" />
+              <span>Chamber Queue</span>
+            </div>
+            <h2 className="text-xl font-serif font-bold text-stone-900 mt-1">Live Clinical Consultations Desk</h2>
+          </div>
+
+          <div className="p-5 rounded-2xl bg-purple-50/40 border border-purple-200 flex items-center justify-between">
+            <div>
+              <span className="text-[10px] font-bold text-purple-700 uppercase">Now Consulting</span>
+              <h3 className="text-base font-bold text-stone-900">Aarav Patil (Stress & Joint Stiffness)</h3>
+              <p className="text-xs text-stone-600">Prescription draft active · Pulse Rate: 72 bpm (Deep Steady Classical Pulse)</p>
+            </div>
+            <button 
+              onClick={() => setIsPrescriptionModalOpen(true)}
+              className="px-4 py-2 bg-[#5B3E8C] text-white rounded-xl text-xs font-bold cursor-pointer shadow-sm"
+            >
+              Issue Digital Rx
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* --- PAGE: Treatment Plans --- */}
+      {activeTab === 'doc_treatment_plans' && (
+        <div className="bg-white rounded-3xl p-6 sm:p-8 border border-[#EBE3D5] shadow-xs space-y-6 animate-in fade-in">
+          <div className="border-b border-stone-100 pb-4">
+            <div className="flex items-center gap-2 text-xs font-bold text-[#5B3E8C] uppercase tracking-wider">
+              <ClipboardList className="w-4 h-4" />
+              <span>Ayurvedic Protocols</span>
+            </div>
+            <h2 className="text-xl font-serif font-bold text-stone-900 mt-1">Customized Treatment Regimens & Panchakarma Plans</h2>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+            <div className="p-5 rounded-2xl bg-[#FAF8F5] border border-stone-200 space-y-2">
+              <span className="px-2 py-0.5 rounded-full bg-purple-100 text-purple-900 text-[10px] font-bold">14-Day Joint & Stress Recovery</span>
+              <h3 className="text-sm font-bold text-stone-900">Abhyanga & Basti Therapy Schedule</h3>
+              <p className="text-stone-600">Mahanarayana oil massage + Dashamula decoction enema every alternate morning.</p>
+            </div>
+            <div className="p-5 rounded-2xl bg-[#FAF8F5] border border-stone-200 space-y-2">
+              <span className="px-2 py-0.5 rounded-full bg-green-100 text-green-900 text-[10px] font-bold">21-Day Deep Cleanse</span>
+              <h3 className="text-sm font-bold text-stone-900">Virechana Agni Deepana Protocol</h3>
+              <p className="text-stone-600">Snehapana with Trikatu Ghrita followed by gentle herbal purging.</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- PAGE: Herbal Recommendations --- */}
+      {activeTab === 'doc_herbal_recommendations' && (
+        <div className="bg-white rounded-3xl p-6 sm:p-8 border border-[#EBE3D5] shadow-xs space-y-6 animate-in fade-in">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-stone-100 pb-4">
+            <div>
+              <div className="flex items-center gap-2 text-xs font-bold text-[#5B3E8C] uppercase tracking-wider">
+                <Sparkles className="w-4 h-4" />
+                <span>Dravyaguna Formulary & Daily Prescriptions</span>
+              </div>
+              <h2 className="text-xl font-serif font-bold text-stone-900 mt-1">Classical Herbal Recommendations Library</h2>
+              <p className="text-xs text-stone-500 mt-0.5">Evidence-based botanical extracts and classical yoga formulations for clinical chamber use.</p>
+            </div>
+
+            <button 
+              onClick={() => setIsPrescriptionModalOpen(true)}
+              className="px-4 py-2 bg-[#5B3E8C] text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-sm"
+            >
+              <Plus className="w-4 h-4" /> Prescribe Herb
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
+            {/* Category 1: Stress & Sleep */}
+            <div className="p-5 rounded-3xl bg-purple-50/50 border border-purple-200 space-y-3 flex flex-col justify-between">
+              <div>
+                <span className="px-2.5 py-0.5 rounded-full bg-purple-100 text-purple-900 text-[10px] font-bold">🌙 Stress & Insomnia</span>
+                <h3 className="text-sm font-bold text-stone-900 mt-2">Ashwagandha, Shankhpushpi & Brahmi</h3>
+                <p className="text-stone-600 text-[11px] mt-1 leading-relaxed">
+                  Reduces cortisol, stops overthinking, repairs neural synapses, and delivers deep delta sleep.
+                </p>
+                <div className="mt-2 text-[10px] bg-white p-2 rounded-xl border border-purple-100 text-purple-950 font-medium">
+                  <strong>Dosage:</strong> 500mg-1g bedtime with warm milk.
+                </div>
+              </div>
+              <button 
+                onClick={() => {
+                  setRxFormulation('Ashwagandha Extract 500mg (1 cap at bedtime with warm milk) + Shankhpushpi Syrup 10ml twice daily');
+                  setIsPrescriptionModalOpen(true);
+                }}
+                className="w-full py-1.5 bg-purple-700 hover:bg-purple-800 text-white rounded-xl text-[11px] font-bold transition-all"
+              >
+                1-Click Prescribe
+              </button>
+            </div>
+
+            {/* Category 2: Digestion & Acidity */}
+            <div className="p-5 rounded-3xl bg-amber-50/50 border border-amber-200 space-y-3 flex flex-col justify-between">
+              <div>
+                <span className="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 text-[10px] font-bold">🔥 Digestion & Reflux</span>
+                <h3 className="text-sm font-bold text-stone-900 mt-2">Avipattikar, Trikatu & Triphala</h3>
+                <p className="text-stone-600 text-[11px] mt-1 leading-relaxed">
+                  Neutralizes excess stomach acid, kindles sluggish metabolic Agni, and cleanses the colon.
+                </p>
+                <div className="mt-2 text-[10px] bg-white p-2 rounded-xl border border-amber-100 text-amber-950 font-medium">
+                  <strong>Dosage:</strong> Avipattikar post-meals, Triphala bedtime.
+                </div>
+              </div>
+              <button 
+                onClick={() => {
+                  setRxFormulation('Avipattikar Churna 3g (post-meals with lukewarm water) + Triphala Churna 3g (bedtime with warm water)');
+                  setIsPrescriptionModalOpen(true);
+                }}
+                className="w-full py-1.5 bg-amber-700 hover:bg-amber-800 text-white rounded-xl text-[11px] font-bold transition-all"
+              >
+                1-Click Prescribe
+              </button>
+            </div>
+
+            {/* Category 3: Low Immunity */}
+            <div className="p-5 rounded-3xl bg-emerald-50/50 border border-emerald-200 space-y-3 flex flex-col justify-between">
+              <div>
+                <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-900 text-[10px] font-bold">🍃 Immunity & Cold</span>
+                <h3 className="text-sm font-bold text-stone-900 mt-2">Guduchi (Amrita) & Tulsi</h3>
+                <p className="text-stone-600 text-[11px] mt-1 leading-relaxed">
+                  Master immunomodulator; purifies liver, mitigates seasonal allergies, and clears chest phlegm.
+                </p>
+                <div className="mt-2 text-[10px] bg-white p-2 rounded-xl border border-emerald-100 text-emerald-950 font-medium">
+                  <strong>Dosage:</strong> 500mg Guduchi morning empty stomach.
+                </div>
+              </div>
+              <button 
+                onClick={() => {
+                  setRxFormulation('Guduchi (Giloy) Ghan Vati 500mg (twice daily) + Tulsi herbal infusion 1 cup daily');
+                  setIsPrescriptionModalOpen(true);
+                }}
+                className="w-full py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-[11px] font-bold transition-all"
+              >
+                1-Click Prescribe
+              </button>
+            </div>
+
+            {/* Category 4: Fatigue & Stamina */}
+            <div className="p-5 rounded-3xl bg-rose-50/50 border border-rose-200 space-y-3 flex flex-col justify-between">
+              <div>
+                <span className="px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-900 text-[10px] font-bold">⚡ Fatigue & Stamina</span>
+                <h3 className="text-sm font-bold text-stone-900 mt-2">Ashwagandha & Shatavari</h3>
+                <p className="text-stone-600 text-[11px] mt-1 leading-relaxed">
+                  Replenishes cellular Ojas essence, reverses adrenal fatigue, and restores muscular stamina.
+                </p>
+                <div className="mt-2 text-[10px] bg-white p-2 rounded-xl border border-rose-100 text-rose-950 font-medium">
+                  <strong>Dosage:</strong> 1g post-meals with warm milk and ghee.
+                </div>
+              </div>
+              <button 
+                onClick={() => {
+                  setRxFormulation('Ashwagandha Lehyam 1 tsp twice daily + Shatavari Churna 3g with warm milk at night');
+                  setIsPrescriptionModalOpen(true);
+                }}
+                className="w-full py-1.5 bg-rose-700 hover:bg-rose-800 text-white rounded-xl text-[11px] font-bold transition-all"
+              >
+                1-Click Prescribe
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- PAGE: Reports & Analytics --- */}
+      {activeTab === 'doc_reports_analytics' && (
+        <div className="bg-white rounded-3xl p-6 sm:p-8 border border-[#EBE3D5] shadow-xs space-y-6 animate-in fade-in">
+          <div className="border-b border-stone-100 pb-4">
+            <div className="flex items-center gap-2 text-xs font-bold text-[#5B3E8C] uppercase tracking-wider">
+              <BarChart3 className="w-4 h-4" />
+              <span>Practice Analytics</span>
+            </div>
+            <h2 className="text-xl font-serif font-bold text-stone-900 mt-1">Clinical Practice Reports & Growth Insights</h2>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center text-xs">
+            <div className="p-4 rounded-2xl bg-[#FAF8F5] border border-stone-200">
+              <p className="text-2xl font-bold font-serif text-purple-950">256</p>
+              <p className="text-stone-500 mt-1 font-medium">Monthly Consultations</p>
+            </div>
+            <div className="p-4 rounded-2xl bg-[#FAF8F5] border border-stone-200">
+              <p className="text-2xl font-bold font-serif text-green-700">92%</p>
+              <p className="text-stone-500 mt-1 font-medium">Recovery Rate</p>
+            </div>
+            <div className="p-4 rounded-2xl bg-[#FAF8F5] border border-stone-200">
+              <p className="text-2xl font-bold font-serif text-blue-700">4.9 ★</p>
+              <p className="text-stone-500 mt-1 font-medium">Patient Satisfaction</p>
+            </div>
+            <div className="p-4 rounded-2xl bg-[#FAF8F5] border border-stone-200">
+              <p className="text-2xl font-bold font-serif text-amber-700">86</p>
+              <p className="text-stone-500 mt-1 font-medium">New Enrolments</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 6. OTHERS SUB-PAGES (Reminders, Messages, Settings, Help & Support)        */}
+      {/* ========================================================================= */}
+
+      {/* --- PAGE: Reminders --- */}
+      {activeTab === 'doc_reminders' && (
+        <div className="bg-white rounded-3xl p-6 sm:p-8 border border-[#EBE3D5] shadow-xs space-y-6 animate-in fade-in">
+          <div className="border-b border-stone-100 pb-4">
+            <div className="flex items-center gap-2 text-xs font-bold text-[#5B3E8C] uppercase tracking-wider">
+              <Bell className="w-4 h-4" />
+              <span>Reminders & Alerts</span>
+            </div>
+            <h2 className="text-xl font-serif font-bold text-stone-900 mt-1">Clinical Follow-up Reminders</h2>
+          </div>
+
+          <div className="space-y-3">
+            {remindersList.map((rem) => (
+              <div key={rem.id} className="p-4 rounded-2xl bg-stone-50 border border-stone-200 flex items-center justify-between text-xs">
+                <div>
+                  <h4 className="font-bold text-stone-900">{rem.title}</h4>
+                  <p className="text-stone-500 mt-0.5">{rem.note}</p>
+                </div>
+                <span className="font-mono text-purple-900 font-bold">{rem.time}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* --- PAGE: Messages --- */}
+      {activeTab === 'doc_messages' && (
+        <div className="bg-white rounded-3xl p-6 sm:p-8 border border-[#EBE3D5] shadow-xs space-y-6 animate-in fade-in">
+          <div className="border-b border-stone-100 pb-4">
+            <div className="flex items-center gap-2 text-xs font-bold text-[#5B3E8C] uppercase tracking-wider">
+              <Mail className="w-4 h-4" />
+              <span>Patient Communication</span>
+            </div>
+            <h2 className="text-xl font-serif font-bold text-stone-900 mt-1">Messages & Patient Inquiries</h2>
+          </div>
+
+          <div className="space-y-3">
+            {messagesList.map((msg) => (
+              <div key={msg.id} className="p-4 rounded-2xl bg-[#FAF8F5] border border-stone-200 flex items-center justify-between text-xs">
+                <div>
+                  <h4 className="font-bold text-stone-900">{msg.sender}</h4>
+                  <p className="text-stone-600 mt-0.5">{msg.text}</p>
+                </div>
+                <span className="font-mono text-stone-400 text-[10px]">{msg.time}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* --- PAGE: Settings --- */}
+      {activeTab === 'doc_settings' && (
+        <div className="bg-white rounded-3xl p-6 sm:p-8 border border-[#EBE3D5] shadow-xs space-y-6 animate-in fade-in">
+          <div className="border-b border-stone-100 pb-4">
+            <div className="flex items-center gap-2 text-xs font-bold text-[#5B3E8C] uppercase tracking-wider">
+              <Settings className="w-4 h-4" />
+              <span>Preferences</span>
+            </div>
+            <h2 className="text-xl font-serif font-bold text-stone-900 mt-1">Doctor Portal & Chamber Settings</h2>
+          </div>
+
+          <div className="space-y-4 text-xs max-w-xl">
+            <div className="flex items-center justify-between p-4 rounded-2xl bg-stone-50 border border-stone-200">
+              <div>
+                <p className="font-bold text-stone-900">SMS Patient Reminders</p>
+                <p className="text-stone-500 text-[11px]">Send automated Fast2SMS reminder before appointment slot.</p>
+              </div>
+              <input type="checkbox" defaultChecked className="w-4 h-4 accent-purple-700" />
+            </div>
+
+            <div className="flex items-center justify-between p-4 rounded-2xl bg-stone-50 border border-stone-200">
+              <div>
+                <p className="font-bold text-stone-900">Digital Watermark on Prescriptions</p>
+                <p className="text-stone-500 text-[11px]">Include official Medical Council Registration badge on exported PDF.</p>
+              </div>
+              <input type="checkbox" defaultChecked className="w-4 h-4 accent-purple-700" />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- PAGE: Help & Support --- */}
+      {activeTab === 'doc_help_support' && (
+        <div className="bg-white rounded-3xl p-6 sm:p-8 border border-[#EBE3D5] shadow-xs space-y-6 animate-in fade-in">
+          <div className="border-b border-stone-100 pb-4">
+            <div className="flex items-center gap-2 text-xs font-bold text-[#5B3E8C] uppercase tracking-wider">
+              <HelpCircle className="w-4 h-4" />
+              <span>Support Desk</span>
+            </div>
+            <h2 className="text-xl font-serif font-bold text-stone-900 mt-1">Doctor Support & Clinical Compliance Help</h2>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+            <div className="p-5 rounded-2xl bg-[#FAF8F5] border border-stone-200 space-y-2">
+              <h3 className="font-bold text-stone-900">Clinical Technical Helpline</h3>
+              <p className="text-stone-600">For issues regarding OPD appointments, digital prescriptions, or live AI diagnostics.</p>
+              <p className="text-purple-900 font-mono font-bold">support@zeniva.ai · Toll Free: 1800-892-ZEN</p>
+            </div>
+            <div className="p-5 rounded-2xl bg-[#FAF8F5] border border-stone-200 space-y-2">
+              <h3 className="font-bold text-stone-900">State Medical Council Compliance</h3>
+              <p className="text-stone-600">Guidance on state licensing renewal, digital telemedicine statutory norms.</p>
+              <p className="text-purple-900 font-mono font-bold">compliance@zeniva.ai</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* ADD PRESCRIPTION MODAL                                                    */}
+      {/* ========================================================================= */}
+      {isPrescriptionModalOpen && (
+        <div className="fixed inset-0 z-50 bg-stone-900/65 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-lg rounded-3xl p-6 sm:p-8 shadow-2xl border border-[#EBE3D5] space-y-4 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-stone-100 pb-3">
+              <div className="flex items-center gap-2 text-[#5B3E8C]">
+                <MortarPestleGraphic className="w-5 h-5" />
+                <h3 className="text-base font-serif font-bold text-stone-900">Issue Ayurvedic Digital Prescription</h3>
+              </div>
+              <button onClick={() => setIsPrescriptionModalOpen(false)} className="p-1.5 rounded-full hover:bg-stone-100 text-stone-400 cursor-pointer">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveRx} className="space-y-3.5 text-xs text-left">
+              <div>
+                <label className="font-bold text-stone-700 block mb-1">Select Patient</label>
+                <select value={selectedPatientForRx} onChange={(e) => setSelectedPatientForRx(e.target.value)} className="w-full p-2.5 rounded-xl border border-stone-200 bg-stone-50 font-bold">
+                  {patientsRoster.map(p => <option key={p.id}>{p.name} ({p.dosha})</option>)}
+                </select>
+              </div>
+
+              <div>
+                <label className="font-bold text-stone-700 block mb-1">Ayurvedic Formulations & Dosage (Aushadhi)</label>
+                <textarea required value={rxFormulation} onChange={(e) => setRxFormulation(e.target.value)} rows={3} className="w-full p-2.5 rounded-xl border border-stone-200 bg-stone-50" />
+              </div>
+
+              <div>
+                <label className="font-bold text-stone-700 block mb-1">Ahara & Vihara Lifestyle Advice (Pathya-Apathya)</label>
+                <textarea value={rxDietAdvice} onChange={(e) => setRxDietAdvice(e.target.value)} rows={2} className="w-full p-2.5 rounded-xl border border-stone-200 bg-stone-50" />
+              </div>
+
+              <div className="pt-2 flex justify-end gap-2">
+                <button type="button" onClick={() => setIsPrescriptionModalOpen(false)} className="px-4 py-2 rounded-xl text-stone-600 hover:bg-stone-100 font-bold cursor-pointer">Cancel</button>
+                <button type="submit" className="px-5 py-2 rounded-xl bg-[#5B3E8C] text-white font-bold cursor-pointer shadow-sm">Sign & Issue Prescription</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+};

@@ -1,0 +1,867 @@
+import React, { useState, useEffect } from 'react';
+import { 
+  ArrowRight, RefreshCw, Lock, 
+  CheckCircle2, HeartPulse, Stethoscope, Sparkles, AlertCircle,
+  User, Shield, Key, KeyRound, ShieldCheck, Mail, Check, X, Eye, EyeOff, Building, Database
+} from 'lucide-react';
+import { ZenivaLogo } from '../components/ZenivaIcons';
+import { supabase } from '../lib/supabase';
+
+const apiPost = async (path, body) => {
+  const endpoints = [
+    `http://127.0.0.1:8000${path}`,
+    path
+  ];
+  let lastErr = null;
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      const text = await res.text();
+      let data = {};
+      try {
+        data = text ? JSON.parse(text) : {};
+      } catch (parseErr) {
+        data = { detail: text || `HTTP ${res.status}` };
+      }
+      if (!res.ok) {
+        const errorMsg = data.detail || data.message || `Request error (${res.status})`;
+        // If it's a 4xx client/auth error (e.g., 401 Incorrect password, 404 User not found), throw immediately
+        if (res.status >= 400 && res.status < 500) {
+          throw new Error(errorMsg);
+        }
+        throw new Error(errorMsg);
+      }
+      return data;
+    } catch (err) {
+      lastErr = err;
+      if (err.message && !err.message.includes('502') && !err.message.includes('Failed to fetch') && !err.message.includes('NetworkError')) {
+        throw err;
+      }
+    }
+  }
+  throw lastErr || new Error('Server connection error. Please verify the backend is running.');
+};
+
+export const LoginPortal = ({ 
+  defaultRole = 'doctor', 
+  onLoginSuccess, 
+  onDoctorProceedToRegister 
+}) => {
+  // Tab: 'create' (Create Account) or 'signin' (Sign In)
+  const [activeTab, setActiveTab] = useState('create');
+
+  // Form Fields for Create Account
+  const [doctorName, setDoctorName] = useState('');
+  const [specialization, setSpecialization] = useState('Kayachikitsa & Panchakarma');
+  const [qualification, setQualification] = useState('BAMS, MD (Ayurveda)');
+  const [contactInfo, setContactInfo] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+
+  // Form Fields for Sign In
+  const [signinIdentifier, setSigninIdentifier] = useState('');
+  const [signinPassword, setSigninPassword] = useState('');
+  const [showSigninPassword, setShowSigninPassword] = useState(false);
+
+  // Status & Admin
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
+  const [adminPin, setAdminPin] = useState('');
+  const [showSecretAdminModal, setShowSecretAdminModal] = useState(false);
+
+  useEffect(() => {
+    setErrorMessage('');
+    setSuccessMessage('');
+  }, [activeTab]);
+
+  // 1. Handle Doctor Create Account with SQLite Database & Supabase Auth
+  const handleCreateAccount = async (e) => {
+    e?.preventDefault();
+    const entered = doctorName.trim();
+    if (!entered) {
+      setErrorMessage('Please enter Doctor Full Name (वैद्यांचे पूर्ण नाव).');
+      return;
+    }
+    if (!password) {
+      setErrorMessage('Please enter a password for your doctor account.');
+      return;
+    }
+    if (password.length < 4) {
+      setErrorMessage('Password should be at least 4 characters long.');
+      return;
+    }
+    if (confirmPassword && password !== confirmPassword) {
+      setErrorMessage('Passwords do not match. Please verify.');
+      return;
+    }
+
+    const formattedName = entered.startsWith('Dr.') || entered.startsWith('Dr ') ? entered : `Dr. ${entered}`;
+    const contactVal = contactInfo.trim();
+    const isEmail = contactVal.includes('@');
+    const email = isEmail 
+      ? contactVal 
+      : (contactVal ? `${contactVal.toLowerCase().replace(/[^a-z0-9]/g, '.')}@zeniva.ai` : `dr.${entered.toLowerCase().replace(/[^a-z0-9]/g, '.')}@zeniva.ai`);
+    const phone = !isEmail ? contactVal : '';
+
+    setIsSubmitting(true);
+    setErrorMessage('');
+    setSuccessMessage('Registering practicing Vaidya account in Zeniva Database...');
+
+    try {
+      // 1. Register in SQLite Backend Database
+      let backendDoctor = null;
+      try {
+        const regRes = await apiPost('/api/auth/doctor/register', {
+          name: formattedName,
+          email: email,
+          password: password,
+          phone: phone,
+          qualification: qualification.trim() || 'BAMS, MD (Ayurveda)',
+          specialization: specialization.trim() || 'Kayachikitsa & Panchakarma',
+          city: 'Nagpur, Maharashtra'
+        });
+        if (regRes?.doctor) {
+          backendDoctor = regRes.doctor;
+        }
+      } catch (backendErr) {
+        console.warn('Backend doctor registration notice:', backendErr);
+      }
+
+      // 2. Also register in Supabase Auth
+      let authUser = null;
+      try {
+        const { data: authData } = await supabase.auth.signUp({
+          email: email,
+          password: password,
+          options: {
+            data: {
+              full_name: formattedName,
+              phone: phone,
+              role: 'doctor',
+              qualification: qualification.trim() || 'BAMS, MD (Ayurveda)',
+              specialization: specialization.trim() || 'Kayachikitsa & Panchakarma'
+            }
+          }
+        });
+        if (authData?.user) {
+          authUser = authData.user;
+        }
+      } catch (authErr) {
+        console.warn('Supabase doctor auth notice:', authErr);
+      }
+
+      const doctorId = backendDoctor?.id || authUser?.id || `ZEN-DOC-${Math.floor(100000 + Math.random() * 900000)}`;
+
+      // 3. Upsert to Supabase profiles table
+      try {
+        if (authUser?.id || doctorId) {
+          await supabase.from('profiles').upsert({
+            id: authUser?.id || doctorId,
+            full_name: formattedName,
+            email: email,
+            phone: phone || null,
+            role: 'doctor',
+            specialization: specialization.trim() || 'Kayachikitsa & Panchakarma',
+            qualification: qualification.trim() || 'BAMS, MD (Ayurveda)',
+            status: 'verified'
+          }, { onConflict: 'id' });
+        }
+      } catch (profErr) {
+        console.warn('Doctor profile upsert notice:', profErr);
+      }
+
+      const newDoctor = {
+        role: 'doctor',
+        id: doctorId,
+        doctor_id: doctorId,
+        name: formattedName,
+        email: email,
+        phone: phone,
+        password: password,
+        council_reg_number: '',
+        qualification: qualification.trim() || 'BAMS, MD (Ayurveda)',
+        specialization: specialization.trim() || 'Kayachikitsa & Panchakarma',
+        organization: 'Zeniva Ayurvedic Clinical Center',
+        city: 'Nagpur, Maharashtra',
+        avatar: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=400',
+        status: 'pending_verification',
+        isRegistered: true,
+        isLoggedIn: true,
+        auth_provider: 'supabase'
+      };
+
+      try {
+        localStorage.setItem('zeniva_doctor_user', JSON.stringify(newDoctor));
+        localStorage.setItem('zeniva_current_user', JSON.stringify(newDoctor));
+        localStorage.setItem('zeniva_registered_doctor', JSON.stringify(newDoctor));
+      } catch (err) {}
+
+      setIsSubmitting(false);
+      setSuccessMessage(`✓ Doctor Account created for ${formattedName}! Opening Medical Council & Document Verification...`);
+
+      setTimeout(() => {
+        if (onDoctorProceedToRegister) {
+          onDoctorProceedToRegister({
+            phone: phone || '',
+            email: email,
+            name: formattedName,
+            qualification: qualification.trim() || 'BAMS, MD (Ayurveda)',
+            specialization: specialization.trim() || 'Kayachikitsa & Panchakarma',
+            isRegistered: true,
+            status: 'pending_verification',
+            user: newDoctor
+          });
+        }
+      }, 500);
+
+    } catch (err) {
+      console.error('Doctor create error:', err);
+      setErrorMessage(err.message || 'Error creating doctor account.');
+      setIsSubmitting(false);
+    }
+  };
+
+  // 2. Handle Doctor Sign In with SQLite Backend & Supabase Auth
+  const handleSignIn = async (e) => {
+    e?.preventDefault();
+    const identifier = signinIdentifier.trim();
+    if (!identifier) {
+      setErrorMessage('Please enter your Doctor Full Name or Email.');
+      return;
+    }
+    if (!signinPassword) {
+      setErrorMessage('Please enter your password.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    setErrorMessage('');
+    setSuccessMessage('Verifying credentials & loading Doctor Dashboard...');
+
+    try {
+      const formattedName = identifier.startsWith('Dr.') || identifier.startsWith('Dr ') ? identifier : `Dr. ${identifier}`;
+      const isEmail = identifier.includes('@');
+      let foundDoc = null;
+
+      // 1. Authenticate with backend SQLite Database strictly
+      try {
+        const data = await apiPost('/api/auth/doctor/login', {
+          email: identifier,
+          password: signinPassword
+        });
+        if (data?.doctor || data?.user) {
+          foundDoc = data.doctor || data.user;
+        }
+      } catch (backendErr) {
+        console.warn('Backend doctor login notice:', backendErr);
+        if (backendErr.message && !backendErr.message.includes('Server connection error')) {
+          throw backendErr;
+        }
+      }
+
+      // 2. Also try Supabase Auth password login if email provided
+      if (!foundDoc && isEmail) {
+        try {
+          const { data: authData } = await supabase.auth.signInWithPassword({
+            email: identifier,
+            password: signinPassword,
+          });
+          if (authData?.user) {
+            const { data: profile } = await supabase
+              .from('profiles')
+              .select('*')
+              .eq('id', authData.user.id)
+              .single();
+
+            foundDoc = {
+              role: 'doctor',
+              id: authData.user.id,
+              doctor_id: `ZEN-DOC-${Math.floor(100000 + Math.random() * 900000)}`,
+              name: profile?.full_name || formattedName,
+              email: authData.user.email,
+              phone: profile?.phone || '',
+              qualification: profile?.qualification || 'BAMS, MD (Ayurveda)',
+              specialization: profile?.specialization || 'Kayachikitsa & Panchakarma',
+              organization: profile?.organization || 'Zeniva Ayurvedic Clinical Center',
+              city: profile?.city || 'Nagpur, Maharashtra',
+              avatar: profile?.avatar_url || 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=400',
+              status: profile?.status || 'pending_verification',
+              isRegistered: true,
+              isLoggedIn: true,
+              auth_provider: 'supabase'
+            };
+          }
+        } catch (authErr) {
+          console.warn('Doctor auth note:', authErr);
+        }
+      }
+
+      // 3. Fallback local memory
+      if (!foundDoc) {
+        let savedDoc = null;
+        try {
+          const stored = localStorage.getItem('zeniva_doctor_user');
+          if (stored) savedDoc = JSON.parse(stored);
+        } catch (err) {}
+
+        if (savedDoc && (savedDoc.email === identifier || savedDoc.name?.toLowerCase().includes(identifier.toLowerCase()))) {
+          foundDoc = {
+            ...savedDoc,
+            isLoggedIn: true,
+            isRegistered: true
+          };
+        }
+      }
+
+      if (!foundDoc) {
+        throw new Error('Invalid Doctor credentials. Please check your email/name and password, or create an account.');
+      }
+
+      foundDoc.role = 'doctor';
+      foundDoc.isLoggedIn = true;
+      foundDoc.isRegistered = true;
+
+      try {
+        localStorage.setItem('zeniva_doctor_user', JSON.stringify(foundDoc));
+        localStorage.setItem('zeniva_current_user', JSON.stringify(foundDoc));
+      } catch (err) {}
+
+      // If doctor is pending verification, gate access and show verification status view
+      if (foundDoc.status === 'pending_verification') {
+        setSuccessMessage(`✓ Doctor credentials verified. Opening Document Verification Status...`);
+        setIsSubmitting(false);
+        setTimeout(() => {
+          if (onDoctorProceedToRegister) {
+            onDoctorProceedToRegister({
+              phone: foundDoc.phone || '',
+              name: foundDoc.name,
+              email: foundDoc.email,
+              qualification: foundDoc.qualification,
+              specialization: foundDoc.specialization,
+              isRegistered: true,
+              status: 'pending_verification',
+              user: foundDoc
+            });
+          }
+        }, 500);
+        return;
+      }
+
+      setSuccessMessage(`✓ Welcome Dr. ${foundDoc.name.replace(/^Dr\.\s*/i, '')}! Loading Doctor Portal...`);
+      setIsSubmitting(false);
+
+      setTimeout(() => {
+        if (onLoginSuccess) {
+          onLoginSuccess(foundDoc);
+        }
+      }, 400);
+
+    } catch (err) {
+      console.error('Sign in error:', err);
+      setErrorMessage(err.message || 'Error signing in. Please check your doctor credentials.');
+      setIsSubmitting(false);
+    }
+  };
+
+  // 3. Super Admin Hidden Login
+  const handleSecretAdminLogin = (e) => {
+    e.preventDefault();
+    if (adminPin === '2027') {
+      setIsSubmitting(true);
+      setErrorMessage('');
+      setSuccessMessage('✓ Super Admin Key Verified! Launching Command Center...');
+      try {
+        sessionStorage.setItem('zeniva_admin_auth_token', 'zeniva_master_2027');
+        localStorage.setItem('zeniva_admin_auth_token', 'zeniva_master_2027');
+      } catch (err) {}
+      setTimeout(() => {
+        setShowSecretAdminModal(false);
+        setIsSubmitting(false);
+        if (onLoginSuccess) {
+          onLoginSuccess({
+            role: 'admin',
+            name: 'Bhupesh Indurkar (Super Admin)',
+            phone: '8766903403',
+            title: 'Super Administrator & Chief Architect'
+          });
+        }
+      }, 700);
+    } else {
+      setErrorMessage('Invalid Admin Security Key. Access Denied.');
+      setSuccessMessage('');
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-[#ECE6DD] text-[#1C1917] flex flex-col justify-between relative overflow-hidden font-sans">
+      
+      {/* Background Subtle Leaf Pattern & Glowing Orbs */}
+      <div className="absolute -top-32 -left-32 w-96 h-96 bg-purple-900/10 rounded-full blur-3xl pointer-events-none"></div>
+      <div className="absolute top-1/2 -right-32 w-96 h-96 bg-emerald-800/10 rounded-full blur-3xl pointer-events-none"></div>
+
+      {/* Top Header - Clean Brand Logo (NO Back to Dashboard button) */}
+      <header className="px-8 py-5 flex items-center justify-between z-10">
+        <div className="flex items-center gap-3">
+          <ZenivaLogo className="w-10 h-10" />
+          <div>
+            <h1 className="text-xl font-bold font-serif tracking-wider text-[#1C1917]">ZENIVA</h1>
+            <p className="text-[10px] uppercase font-bold tracking-widest text-[#B45309] -mt-1">AI Ayurvedic Care</p>
+          </div>
+        </div>
+
+        <div className="text-right hidden sm:block">
+          <span className="text-[11px] font-bold text-[#5B3E8C] bg-purple-100/70 border border-purple-200/80 px-3 py-1 rounded-full">
+            Clinical Vaidya Portal
+          </span>
+        </div>
+      </header>
+
+      {/* Main Doctor Container (Create Account & Password Sign-in, Direct Access) */}
+      <div className="flex-1 flex items-center justify-center p-4 z-10 my-4">
+        <div className="w-full max-w-md bg-white rounded-3xl p-7 sm:p-9 border border-[#EBE3D5] shadow-xl shadow-purple-950/5 relative overflow-hidden text-center space-y-4">
+          
+          {/* Top Circular Doctor Stethoscope Icon */}
+          <div className="w-14 h-14 rounded-full bg-[#FAF5FF] border border-[#E9D5FF] text-[#5B3E8C] mx-auto flex items-center justify-center shadow-xs">
+            <Stethoscope className="w-7 h-7 text-[#5B3E8C]" />
+          </div>
+
+          {/* Title and Subtitle */}
+          <div className="space-y-0.5">
+            <h2 className="text-2xl font-serif font-bold text-[#1C1917]">
+              Doctor Portal
+            </h2>
+            <p className="text-xs text-[#78716C]">
+              {activeTab === 'create' 
+                ? 'Create practicing Vaidya account with password' 
+                : 'Sign in to access clinical consultations'}
+            </p>
+          </div>
+
+          {/* Clean Switcher: Create Account vs Sign In */}
+          <div className="flex bg-[#FAF7F2] p-1 rounded-2xl border border-[#EBE3D5] text-xs font-bold">
+            <button
+              type="button"
+              onClick={() => setActiveTab('create')}
+              className={`flex-1 py-2 rounded-xl transition-all cursor-pointer text-center ${
+                activeTab === 'create'
+                  ? 'bg-[#5B3E8C] text-white shadow-xs'
+                  : 'text-[#78716C] hover:text-[#1C1917]'
+              }`}
+            >
+              ✨ Create Account
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('signin')}
+              className={`flex-1 py-2 rounded-xl transition-all cursor-pointer text-center ${
+                activeTab === 'signin'
+                  ? 'bg-[#5B3E8C] text-white shadow-xs'
+                  : 'text-[#78716C] hover:text-[#1C1917]'
+              }`}
+            >
+              🔑 Sign In
+            </button>
+          </div>
+
+          {/* TAB 1: CREATE ACCOUNT (DOCTOR REGISTRATION WITH PASSWORD) */}
+          {activeTab === 'create' && (
+            <form onSubmit={handleCreateAccount} className="space-y-3 text-left text-xs pt-1">
+              
+              {/* Doctor Full Name */}
+              <div>
+                <label className="font-bold text-[#44403C] block mb-1">
+                  Doctor Full Name <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <User className="w-4 h-4 text-[#A8A29E] absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    required
+                    value={doctorName}
+                    onChange={(e) => setDoctorName(e.target.value)}
+                    placeholder="e.g. Dr. Ramesh Gupta"
+                    className="w-full pl-10 pr-4 py-2.5 rounded-2xl border border-[#D6CBB8] text-xs font-semibold text-[#1C1917] focus:outline-none focus:ring-2 focus:ring-purple-600/30 bg-white"
+                  />
+                </div>
+              </div>
+
+              {/* Specialization / Qualification */}
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="font-bold text-[#44403C] block mb-1">
+                    Specialization
+                  </label>
+                  <input
+                    type="text"
+                    value={specialization}
+                    onChange={(e) => setSpecialization(e.target.value)}
+                    placeholder="Kayachikitsa"
+                    className="w-full px-3 py-2.5 rounded-2xl border border-[#D6CBB8] text-xs font-semibold text-[#1C1917] focus:outline-none focus:ring-2 focus:ring-purple-600/30 bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-[#44403C] block mb-1">
+                    Degree
+                  </label>
+                  <input
+                    type="text"
+                    value={qualification}
+                    onChange={(e) => setQualification(e.target.value)}
+                    placeholder="BAMS, MD"
+                    className="w-full px-3 py-2.5 rounded-2xl border border-[#D6CBB8] text-xs font-semibold text-[#1C1917] focus:outline-none focus:ring-2 focus:ring-purple-600/30 bg-white"
+                  />
+                </div>
+              </div>
+
+              {/* Email / Mobile */}
+              <div>
+                <label className="font-bold text-[#44403C] block mb-1">
+                  Email or Mobile Number
+                </label>
+                <div className="relative">
+                  <Mail className="w-4 h-4 text-[#A8A29E] absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={contactInfo}
+                    onChange={(e) => setContactInfo(e.target.value)}
+                    placeholder="e.g. dr.ramesh@gmail.com or 9876543210"
+                    className="w-full pl-10 pr-4 py-2.5 rounded-2xl border border-[#D6CBB8] text-xs font-semibold text-[#1C1917] focus:outline-none focus:ring-2 focus:ring-purple-600/30 bg-white"
+                  />
+                </div>
+              </div>
+
+              {/* New Password */}
+              <div>
+                <label className="font-bold text-[#44403C] block mb-1">
+                  New Password <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <Lock className="w-4 h-4 text-[#A8A29E] absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Create a secure password"
+                    className="w-full pl-10 pr-10 py-2.5 rounded-2xl border border-[#D6CBB8] text-xs font-semibold text-[#1C1917] focus:outline-none focus:ring-2 focus:ring-purple-600/30 bg-white"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 cursor-pointer"
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Confirm Password */}
+              <div>
+                <label className="font-bold text-[#44403C] block mb-1">
+                  Confirm Password
+                </label>
+                <div className="relative">
+                  <KeyRound className="w-4 h-4 text-[#A8A29E] absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="Confirm your password"
+                    className="w-full pl-10 pr-4 py-2.5 rounded-2xl border border-[#D6CBB8] text-xs font-semibold text-[#1C1917] focus:outline-none focus:ring-2 focus:ring-purple-600/30 bg-white"
+                  />
+                </div>
+              </div>
+
+              {errorMessage && (
+                <p className="text-xs text-red-600 font-medium flex items-center gap-1 pt-1">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                  <span>{errorMessage}</span>
+                </p>
+              )}
+
+              {successMessage && (
+                <p className="text-xs text-emerald-600 font-medium flex items-center gap-1 pt-1">
+                  <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                  <span>{successMessage}</span>
+                </p>
+              )}
+
+              {/* Account Security Notice */}
+              <div className="p-2.5 rounded-xl bg-purple-50/80 border border-purple-200/70 text-[11px] text-[#5B3E8C] flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 shrink-0 text-[#5B3E8C]" />
+                <span>Practicing Vaidya account with instant credential registration & secure clinical access.</span>
+              </div>
+
+              {/* Submit Button */}
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="w-full py-3 rounded-2xl bg-[#5B3E8C] hover:bg-[#4A3273] text-white font-bold text-xs shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer mt-2"
+              >
+                {isSubmitting ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Creating Doctor Account...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Create Doctor Account (खाते तयार करा)</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </>
+                )}
+              </button>
+            </form>
+          )}
+
+          {/* TAB 2: SIGN IN (EXISTING DOCTOR WITH PASSWORD) */}
+          {activeTab === 'signin' && (
+            <form onSubmit={handleSignIn} className="space-y-3.5 text-left text-xs pt-1">
+              
+              {/* Doctor Name / Email */}
+              <div>
+                <label className="font-bold text-[#44403C] block mb-1">
+                  Doctor Name or Email <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <User className="w-4 h-4 text-[#A8A29E] absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    required
+                    value={signinIdentifier}
+                    onChange={(e) => setSigninIdentifier(e.target.value)}
+                    placeholder="Enter doctor full name or email"
+                    className="w-full pl-10 pr-4 py-2.5 rounded-2xl border border-[#D6CBB8] text-xs font-semibold text-[#1C1917] focus:outline-none focus:ring-2 focus:ring-purple-600/30 bg-white"
+                  />
+                </div>
+              </div>
+
+              {/* Password */}
+              <div>
+                <label className="font-bold text-[#44403C] block mb-1">
+                  Password <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <Lock className="w-4 h-4 text-[#A8A29E] absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type={showSigninPassword ? 'text' : 'password'}
+                    required
+                    value={signinPassword}
+                    onChange={(e) => setSigninPassword(e.target.value)}
+                    placeholder="Enter your doctor password"
+                    className="w-full pl-10 pr-10 py-2.5 rounded-2xl border border-[#D6CBB8] text-xs font-semibold text-[#1C1917] focus:outline-none focus:ring-2 focus:ring-purple-600/30 bg-white"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowSigninPassword(!showSigninPassword)}
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 cursor-pointer"
+                  >
+                    {showSigninPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              {errorMessage && (
+                <p className="text-xs text-red-600 font-medium flex items-center gap-1 pt-1">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                  <span>{errorMessage}</span>
+                </p>
+              )}
+
+              {successMessage && (
+                <p className="text-xs text-emerald-600 font-medium flex items-center gap-1 pt-1">
+                  <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                  <span>{successMessage}</span>
+                </p>
+              )}
+
+              {/* Submit Button */}
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="w-full py-3 rounded-2xl bg-[#5B3E8C] hover:bg-[#4A3273] text-white font-bold text-xs shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer mt-3"
+              >
+                {isSubmitting ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Signing in to Doctor Dashboard...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Sign In to Doctor Dashboard</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </>
+                )}
+              </button>
+            </form>
+          )}
+
+          {/* Encryption Footer Note */}
+          <div className="flex items-center justify-center gap-1.5 text-[10px] text-[#A8A29E] pt-2">
+            <Lock className="w-3 h-3 text-[#A8A29E]" />
+            <span>Encrypted clinical portal · Verified Ayurvedic Practitioner Access</span>
+          </div>
+
+        </div>
+      </div>
+
+      {/* Bottom 4 Trust Badges */}
+      <div className="px-8 pb-4 max-w-5xl mx-auto w-full">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-left">
+          
+          <div className="bg-white/80 rounded-2xl p-3 border border-[#EBE3D5] shadow-xs flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-[#DCFCE7] text-[#16A34A] flex items-center justify-center shrink-0">
+              <ShieldCheck className="w-4 h-4" />
+            </div>
+            <div>
+              <p className="text-xs font-bold text-[#1C1917]">Secure & Private</p>
+              <p className="text-[9px] text-[#A8A29E]">End-to-end encrypted</p>
+            </div>
+          </div>
+
+          <div className="bg-white/80 rounded-2xl p-3 border border-[#EBE3D5] shadow-xs flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-[#F3E8FF] text-[#9333EA] flex items-center justify-center shrink-0">
+              <Stethoscope className="w-4 h-4" />
+            </div>
+            <div>
+              <p className="text-xs font-bold text-[#1C1917]">Verified Doctors</p>
+              <p className="text-[9px] text-[#A8A29E]">MCIM & CCIM Accredited</p>
+            </div>
+          </div>
+
+          <div className="bg-white/80 rounded-2xl p-3 border border-[#EBE3D5] shadow-xs flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-[#DCFCE7] text-[#16A34A] flex items-center justify-center shrink-0">
+              <Sparkles className="w-4 h-4" />
+            </div>
+            <div>
+              <p className="text-xs font-bold text-[#1C1917]">Ayurvedic Care</p>
+              <p className="text-[9px] text-[#A8A29E]">Ancient Charaka wisdom</p>
+            </div>
+          </div>
+
+          <div className="bg-white/80 rounded-2xl p-3 border border-[#EBE3D5] shadow-xs flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-[#FEF3C7] text-[#D97706] flex items-center justify-center shrink-0">
+              <HeartPulse className="w-4 h-4" />
+            </div>
+            <div>
+              <p className="text-xs font-bold text-[#1C1917]">Patient First</p>
+              <p className="text-[9px] text-[#A8A29E]">Compassionate healing</p>
+            </div>
+          </div>
+
+        </div>
+
+        {/* Hidden Admin Portal Trigger in the Footer */}
+        <div className="pt-4 flex items-center justify-between text-[10px] text-[#A8A29E]">
+          <span>© 2026 Zeniva AI Ayurvedic Care · Classical Samhita Framework</span>
+          
+          {/* Discreet Hidden Admin Button */}
+          <button
+            onClick={() => { setShowSecretAdminModal(true); setAdminPin(''); setErrorMessage(''); }}
+            className="hover:text-stone-600 transition-colors flex items-center gap-1 opacity-50 hover:opacity-100 cursor-pointer"
+            title="Authorized staff access only"
+          >
+            <Lock className="w-2.5 h-2.5" />
+            <span className="text-[9px]">Staff Access</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Secret Super Admin Passcode Modal with Rich Animations */}
+      {showSecretAdminModal && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-center justify-center p-4 transition-all duration-300 animate-in fade-in">
+          <div className="relative bg-gradient-to-b from-[#1C0F32] via-[#140A26] to-[#0A0314] text-white w-full max-w-sm rounded-3xl p-7 border-2 border-amber-400/40 shadow-[0_0_50px_rgba(245,158,11,0.25)] space-y-5 animate-in zoom-in-95 duration-200">
+            
+            {/* Ambient Background Glowing Orb */}
+            <div className="absolute -top-10 -right-10 w-32 h-32 bg-amber-500/20 rounded-full blur-2xl pointer-events-none"></div>
+            <div className="absolute -bottom-10 -left-10 w-32 h-32 bg-purple-600/20 rounded-full blur-2xl pointer-events-none"></div>
+
+            {/* Header with Pulsing Golden Shield */}
+            <div className="flex items-center gap-3">
+              <div className="relative flex items-center justify-center w-10 h-10 rounded-2xl bg-amber-500/15 border border-amber-400/40 shadow-inner">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-2xl bg-amber-400 opacity-25"></span>
+                <Shield className="w-5 h-5 text-amber-300 animate-pulse relative z-10" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold tracking-wider uppercase font-serif text-amber-200 flex items-center gap-1.5">
+                  <span>SUPER ADMIN PORTAL</span>
+                  <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                </h3>
+                <p className="text-[10px] text-purple-300/80 font-mono">Restricted Governance System</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-stone-300 leading-relaxed">
+              Restricted governance system. Enter your <span className="text-amber-300 font-bold">Admin Master Key</span> to unlock the central command dashboard.
+            </p>
+
+            <form onSubmit={handleSecretAdminLogin} className="space-y-4">
+              <div className="relative">
+                <input
+                  type="password"
+                  maxLength={6}
+                  autoFocus
+                  value={adminPin}
+                  onChange={(e) => {
+                    setAdminPin(e.target.value);
+                    if (errorMessage) setErrorMessage('');
+                  }}
+                  placeholder="Enter 4-digit Admin PIN"
+                  className="w-full pl-4 pr-10 py-3 rounded-2xl bg-purple-950/90 border-2 border-purple-800/80 focus:border-amber-400 text-sm text-white placeholder-purple-400/60 focus:outline-none focus:ring-4 focus:ring-amber-400/20 tracking-widest text-center font-mono transition-all shadow-inner"
+                />
+                <Lock className="w-4 h-4 text-amber-400/60 absolute right-3.5 top-3.5 pointer-events-none" />
+              </div>
+
+              {errorMessage && (
+                <div className="p-2.5 rounded-xl bg-rose-950/80 border border-rose-500/50 text-rose-300 text-xs flex items-center gap-2 animate-bounce">
+                  <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                  <span>{errorMessage}</span>
+                </div>
+              )}
+
+              {successMessage && (
+                <div className="p-2.5 rounded-xl bg-emerald-950/80 border border-emerald-500/50 text-emerald-300 text-xs flex items-center gap-2 animate-pulse">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>{successMessage}</span>
+                </div>
+              )}
+
+              <div className="flex gap-2.5 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowSecretAdminModal(false)}
+                  className="flex-1 py-2.5 text-xs font-semibold rounded-2xl bg-purple-900/40 hover:bg-purple-900/70 text-purple-200 border border-purple-700/40 hover:border-purple-600 transition-all cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="flex-1 py-2.5 text-xs rounded-2xl bg-gradient-to-r from-amber-400 via-amber-500 to-amber-600 hover:from-amber-300 hover:to-amber-500 text-purple-950 font-bold shadow-[0_0_20px_rgba(245,158,11,0.35)] hover:shadow-[0_0_25px_rgba(245,158,11,0.5)] transition-all cursor-pointer flex items-center justify-center gap-1.5 active:scale-95 disabled:opacity-75"
+                >
+                  {isSubmitting ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>Unlocking...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Key className="w-3.5 h-3.5" />
+                      <span>Unlock Admin</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+};
