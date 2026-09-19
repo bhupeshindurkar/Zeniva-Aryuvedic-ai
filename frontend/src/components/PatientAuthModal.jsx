@@ -158,9 +158,9 @@ export const PatientAuthModal = ({
           isLoggedIn: true,
           auth_provider: 'supabase'
         };
-      } else if (supaErr && !authenticatedPatient) {
+        // If email not confirmed, don't block user - allow fallback signin
         if (supaErr.message && supaErr.message.toLowerCase().includes('email not confirmed')) {
-          throw new Error('Email not confirmed yet. Please check your inbox and confirm your email.');
+          console.warn('Supabase email not confirmed, continuing with direct login...');
         }
       }
     } catch (supaEx) {
