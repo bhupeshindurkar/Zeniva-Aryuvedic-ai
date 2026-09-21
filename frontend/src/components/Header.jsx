@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Search, Bell, ChevronDown, Check, Scan, LogOut,
+  Search, Bell, ChevronDown, Check, Scan, LogOut, Menu,
   User, Stethoscope, Shield, ShieldCheck, KeyRound, Sun, Moon, Sunset, Sunrise
 } from 'lucide-react';
 
@@ -14,7 +14,8 @@ export const Header = ({
   onOpenNotifications,
   onOpenAuth = () => {},
   onLogout = () => {},
-  unreadCount = 2
+  unreadCount = 2,
+  onOpenMobileMenu = () => {}
 }) => {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [timeGreeting, setTimeGreeting] = useState('Good Day');
@@ -102,18 +103,31 @@ export const Header = ({
   const profile = getProfileInfo();
 
   return (
-    <header className="px-5 sm:px-8 py-4 flex items-center justify-between border-b border-[#D8D1C3] bg-[#F4EFE7] sticky top-0 z-30 select-none shadow-2xs">
-      {/* Dynamic Clock Greeting on Left */}
-      <div>
-        <h2 className="text-xl sm:text-2xl font-serif font-bold text-[#1C1917] tracking-tight flex items-center gap-2">
-          {profile.greeting}
-        </h2>
-        <p className="text-xs text-[#78716C] mt-0.5">{profile.subtitle}</p>
+    <header className="px-3 sm:px-6 lg:px-8 py-3.5 flex items-center justify-between border-b border-[#D8D1C3] bg-[#F4EFE7] sticky top-0 z-30 select-none shadow-2xs">
+      
+      {/* Left Area: Mobile Menu Toggle + Clock Greeting */}
+      <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+        {/* Mobile Hamburger Drawer Button */}
+        <button
+          onClick={onOpenMobileMenu}
+          className="lg:hidden p-2 rounded-xl text-[#1C1030] hover:bg-stone-200/70 transition-colors cursor-pointer border border-[#E5DAC6] bg-white/70 shadow-2xs shrink-0"
+          title="Open Navigation Menu"
+          aria-label="Open Navigation Menu"
+        >
+          <Menu className="w-5 h-5" />
+        </button>
+
+        <div className="min-w-0">
+          <h2 className="text-base sm:text-xl lg:text-2xl font-serif font-bold text-[#1C1917] tracking-tight flex items-center gap-1.5 truncate">
+            {profile.greeting}
+          </h2>
+          <p className="text-[10px] sm:text-xs text-[#78716C] mt-0.5 truncate hidden xs:block">{profile.subtitle}</p>
+        </div>
       </div>
 
       {/* Center Search Bar for Doctor / Admin */}
       {profile.showSearch && (
-        <div className="flex-1 max-w-md mx-8 hidden md:block">
+        <div className="flex-1 max-w-md mx-4 sm:mx-8 hidden md:block">
           <div className="relative">
             <Search className="w-4 h-4 text-stone-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
             <input
@@ -126,28 +140,30 @@ export const Header = ({
       )}
 
       {/* Right Action Items */}
-      <div className="flex items-center gap-2 sm:gap-3">
+      <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
 
         {/* PUBLIC MODE: CLEAR DOCTOR & PATIENT LOGIN / SIGN UP */}
         {currentRole === 'public' ? (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2">
             <button
               onClick={() => {
                 if (onSwitchRole) onSwitchRole('doctor');
                 else onOpenLogin('doctor');
               }}
-              className="flex items-center gap-1.5 px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-full border border-purple-300 bg-white hover:bg-purple-50 text-purple-900 text-xs font-bold transition-all cursor-pointer shadow-xs hover:scale-105"
+              className="flex items-center gap-1 sm:gap-1.5 px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-full border border-purple-300 bg-white hover:bg-purple-50 text-purple-900 text-xs font-bold transition-all cursor-pointer shadow-xs hover:scale-105"
             >
               <Stethoscope className="w-3.5 h-3.5 text-purple-700" />
-              <span>Doctor Login</span>
+              <span className="hidden xs:inline">Doctor Login</span>
+              <span className="xs:hidden">Doctor</span>
             </button>
 
             <button
               onClick={onOpenAuth}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-full bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-500 hover:to-teal-600 text-white text-xs font-bold shadow-md hover:scale-105 transition-all cursor-pointer border border-emerald-300"
+              className="flex items-center gap-1 sm:gap-1.5 px-3 py-1.5 sm:px-4 sm:py-2 rounded-full bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-500 hover:to-teal-600 text-white text-xs font-bold shadow-md hover:scale-105 transition-all cursor-pointer border border-emerald-300"
             >
               <User className="w-3.5 h-3.5 text-emerald-200" />
-              <span>Patient Login / Sign Up</span>
+              <span className="hidden sm:inline">Patient Login / Sign Up</span>
+              <span className="sm:hidden">Login</span>
             </button>
           </div>
         ) : (

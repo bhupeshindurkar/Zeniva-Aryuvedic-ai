@@ -11,7 +11,9 @@ export const PublicLandingView = ({
   onOpenAuth = () => {},
   onOpenAIChat = () => {},
   onSelectDoctorPortal = () => {},
-  onOpenTeam = () => {}
+  onOpenTeam = () => {},
+  onOpenContact = () => {},
+  onSelectTab = () => {}
 }) => {
   const [activeConcernTab, setActiveConcernTab] = useState('stress');
 
@@ -638,14 +640,24 @@ export const PublicLandingView = ({
         </button>
       </div>
 
-      {/* Subtle Developer Attribution */}
-      <div className="pt-4 pb-2 text-center text-xs text-stone-500 font-medium">
+      {/* Developer Attribution & Contact Helpdesk Links */}
+      <div className="pt-4 pb-2 flex flex-wrap items-center justify-center gap-4 text-center text-xs text-stone-500 font-medium">
         <button 
           onClick={onOpenTeam}
           className="hover:text-[#5B3E8C] transition-colors cursor-pointer inline-flex items-center gap-1.5 group"
         >
           <span>Developed by <strong className="text-stone-700 group-hover:text-[#5B3E8C] font-semibold">Zeniva Group</strong></span>
-          <span className="text-[10px] px-2 py-0.5 rounded-full bg-stone-200/80 group-hover:bg-purple-100 group-hover:text-purple-800 transition-colors font-bold">Meet the Team & Founders →</span>
+          <span className="text-[10px] px-2 py-0.5 rounded-full bg-stone-200/80 group-hover:bg-purple-100 group-hover:text-purple-800 transition-colors font-bold">Meet the Team →</span>
+        </button>
+
+        <span className="text-stone-300">|</span>
+
+        <button
+          onClick={onOpenContact}
+          className="hover:text-emerald-700 transition-colors cursor-pointer inline-flex items-center gap-1.5 group text-emerald-800 font-semibold"
+        >
+          <PhoneCall className="w-3.5 h-3.5 text-emerald-600" />
+          <span>24/7 Support & Contact Helpdesk →</span>
         </button>
       </div>
 

@@ -20,6 +20,7 @@ import { WebsiteInsightsView } from './views/WebsiteInsightsView';
 import { PublicLandingView } from './views/PublicLandingView';
 import { TeamContributorsView } from './views/TeamContributorsView';
 import { OpportunitiesView } from './views/OpportunitiesView';
+import { ContactUsView } from './views/ContactUsView';
 import { PatientAuthModal } from './components/PatientAuthModal';
 import { AppointmentModal } from './components/AppointmentModal';
 import { QuickScanModal } from './components/QuickScanModal';
@@ -28,6 +29,7 @@ import { SplashScreen } from './components/SplashScreen';
 import { ZenivaLLMWidget } from './components/ZenivaLLMWidget';
 import { AyurvedicAIChatModal } from './components/AyurvedicAIChatModal';
 import { supabase } from './lib/supabase';
+import { Home, Activity, Phone, Sparkles, User, Menu, Stethoscope, Briefcase } from 'lucide-react';
 
 // Helper to inspect URL hash / tab-scoped state
 const parseUrlState = () => {
@@ -147,6 +149,7 @@ export default function App() {
   const [authView, setAuthView] = useState(initialState.authView);
   const [activeTab, setActiveTab] = useState(initialState.tab);
   const [loginRoleTarget, setLoginRoleTarget] = useState(() => initialState.loginRoleTarget || 'doctor');
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // Modals
   const [isAppointmentOpen, setIsAppointmentOpen] = useState(false);
@@ -568,18 +571,36 @@ export default function App() {
   return (
     <div className="flex h-screen bg-[#ECE6DD] text-[#1C1917] font-sans antialiased overflow-hidden">
       
-      {/* Dynamic Role-Based Sidebar */}
+      {/* Dynamic Role-Based Sidebar (Desktop + Mobile Drawer) */}
       <Sidebar
         currentRole={currentRole}
         activeTab={activeTab}
+        isOpenMobile={isMobileMenuOpen}
+        onCloseMobile={() => setIsMobileMenuOpen(false)}
         onSelectTab={(tabId) => {
           setActiveTab(tabId);
+          setIsMobileMenuOpen(false);
         }}
-        onOpenProfile={() => setActiveTab('profile')}
-        onOpenSettings={() => setActiveTab('settings')}
-        onOpenConsultation={() => setActiveTab('consultation')}
-        onOpenQuickScan={() => setIsQuickScanOpen(true)}
-        onOpenAuth={() => setIsAuthModalOpen(true)}
+        onOpenProfile={() => {
+          setActiveTab('profile');
+          setIsMobileMenuOpen(false);
+        }}
+        onOpenSettings={() => {
+          setActiveTab('settings');
+          setIsMobileMenuOpen(false);
+        }}
+        onOpenConsultation={() => {
+          setActiveTab('consultation');
+          setIsMobileMenuOpen(false);
+        }}
+        onOpenQuickScan={() => {
+          setIsQuickScanOpen(true);
+          setIsMobileMenuOpen(false);
+        }}
+        onOpenAuth={() => {
+          setIsAuthModalOpen(true);
+          setIsMobileMenuOpen(false);
+        }}
       />
 
       {/* Main Content Area */}
@@ -591,6 +612,7 @@ export default function App() {
             currentRole={currentRole}
             activeTab={activeTab}
             currentUser={currentUser}
+            onOpenMobileMenu={() => setIsMobileMenuOpen(true)}
             onOpenQuickScan={() => setIsQuickScanOpen(true)}
             onSelectRole={(role) => {
               setCurrentRole(role);
@@ -654,6 +676,14 @@ export default function App() {
               <TeamContributorsView
                 onBackToOverview={() => setActiveTab('home')}
               />
+            ) : activeTab === 'contact' ? (
+              <ContactUsView
+                onSelectTab={(tabId) => setActiveTab(tabId)}
+                onOpenAIChat={(prompt) => {
+                  setChatInitialPrompt(prompt || '');
+                  setIsAIChatOpen(true);
+                }}
+              />
             ) : (
               <PublicLandingView
                 onOpenAuth={() => setIsAuthModalOpen(true)}
@@ -666,6 +696,8 @@ export default function App() {
                   setAuthView('login');
                 }}
                 onOpenTeam={() => setActiveTab('team')}
+                onOpenContact={() => setActiveTab('contact')}
+                onSelectTab={(tabId) => setActiveTab(tabId)}
               />
             )
           ) : activeTab === 'insights' || activeTab === 'doc_insights' ? (
@@ -816,6 +848,16 @@ export default function App() {
                 />
               )}
 
+              {activeTab === 'contact' && (
+                <ContactUsView
+                  onSelectTab={(tabId) => setActiveTab(tabId)}
+                  onOpenAIChat={(prompt) => {
+                    setChatInitialPrompt(prompt || '');
+                    setIsAIChatOpen(true);
+                  }}
+                />
+              )}
+
               {activeTab === 'settings' && (
                 <SettingsView
                   currentUser={currentUser}
@@ -884,6 +926,105 @@ export default function App() {
         onSelectTab={(tabId) => setActiveTab(tabId)}
         onOpenAuth={() => setIsAuthModalOpen(true)}
       />
+
+      {/* Modern Floating Mobile Bottom Navigation Bar (Patient & Public) */}
+      {(currentRole === 'patient' || currentRole === 'public') && authView === 'authenticated' && !showSplash && (
+        <nav className="lg:hidden fixed bottom-0 inset-x-0 bg-[#160B28]/95 backdrop-blur-lg border-t border-[#311E54] py-1.5 px-3 flex items-center justify-around z-30 shadow-[0_-4px_20px_rgba(0,0,0,0.3)]">
+          <button
+            onClick={() => setActiveTab('home')}
+            className={`flex flex-col items-center gap-0.5 py-1 px-2.5 rounded-xl transition-colors cursor-pointer ${
+              activeTab === 'home' ? 'text-amber-300 font-bold' : 'text-stone-300 hover:text-white'
+            }`}
+          >
+            <Home className="w-4 h-4" />
+            <span className="text-[10px]">Home</span>
+          </button>
+
+          {currentRole === 'public' ? (
+            <>
+              <button
+                onClick={() => setActiveTab('opportunities')}
+                className={`flex flex-col items-center gap-0.5 py-1 px-2.5 rounded-xl transition-colors cursor-pointer ${
+                  activeTab === 'opportunities' ? 'text-amber-300 font-bold' : 'text-stone-300 hover:text-white'
+                }`}
+              >
+                <Briefcase className="w-4 h-4" />
+                <span className="text-[10px]">Opportunities</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setChatInitialPrompt('');
+                  setIsAIChatOpen(true);
+                }}
+                className="flex flex-col items-center justify-center -mt-5 w-11 h-11 rounded-full bg-gradient-to-tr from-cyan-500 to-indigo-600 text-white shadow-[0_0_15px_rgba(6,182,212,0.6)] border-2 border-cyan-300 cursor-pointer transition-transform hover:scale-110"
+                title="Open AI Vaidya Chat"
+              >
+                <Sparkles className="w-5 h-5 animate-pulse" />
+              </button>
+
+              <button
+                onClick={() => setActiveTab('contact')}
+                className={`flex flex-col items-center gap-0.5 py-1 px-2.5 rounded-xl transition-colors cursor-pointer ${
+                  activeTab === 'contact' ? 'text-amber-300 font-bold' : 'text-stone-300 hover:text-white'
+                }`}
+              >
+                <Phone className="w-4 h-4" />
+                <span className="text-[10px]">Contact</span>
+              </button>
+
+              <button
+                onClick={() => setIsMobileMenuOpen(true)}
+                className="flex flex-col items-center gap-0.5 py-1 px-2.5 rounded-xl text-stone-300 hover:text-white transition-colors cursor-pointer"
+              >
+                <Menu className="w-4 h-4" />
+                <span className="text-[10px]">Menu</span>
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={() => setActiveTab('dosha')}
+                className={`flex flex-col items-center gap-0.5 py-1 px-2.5 rounded-xl transition-colors cursor-pointer ${
+                  activeTab === 'dosha' ? 'text-amber-300 font-bold' : 'text-stone-300 hover:text-white'
+                }`}
+              >
+                <Activity className="w-4 h-4" />
+                <span className="text-[10px]">Assessment</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setChatInitialPrompt('');
+                  setIsAIChatOpen(true);
+                }}
+                className="flex flex-col items-center justify-center -mt-5 w-11 h-11 rounded-full bg-gradient-to-tr from-purple-600 to-amber-500 text-white shadow-[0_0_15px_rgba(168,85,247,0.6)] border-2 border-amber-300 cursor-pointer transition-transform hover:scale-110"
+                title="Open AI Vaidya Chat"
+              >
+                <Sparkles className="w-5 h-5 animate-pulse" />
+              </button>
+
+              <button
+                onClick={() => setActiveTab('profile')}
+                className={`flex flex-col items-center gap-0.5 py-1 px-2.5 rounded-xl transition-colors cursor-pointer ${
+                  activeTab === 'profile' ? 'text-amber-300 font-bold' : 'text-stone-300 hover:text-white'
+                }`}
+              >
+                <User className="w-4 h-4" />
+                <span className="text-[10px]">Profile</span>
+              </button>
+
+              <button
+                onClick={() => setIsMobileMenuOpen(true)}
+                className="flex flex-col items-center gap-0.5 py-1 px-2.5 rounded-xl text-stone-300 hover:text-white transition-colors cursor-pointer"
+              >
+                <Menu className="w-4 h-4" />
+                <span className="text-[10px]">Menu</span>
+              </button>
+            </>
+          )}
+        </nav>
+      )}
     </div>
   );
 }

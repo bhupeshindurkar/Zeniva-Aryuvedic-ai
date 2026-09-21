@@ -366,7 +366,7 @@ export const AyurvedicAIChatModal = ({
 
     if (!cleanText) return;
 
-    // Split text into sentence chunks
+    // Split text into digestible sentence chunks
     const rawParagraphs = text.split(/\n+/);
     const chunks = [];
 
@@ -385,13 +385,13 @@ export const AyurvedicAIChatModal = ({
 
       if (!p) return;
 
-      if (p.length <= 160) {
+      if (p.length <= 140) {
         chunks.push(p);
       } else {
-        const sentences = p.split(/(?<=[.!?:।])\s+/);
+        const sentences = p.split(/(?<=[.!?:।\n])\s+/);
         let curr = "";
         sentences.forEach(s => {
-          if ((curr + " " + s).trim().length > 160) {
+          if ((curr + " " + s).trim().length > 140) {
             if (curr.trim()) chunks.push(curr.trim());
             curr = s;
           } else {
@@ -462,26 +462,17 @@ export const AyurvedicAIChatModal = ({
 
       utterance.onerror = (e) => {
         if (e.error !== 'interrupted' && e.error !== 'canceled') {
-          console.warn("Speech chunk error:", e);
+          console.warn("Speech chunk note:", e);
         }
         if (currentSession === speechSessionIdRef.current && isSpeechActiveRef.current) {
-          playNextChunk();
+          speechNextChunkTimerRef.current = setTimeout(playNextChunk, 60);
         }
       };
 
       activeUtteranceRef.current = utterance;
 
-      // Chrome SpeechSynthesis Keep-Alive Ping
-      if (speechKeepAliveRef.current) clearInterval(speechKeepAliveRef.current);
-      speechKeepAliveRef.current = setInterval(() => {
-        if (window.speechSynthesis.speaking) {
-          window.speechSynthesis.pause();
-          window.speechSynthesis.resume();
-        }
-      }, 5000);
-
-      // Watchdog Timer
-      const expectedDurationMs = Math.max(3000, chunk.length * 90);
+      // Watchdog Timer to auto-recover if mobile browser fails to emit onend
+      const expectedDurationMs = Math.max(3500, chunk.length * 100);
       if (speechWatchdogRef.current) clearTimeout(speechWatchdogRef.current);
       speechWatchdogRef.current = setTimeout(() => {
         if (currentSession === speechSessionIdRef.current && isSpeechActiveRef.current) {
@@ -493,7 +484,7 @@ export const AyurvedicAIChatModal = ({
         window.speechSynthesis.resume();
         window.speechSynthesis.speak(utterance);
       } catch (err) {
-        console.warn("Speech playback error:", err);
+        console.warn("Speech playback notice:", err);
         playNextChunk();
       }
     };
@@ -654,7 +645,7 @@ export const AyurvedicAIChatModal = ({
       };
 
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 4500);
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
 
       const res = await fetch('/api/chat', {
         method: 'POST',
@@ -809,8 +800,8 @@ export const AyurvedicAIChatModal = ({
   const activePrompts = localizedQuickPrompts[selectedLang] || localizedQuickPrompts.mr;
 
   return (
-    <div className="fixed inset-0 z-50 bg-stone-950/80 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 animate-in fade-in">
-      <div className="bg-[#FAF7F2] w-full max-w-4xl h-[94vh] max-h-[820px] rounded-3xl shadow-2xl border-2 border-[#EBE3D5] flex flex-col relative overflow-hidden text-[#1C1917]">
+    <div className="fixed inset-0 z-50 bg-stone-950/85 backdrop-blur-md flex items-center justify-center p-0 sm:p-4 animate-in fade-in">
+      <div className="bg-[#FAF7F2] w-full max-w-4xl h-[100dvh] sm:h-[94vh] sm:max-h-[850px] rounded-none sm:rounded-3xl shadow-2xl border-0 sm:border-2 border-[#EBE3D5] flex flex-col relative overflow-hidden text-[#1C1917]">
         
         {/* HEADER */}
         <div className="px-4 sm:px-6 py-3.5 bg-gradient-to-r from-[#060A14] via-[#0D162C] to-[#1C0D33] text-white flex items-center justify-between border-b border-cyan-500/30 shadow-lg relative overflow-hidden">
