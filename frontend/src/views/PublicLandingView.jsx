@@ -207,69 +207,71 @@ export const PublicLandingView = ({
       {/* ========================================================================= */}
       {/* 2. INTERACTIVE EVIDENCE-BASED CLINICAL HEALTH CATEGORIES                   */}
       {/* ========================================================================= */}
-      <div className="bg-white rounded-3xl p-6 sm:p-8 border border-[#E5DAC6] shadow-sm space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
+      <div className="bg-white rounded-3xl p-4 sm:p-6 lg:p-8 border border-[#E5DAC6] shadow-sm space-y-5 sm:space-y-6">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div className="max-w-2xl">
             <div className="flex items-center gap-2">
               <span className="w-2.5 h-2.5 rounded-full bg-purple-600 animate-ping"></span>
               <p className="text-[10px] uppercase font-bold tracking-wider text-purple-800">
                 Evidence-Based Clinical Intelligence
               </p>
             </div>
-            <h2 className="text-lg sm:text-xl font-serif font-bold text-[#1C1917] tracking-tight mt-0.5">
+            <h2 className="text-base sm:text-xl font-serif font-bold text-[#1C1917] tracking-tight mt-0.5 leading-snug">
               Explore Key Clinical Health Categories (आरोग्य समस्या व वैदिक उपाय)
             </h2>
-            <p className="text-xs text-[#78716C]">
+            <p className="text-xs text-[#78716C] mt-1 leading-relaxed">
               Comprehensive holistic care protocols for stress, joint mobility, digestion, and immunity. Click below to inspect each clinical domain.
             </p>
           </div>
 
-          {/* Health Concern Selector Tabs */}
-          <div className="flex flex-wrap items-center gap-1.5 p-1 bg-[#E5DFD4] rounded-2xl border border-[#D5CDBC] shrink-0">
-            <button
-              onClick={() => setActiveConcernTab('stress')}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                activeConcernTab === 'stress' 
-                  ? 'bg-white text-purple-900 shadow-xs border border-purple-300' 
-                  : 'text-[#78716C] hover:text-[#1C1917]'
-              }`}
-            >
-              <Activity className="w-3.5 h-3.5 text-purple-600" />
-              <span>Stress & Mind (38%)</span>
-            </button>
-            <button
-              onClick={() => setActiveConcernTab('joints')}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                activeConcernTab === 'joints' 
-                  ? 'bg-white text-sky-900 shadow-xs border border-sky-300' 
-                  : 'text-[#78716C] hover:text-[#1C1917]'
-              }`}
-            >
-              <Zap className="w-3.5 h-3.5 text-sky-600" />
-              <span>Joint Care (44%)</span>
-            </button>
-            <button
-              onClick={() => setActiveConcernTab('digestion')}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                activeConcernTab === 'digestion' 
-                  ? 'bg-white text-amber-900 shadow-xs border border-amber-300' 
-                  : 'text-[#78716C] hover:text-[#1C1917]'
-              }`}
-            >
-              <Flame className="w-3.5 h-3.5 text-amber-600" />
-              <span>Digestion (32%)</span>
-            </button>
-            <button
-              onClick={() => setActiveConcernTab('immunity')}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                activeConcernTab === 'immunity' 
-                  ? 'bg-white text-emerald-900 shadow-xs border border-emerald-300' 
-                  : 'text-[#78716C] hover:text-[#1C1917]'
-              }`}
-            >
-              <Shield className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Immunity (24%)</span>
-            </button>
+          {/* Health Concern Selector Tabs (Smooth horizontal scroll on mobile, wrap on desktop) */}
+          <div className="w-full lg:w-auto overflow-x-auto pb-1 -mx-1 px-1">
+            <div className="inline-flex items-center gap-1.5 p-1 bg-[#E5DFD4] rounded-2xl border border-[#D5CDBC] min-w-max">
+              <button
+                onClick={() => setActiveConcernTab('stress')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+                  activeConcernTab === 'stress' 
+                    ? 'bg-white text-purple-900 shadow-xs border border-purple-300' 
+                    : 'text-[#78716C] hover:text-[#1C1917]'
+                }`}
+              >
+                <Activity className="w-3.5 h-3.5 text-purple-600" />
+                <span>Stress & Mind (38%)</span>
+              </button>
+              <button
+                onClick={() => setActiveConcernTab('joints')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+                  activeConcernTab === 'joints' 
+                    ? 'bg-white text-sky-900 shadow-xs border border-sky-300' 
+                    : 'text-[#78716C] hover:text-[#1C1917]'
+                }`}
+              >
+                <Zap className="w-3.5 h-3.5 text-sky-600" />
+                <span>Joint Care (44%)</span>
+              </button>
+              <button
+                onClick={() => setActiveConcernTab('digestion')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+                  activeConcernTab === 'digestion' 
+                    ? 'bg-white text-amber-900 shadow-xs border border-amber-300' 
+                    : 'text-[#78716C] hover:text-[#1C1917]'
+                }`}
+              >
+                <Flame className="w-3.5 h-3.5 text-amber-600" />
+                <span>Digestion (32%)</span>
+              </button>
+              <button
+                onClick={() => setActiveConcernTab('immunity')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+                  activeConcernTab === 'immunity' 
+                    ? 'bg-white text-emerald-900 shadow-xs border border-emerald-300' 
+                    : 'text-[#78716C] hover:text-[#1C1917]'
+                }`}
+              >
+                <Shield className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Immunity (24%)</span>
+              </button>
+            </div>
           </div>
         </div>
 
