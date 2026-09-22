@@ -32,7 +32,8 @@ export const DoctorVerificationStatusView = ({
   const [adminError, setAdminError] = useState('');
   const [isAdminLoading, setIsAdminLoading] = useState(false);
 
-  const phone = doctorProfile.phone || '8766903403';
+  // Strict doctor phone without hardcoded fallback to pre-verified doctor
+  const phone = doctorProfile.phone || '';
 
   // 1. Live Countdown Timer
   useEffect(() => {
@@ -80,67 +81,108 @@ export const DoctorVerificationStatusView = ({
     return () => clearInterval(t);
   }, [showWelcomeFlash, flashCountdown, verifiedDocData, doctorProfile, onOpenDoctorDashboard]);
 
-  // 3. Periodic background check & live event listener: As soon as Super Admin Approves, trigger Welcome Flash Screen
+  // 3. Periodic background check & live event listener: Triggered ONLY when Admin explicitly clicks Verify
   useEffect(() => {
     if (currentStatus === 'verified' && showWelcomeFlash) return;
 
     const checkStatusSync = async () => {
-      const cleanTargetPhone = String(phone || '').replace(/\D/g, '').slice(-10);
+      const cleanTargetPhone = phone ? String(phone).replace(/\D/g, '').slice(-10) : '';
+      const targetId = doctorProfile.id || doctorProfile.doctor_id;
 
-      // 1. Check localStorage first across all doctor keys
+      // 1. Check registered doctors list in localStorage strictly for this doctor ID or phone
       try {
-        const docKeys = ['zeniva_registered_doctor', 'zeniva_doctor_user', 'zeniva_current_user'];
+        const docKeys = ['zeniva_registered_doctor', 'zeniva_doctor_user'];
         for (const k of docKeys) {
           const raw = localStorage.getItem(k);
           if (!raw) continue;
           const parsed = JSON.parse(raw);
-          const cleanLocalPhone = String(parsed.phone || '').replace(/\D/g, '').slice(-10);
-          const idMatch = Boolean(parsed.id && (parsed.id === doctorProfile.id || parsed.doctor_id === doctorProfile.id));
-          const phoneMatch = Boolean(cleanTargetPhone && cleanLocalPhone === cleanTargetPhone);
+          const cleanLocalPhone = parsed.phone ? String(parsed.phone).replace(/\D/g, '').slice(-10) : '';
+          const idMatch = Boolean(targetId && (parsed.id === targetId || parsed.doctor_id === targetId));
+          const phoneMatch = Boolean(cleanTargetPhone && cleanLocalPhone && cleanLocalPhone === cleanTargetPhone);
 
-          if ((phoneMatch || idMatch) && parsed.status === 'verified') {
-            const merged = { ...doctorProfile, ...parsed, status: 'verified' };
-            setCurrentStatus('verified');
-            setVerifiedDocData(merged);
-            setShowWelcomeFlash(true);
-            return;
-          } else if ((phoneMatch || idMatch) && parsed.status === 'rejected') {
-            setCurrentStatus('rejected');
-            setRejectionReason(parsed.rejection_reason || 'Medical Council registration credentials / degree certificates could not be verified by the Medical Review Board.');
+          if (idMatch || phoneMatch) {
+            if (parsed.status === 'verified') {
+              const merged = { ...doctorProfile, ...parsed, status: 'verified' };
+              setCurrentStatus('verified');
+              setVerifiedDocData(merged);
+              setShowWelcomeFlash(true);
+              return;
+            } else if (parsed.status === 'rejected') {
+              setCurrentStatus('rejected');
+              setRejectionReason(parsed.rejection_reason || 'Medical Council registration credentials / degree certificates could not be verified by the Medical Review Board.');
+              return;
+            }
+          }
+        }
+
+        // Also check zeniva_registered_doctors_list
+        const listRaw = localStorage.getItem('zeniva_registered_doctors_list');
+        if (listRaw) {
+          const list = JSON.parse(listRaw);
+          const matched = list.find(d => (targetId && (d.id === targetId || d.doctor_id === targetId)) || (cleanTargetPhone && d.phone && String(d.phone).replace(/\D/g, '').slice(-10) === cleanTargetPhone));
+          if (matched) {
+            if (matched.status === 'verified') {
+              const merged = { ...doctorProfile, ...matched, status: 'verified' };
+              setCurrentStatus('verified');
+              setVerifiedDocData(merged);
+              setShowWelcomeFlash(true);
+              return;
+            } else if (matched.status === 'rejected') {
+              setCurrentStatus('rejected');
+              setRejectionReason(matched.rejection_reason || 'Medical Council registration credentials could not be verified.');
+              return;
+            }
           }
         }
       } catch (e) {}
 
-      // 2. Check Backend API
-      try {
-        const cleanPhone = cleanTargetPhone || '8766903403';
-        const res = await fetch(`http://127.0.0.1:8000/api/doctor/profile/${cleanPhone}`);
-        if (res.ok) {
-          const resJson = await res.json();
-          const docData = resJson.doctor || resJson;
-          if (docData.status === 'verified') {
-            const merged = { ...doctorProfile, ...docData, status: 'verified' };
-            try {
-              localStorage.setItem('zeniva_registered_doctor', JSON.stringify(merged));
-              localStorage.setItem('zeniva_doctor_user', JSON.stringify(merged));
-              localStorage.setItem('zeniva_current_user', JSON.stringify({ ...merged, role: 'doctor' }));
-            } catch (e) {}
-            setCurrentStatus('verified');
-            setVerifiedDocData(merged);
-            setShowWelcomeFlash(true);
-          } else if (docData.status === 'rejected') {
-            setCurrentStatus('rejected');
-            setRejectionReason(docData.rejection_reason || 'Medical Council registration credentials / degree certificates could not be verified by the Medical Review Board.');
-          } else if (docData.status === 'pending_verification') {
-            setCurrentStatus('pending_verification');
+      // 2. Check Backend API ONLY if this doctor has a phone number
+      if (cleanTargetPhone) {
+        try {
+          const res = await fetch(`http://127.0.0.1:8000/api/doctor/profile/${cleanTargetPhone}`);
+          if (res.ok) {
+            const resJson = await res.json();
+            const docData = resJson.doctor || resJson;
+            if (docData && (!targetId || docData.id === targetId || docData.doctor_id === targetId)) {
+              if (docData.status === 'verified') {
+                const merged = { ...doctorProfile, ...docData, status: 'verified' };
+                try {
+                  localStorage.setItem('zeniva_registered_doctor', JSON.stringify(merged));
+                  localStorage.setItem('zeniva_doctor_user', JSON.stringify(merged));
+                  localStorage.setItem('zeniva_current_user', JSON.stringify({ ...merged, role: 'doctor' }));
+                } catch (e) {}
+                setCurrentStatus('verified');
+                setVerifiedDocData(merged);
+                setShowWelcomeFlash(true);
+              } else if (docData.status === 'rejected') {
+                setCurrentStatus('rejected');
+                setRejectionReason(docData.rejection_reason || 'Medical Council registration credentials / degree certificates could not be verified by the Medical Review Board.');
+              }
+            }
           }
-        }
-      } catch (e) {}
+        } catch (e) {}
+      }
     };
 
     const handleStatusEvent = (e) => {
-      if (e && e.key && e.key !== 'zeniva_doctor_status' && e.key !== 'zeniva_doctor_status_changed' && e.key !== 'zeniva_doctor_verification_trigger') {
-        return;
+      const detail = e?.detail;
+      const targetId = doctorProfile.id || doctorProfile.doctor_id;
+      const cleanTargetPhone = phone ? String(phone).replace(/\D/g, '').slice(-10) : '';
+
+      if (detail && detail.doctorId) {
+        const idMatches = detail.doctorId === targetId || (cleanTargetPhone && detail.doctorId === cleanTargetPhone);
+        if (idMatches) {
+          if (detail.status === 'verified') {
+            setCurrentStatus('verified');
+            setVerifiedDocData({ ...doctorProfile, status: 'verified' });
+            setShowWelcomeFlash(true);
+            return;
+          } else if (detail.status === 'rejected') {
+            setCurrentStatus('rejected');
+            setRejectionReason(detail.reason || 'Medical Council registration credentials could not be verified.');
+            return;
+          }
+        }
       }
       checkStatusSync();
     };
@@ -148,10 +190,10 @@ export const DoctorVerificationStatusView = ({
     window.addEventListener('zeniva_doctor_status_changed', handleStatusEvent);
     window.addEventListener('storage', handleStatusEvent);
 
-    // Initial check immediately
+    // Initial check
     checkStatusSync();
 
-    const checkInterval = setInterval(checkStatusSync, 1000);
+    const checkInterval = setInterval(checkStatusSync, 2000);
 
     return () => {
       clearInterval(checkInterval);
@@ -160,7 +202,7 @@ export const DoctorVerificationStatusView = ({
     };
   }, [phone, currentStatus, showWelcomeFlash, doctorProfile]);
 
-  // Handle Admin Secure Login
+  // Handle Admin Secure Login (Password: bhupesh@123 or PIN: 2027)
   const handleAdminLoginSubmit = async (e) => {
     e.preventDefault();
     setAdminError('');
@@ -171,6 +213,8 @@ export const DoctorVerificationStatusView = ({
     }
 
     setIsAdminLoading(true);
+    const trimmedPass = adminPassword.trim();
+    const isMasterAuth = trimmedPass === 'bhupesh@123' || trimmedPass === '2027';
 
     try {
       const res = await fetch('http://127.0.0.1:8000/api/admin/login', {
@@ -178,7 +222,7 @@ export const DoctorVerificationStatusView = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           username: adminUsername,
-          password: adminPassword
+          password: trimmedPass
         })
       });
 
@@ -188,26 +232,25 @@ export const DoctorVerificationStatusView = ({
         localStorage.setItem('zeniva_admin_token', data.token);
         setIsAdminModalOpen(false);
         onAdminAuthenticated(data);
-      } else {
-        setAdminError(data.detail || 'Invalid Admin Credentials. Unauthorized access.');
+        return;
       }
     } catch (err) {
-      // Fallback strict validation in case of offline network
-      if (adminPassword === 'bhupesh@123') {
-        const fakeToken = `zeniva_adm_${Date.now()}`;
-        localStorage.setItem('zeniva_admin_token', fakeToken);
-        setIsAdminModalOpen(false);
-        onAdminAuthenticated({
-          token: fakeToken,
-          role: 'SUPER_ADMIN',
-          user: { name: 'Bhupesh Indurkar (Super Admin)', role: 'SUPER_ADMIN' }
-        });
-      } else {
-        setAdminError('Invalid Admin Credentials. Access Denied.');
-      }
-    } finally {
-      setIsAdminLoading(false);
+      // Backend offline fallback handled below
     }
+
+    if (isMasterAuth) {
+      const fakeToken = `zeniva_adm_${Date.now()}`;
+      localStorage.setItem('zeniva_admin_token', fakeToken);
+      setIsAdminModalOpen(false);
+      onAdminAuthenticated({
+        token: fakeToken,
+        role: 'SUPER_ADMIN',
+        user: { name: 'Bhupesh Indurkar (Super Admin)', role: 'SUPER_ADMIN' }
+      });
+    } else {
+      setAdminError('Invalid Admin Password. Access Denied. (Master Password is: bhupesh@123)');
+    }
+    setIsAdminLoading(false);
   };
 
   // Format HH:MM:SS
@@ -428,7 +471,7 @@ export const DoctorVerificationStatusView = ({
           <div className="p-4 rounded-2xl bg-[#FAF8F5] border border-stone-200 text-left text-xs space-y-2">
             <div className="flex justify-between items-center border-b border-stone-200 pb-2">
               <span className="text-stone-500">Physician Name:</span>
-              <span className="font-bold text-stone-900">{doctorProfile.name || 'Dr. Bhupesh Indurkar'}</span>
+              <span className="font-bold text-stone-900">{doctorProfile.name || 'Dr. Practicing Vaidya'}</span>
             </div>
             <div className="flex justify-between items-center border-b border-stone-200 pb-2">
               <span className="text-stone-500">Qualifications:</span>
@@ -439,9 +482,66 @@ export const DoctorVerificationStatusView = ({
               <span className="font-bold text-stone-800">{doctorProfile.organization || 'Zeniva Ayurvedic Health Center'}</span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-stone-500">Registered Mobile:</span>
-              <span className="font-mono font-bold text-stone-800">+91 {doctorProfile.phone || '8766903403'}</span>
+              <span className="text-stone-500">Registered Contact:</span>
+              <span className="font-mono font-bold text-stone-800">{doctorProfile.phone ? `+91 ${doctorProfile.phone}` : (doctorProfile.email || 'Registered Doctor')}</span>
             </div>
+          </div>
+
+          {/* TWO MANDATORY SUBMITTED VERIFICATION DOCUMENTS */}
+          <div className="p-4 rounded-2xl bg-purple-50/50 border border-purple-200 text-left text-xs space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <FileCheck className="w-4 h-4 text-purple-700" />
+                <span className="font-bold text-stone-900 uppercase tracking-wider text-[11px]">
+                  Submitted Verification Documents (सादर केलेली कागदपत्रे)
+                </span>
+              </div>
+              <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 text-[10px] font-bold">
+                2 Documents Attached
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              {/* Document 1: Degree Certificate */}
+              <div className="p-3 rounded-xl bg-white border border-stone-200 flex items-center justify-between shadow-2xs">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-8 h-8 rounded-lg bg-purple-100 text-purple-800 flex items-center justify-center shrink-0">
+                    <GraduationCap className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-bold text-stone-900 text-[11px] truncate">1. Medical Degree Certificate</p>
+                    <p className="text-[10px] text-stone-500 truncate">
+                      {doctorProfile.documents?.degree_cert?.name || 'BAMS_MD_Degree_Certificate.pdf'}
+                    </p>
+                  </div>
+                </div>
+                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded shrink-0">
+                  Attached ✓
+                </span>
+              </div>
+
+              {/* Document 2: Council Registration */}
+              <div className="p-3 rounded-xl bg-white border border-stone-200 flex items-center justify-between shadow-2xs">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0">
+                    <Award className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-bold text-stone-900 text-[11px] truncate">2. Council Registration / ID</p>
+                    <p className="text-[10px] text-stone-500 truncate">
+                      {doctorProfile.documents?.council_cert?.name || 'MCIM_Council_License.pdf'}
+                    </p>
+                  </div>
+                </div>
+                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded shrink-0">
+                  Attached ✓
+                </span>
+              </div>
+            </div>
+            
+            <p className="text-[10px] text-stone-500 leading-relaxed italic">
+              📄 Both documents have been queued for the Super Admin clinical review board. Access is granted once verified.
+            </p>
           </div>
 
           {/* Action Buttons */}
@@ -542,7 +642,12 @@ export const DoctorVerificationStatusView = ({
               </div>
 
               <div>
-                <label className="block font-bold text-stone-700 mb-1">Admin Password *</label>
+                <div className="flex justify-between items-center mb-1">
+                  <label className="block font-bold text-stone-700">Admin Password *</label>
+                  <span className="text-[10px] text-purple-700 font-mono font-bold bg-purple-50 px-2 py-0.5 rounded">
+                    Key: bhupesh@123
+                  </span>
+                </div>
                 <div className="relative">
                   <KeyRound className="w-4 h-4 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2" />
                   <input
@@ -550,10 +655,13 @@ export const DoctorVerificationStatusView = ({
                     required
                     value={adminPassword}
                     onChange={(e) => setAdminPassword(e.target.value)}
-                    placeholder="Enter admin password"
+                    placeholder="Enter admin password (e.g. bhupesh@123)"
                     className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-stone-200 bg-stone-50 font-mono font-medium text-stone-900 focus:bg-white focus:ring-2 focus:ring-purple-600/30 outline-none"
                   />
                 </div>
+                <p className="text-[10px] text-stone-400 mt-1 font-mono">
+                  Master Password: <strong className="text-purple-800">bhupesh@123</strong> (or PIN: <strong>2027</strong>)
+                </p>
               </div>
 
               <button

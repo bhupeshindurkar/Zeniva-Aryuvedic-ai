@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
 import { 
   ArrowRight, RefreshCw, Lock, 
   CheckCircle2, HeartPulse, Stethoscope, Sparkles, AlertCircle,
-  User, Shield, Key, KeyRound, ShieldCheck, Mail, Check, X, Eye, EyeOff, Building, Database
+  User, Shield, Key, KeyRound, ShieldCheck, Mail, Check, X, Eye, EyeOff, Building, Database,
+  UploadCloud, FileText, FileCheck, GraduationCap, Award
 } from 'lucide-react';
 import { ZenivaLogo } from '../components/ZenivaIcons';
 import { supabase } from '../lib/supabase';
@@ -63,6 +63,36 @@ export const LoginPortal = ({
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
+  // 2 Mandatory Medical Verification Documents
+  const [degreeDoc, setDegreeDoc] = useState(null);
+  const [councilDoc, setCouncilDoc] = useState(null);
+
+  const handleDegreeFileUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setDegreeDoc({
+        name: file.name,
+        size: `${(file.size / (1024 * 1024)).toFixed(2)} MB`,
+        type: file.type || 'application/pdf',
+        uploaded_at: new Date().toISOString()
+      });
+      setErrorMessage('');
+    }
+  };
+
+  const handleCouncilFileUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setCouncilDoc({
+        name: file.name,
+        size: `${(file.size / (1024 * 1024)).toFixed(2)} MB`,
+        type: file.type || 'application/pdf',
+        uploaded_at: new Date().toISOString()
+      });
+      setErrorMessage('');
+    }
+  };
+
   // Form Fields for Sign In
   const [signinIdentifier, setSigninIdentifier] = useState('');
   const [signinPassword, setSigninPassword] = useState('');
@@ -101,6 +131,16 @@ export const LoginPortal = ({
       return;
     }
 
+    // Strict 2 Documents Requirement
+    if (!degreeDoc) {
+      setErrorMessage('Please upload Document 1: Medical Degree Certificate (BAMS / MD / MS Ayurveda).');
+      return;
+    }
+    if (!councilDoc) {
+      setErrorMessage('Please upload Document 2: Medical Council Registration Certificate (MCIM / NCISM License / ID).');
+      return;
+    }
+
     const formattedName = entered.startsWith('Dr.') || entered.startsWith('Dr ') ? entered : `Dr. ${entered}`;
     const contactVal = contactInfo.trim();
     const isEmail = contactVal.includes('@');
@@ -111,7 +151,7 @@ export const LoginPortal = ({
 
     setIsSubmitting(true);
     setErrorMessage('');
-    setSuccessMessage('Registering practicing Vaidya account in Zeniva Database...');
+    setSuccessMessage('Registering practicing Vaidya account & attaching 2 verification documents...');
 
     try {
       // 1. Register in SQLite Backend Database
@@ -124,7 +164,11 @@ export const LoginPortal = ({
           phone: phone,
           qualification: qualification.trim() || 'BAMS, MD (Ayurveda)',
           specialization: specialization.trim() || 'Kayachikitsa & Panchakarma',
-          city: 'Nagpur, Maharashtra'
+          city: 'Nagpur, Maharashtra',
+          documents: {
+            degree_cert: degreeDoc,
+            council_cert: councilDoc
+          }
         });
         if (regRes?.doctor) {
           backendDoctor = regRes.doctor;
@@ -158,7 +202,7 @@ export const LoginPortal = ({
 
       const doctorId = backendDoctor?.id || authUser?.id || `ZEN-DOC-${Math.floor(100000 + Math.random() * 900000)}`;
 
-      // 3. Upsert to Supabase profiles table
+      // 3. Upsert to Supabase profiles table strictly with pending_verification
       try {
         if (authUser?.id || doctorId) {
           await supabase.from('profiles').upsert({
@@ -169,12 +213,17 @@ export const LoginPortal = ({
             role: 'doctor',
             specialization: specialization.trim() || 'Kayachikitsa & Panchakarma',
             qualification: qualification.trim() || 'BAMS, MD (Ayurveda)',
-            status: 'verified'
+            status: 'pending_verification'
           }, { onConflict: 'id' });
         }
       } catch (profErr) {
         console.warn('Doctor profile upsert notice:', profErr);
       }
+
+      const docsPayload = {
+        degree_cert: degreeDoc,
+        council_cert: councilDoc
+      };
 
       const newDoctor = {
         role: 'doctor',
@@ -190,6 +239,8 @@ export const LoginPortal = ({
         organization: 'Zeniva Ayurvedic Clinical Center',
         city: 'Nagpur, Maharashtra',
         avatar: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=400',
+        documents: docsPayload,
+        documents_json: JSON.stringify(docsPayload),
         status: 'pending_verification',
         isRegistered: true,
         isLoggedIn: true,
@@ -200,10 +251,15 @@ export const LoginPortal = ({
         localStorage.setItem('zeniva_doctor_user', JSON.stringify(newDoctor));
         localStorage.setItem('zeniva_current_user', JSON.stringify(newDoctor));
         localStorage.setItem('zeniva_registered_doctor', JSON.stringify(newDoctor));
+
+        const listStr = localStorage.getItem('zeniva_registered_doctors_list');
+        let dList = listStr ? JSON.parse(listStr) : [];
+        dList = [newDoctor, ...dList.filter(d => d.id !== newDoctor.id && (!d.email || d.email !== newDoctor.email))];
+        localStorage.setItem('zeniva_registered_doctors_list', JSON.stringify(dList));
       } catch (err) {}
 
       setIsSubmitting(false);
-      setSuccessMessage(`✓ Doctor Account created for ${formattedName}! Opening Medical Council & Document Verification...`);
+      setSuccessMessage(`✓ Doctor Account created for ${formattedName}! 2 Documents queued for Super Admin review...`);
 
       setTimeout(() => {
         if (onDoctorProceedToRegister) {
@@ -213,6 +269,7 @@ export const LoginPortal = ({
             name: formattedName,
             qualification: qualification.trim() || 'BAMS, MD (Ayurveda)',
             specialization: specialization.trim() || 'Kayachikitsa & Panchakarma',
+            documents: docsPayload,
             isRegistered: true,
             status: 'pending_verification',
             user: newDoctor
@@ -584,6 +641,123 @@ export const LoginPortal = ({
                     placeholder="Confirm your password"
                     className="w-full pl-10 pr-4 py-2.5 rounded-2xl border border-[#D6CBB8] text-xs font-semibold text-[#1C1917] focus:outline-none focus:ring-2 focus:ring-purple-600/30 bg-white"
                   />
+                </div>
+              </div>
+
+              {/* TWO MANDATORY VERIFICATION DOCUMENTS */}
+              <div className="space-y-2.5 pt-2 border-t border-dashed border-stone-200">
+                <div className="flex items-center justify-between">
+                  <label className="font-bold text-[#44403C] text-xs flex items-center gap-1.5">
+                    <FileText className="w-4 h-4 text-purple-700" />
+                    <span>Upload 2 Mandatory Medical Documents <span className="text-red-500">*</span></span>
+                  </label>
+                  <span className="text-[10px] text-purple-700 font-bold bg-purple-50 px-2 py-0.5 rounded-full border border-purple-200">
+                    2 Documents Required
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {/* Document 1: Degree Certificate */}
+                  <div className={`p-3 rounded-2xl border-2 transition-all ${
+                    degreeDoc 
+                      ? 'border-emerald-400 bg-emerald-50/40' 
+                      : 'border-dashed border-stone-300 bg-stone-50/60 hover:bg-stone-50 hover:border-purple-300'
+                  }`}>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
+                          degreeDoc ? 'bg-emerald-100 text-emerald-700' : 'bg-purple-100 text-purple-800'
+                        }`}>
+                          <GraduationCap className="w-4 h-4" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-bold text-[#1C1917] text-[11px] truncate">1. Degree Certificate</p>
+                          <p className="text-[9px] text-[#78716C]">BAMS / MD / MS Degree</p>
+                        </div>
+                      </div>
+                      {degreeDoc && (
+                        <button
+                          type="button"
+                          onClick={() => setDegreeDoc(null)}
+                          className="p-1 rounded-full text-stone-400 hover:text-red-500 hover:bg-red-50 cursor-pointer"
+                          title="Remove File"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+
+                    {degreeDoc ? (
+                      <div className="mt-2.5 pt-2 border-t border-emerald-200/60 flex items-center justify-between text-[10px]">
+                        <span className="font-mono text-emerald-900 truncate font-semibold max-w-[120px]">{degreeDoc.name}</span>
+                        <span className="font-bold text-emerald-700 bg-white px-1.5 py-0.5 rounded border border-emerald-200">✓ Attached</span>
+                      </div>
+                    ) : (
+                      <label className="mt-2.5 block text-center py-2 px-2 rounded-xl bg-white border border-stone-200 text-[10px] font-bold text-purple-800 hover:bg-purple-50 cursor-pointer transition-all shadow-2xs">
+                        <input
+                          type="file"
+                          accept=".pdf,.png,.jpg,.jpeg,.webp"
+                          className="hidden"
+                          onChange={handleDegreeFileUpload}
+                        />
+                        <div className="flex items-center justify-center gap-1">
+                          <UploadCloud className="w-3.5 h-3.5 text-purple-600" />
+                          <span>Attach Degree (.pdf / .img)</span>
+                        </div>
+                      </label>
+                    )}
+                  </div>
+
+                  {/* Document 2: Medical Council Registration / ID */}
+                  <div className={`p-3 rounded-2xl border-2 transition-all ${
+                    councilDoc 
+                      ? 'border-emerald-400 bg-emerald-50/40' 
+                      : 'border-dashed border-stone-300 bg-stone-50/60 hover:bg-stone-50 hover:border-purple-300'
+                  }`}>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
+                          councilDoc ? 'bg-emerald-100 text-emerald-700' : 'bg-emerald-100 text-emerald-800'
+                        }`}>
+                          <Award className="w-4 h-4" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-bold text-[#1C1917] text-[11px] truncate">2. Council License / ID</p>
+                          <p className="text-[9px] text-[#78716C]">MCIM / NCISM License</p>
+                        </div>
+                      </div>
+                      {councilDoc && (
+                        <button
+                          type="button"
+                          onClick={() => setCouncilDoc(null)}
+                          className="p-1 rounded-full text-stone-400 hover:text-red-500 hover:bg-red-50 cursor-pointer"
+                          title="Remove File"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+
+                    {councilDoc ? (
+                      <div className="mt-2.5 pt-2 border-t border-emerald-200/60 flex items-center justify-between text-[10px]">
+                        <span className="font-mono text-emerald-900 truncate font-semibold max-w-[120px]">{councilDoc.name}</span>
+                        <span className="font-bold text-emerald-700 bg-white px-1.5 py-0.5 rounded border border-emerald-200">✓ Attached</span>
+                      </div>
+                    ) : (
+                      <label className="mt-2.5 block text-center py-2 px-2 rounded-xl bg-white border border-stone-200 text-[10px] font-bold text-emerald-800 hover:bg-emerald-50 cursor-pointer transition-all shadow-2xs">
+                        <input
+                          type="file"
+                          accept=".pdf,.png,.jpg,.jpeg,.webp"
+                          className="hidden"
+                          onChange={handleCouncilFileUpload}
+                        />
+                        <div className="flex items-center justify-center gap-1">
+                          <UploadCloud className="w-3.5 h-3.5 text-emerald-600" />
+                          <span>Attach Council License (.pdf / .img)</span>
+                        </div>
+                      </label>
+                    )}
+                  </div>
                 </div>
               </div>
 

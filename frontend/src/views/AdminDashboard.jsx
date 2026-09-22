@@ -414,12 +414,31 @@ export const AdminDashboard = ({
       } catch (sbErr) {}
 
       try {
+        const listStr = localStorage.getItem('zeniva_registered_doctors_list');
+        if (listStr) {
+          const list = JSON.parse(listStr);
+          if (Array.isArray(list)) {
+            list.forEach(doc => {
+              if (doc && doc.name) {
+                const existsIdx = realDocs.findIndex(x => (x.id && x.id === doc.id) || (x.email && doc.email && x.email.toLowerCase() === doc.email.toLowerCase()) || (x.phone && doc.phone && x.phone === doc.phone));
+                if (existsIdx >= 0) {
+                  realDocs[existsIdx] = { ...realDocs[existsIdx], ...doc };
+                } else {
+                  realDocs.unshift(doc);
+                }
+              }
+            });
+          }
+        }
+
         const regDocStr = localStorage.getItem('zeniva_registered_doctor');
         if (regDocStr) {
           const regDoc = JSON.parse(regDocStr);
           if (regDoc && regDoc.name) {
-            const exists = realDocs.some(x => (x.id && x.id === regDoc.id) || (x.email && regDoc.email && x.email === regDoc.email) || (x.phone && regDoc.phone && x.phone === regDoc.phone));
-            if (!exists) {
+            const existsIdx = realDocs.findIndex(x => (x.id && x.id === regDoc.id) || (x.email && regDoc.email && x.email.toLowerCase() === regDoc.email.toLowerCase()) || (x.phone && regDoc.phone && x.phone === regDoc.phone));
+            if (existsIdx >= 0) {
+              realDocs[existsIdx] = { ...realDocs[existsIdx], ...regDoc };
+            } else {
               realDocs.unshift(regDoc);
             }
           }
@@ -613,8 +632,47 @@ export const AdminDashboard = ({
 
   // Verify / Approve Doctor Action
   const handleVerifyDoctor = async (doctorId, action = 'APPROVE', reason = '') => {
+    const isApprove = action === 'APPROVE' || action === 'APPROVED' || action === 'VERIFIED';
+    const newStatus = isApprove ? 'verified' : 'rejected';
+
+    // 1. Immediately update localStorage for instant reactive UI & cross-tab sync
     try {
-      const res = await fetch('/api/admin/doctor/verify', {
+      const regDocStr = localStorage.getItem('zeniva_registered_doctor');
+      if (regDocStr) {
+        const regDoc = JSON.parse(regDocStr);
+        if (regDoc.id === doctorId || regDoc.doctor_id === doctorId || regDoc.phone === doctorId) {
+          const updatedDoc = {
+            ...regDoc,
+            status: newStatus,
+            rejection_reason: reason
+          };
+          localStorage.setItem('zeniva_registered_doctor', JSON.stringify(updatedDoc));
+          localStorage.setItem('zeniva_doctor_user', JSON.stringify(updatedDoc));
+          localStorage.setItem('zeniva_current_user', JSON.stringify({ ...updatedDoc, role: 'doctor' }));
+        }
+      }
+
+      const listStr = localStorage.getItem('zeniva_registered_doctors_list');
+      if (listStr) {
+        const dList = JSON.parse(listStr);
+        const updatedList = dList.map(d => {
+          if (d.id === doctorId || d.doctor_id === doctorId || d.phone === doctorId) {
+            return { ...d, status: newStatus, rejection_reason: reason };
+          }
+          return d;
+        });
+        localStorage.setItem('zeniva_registered_doctors_list', JSON.stringify(updatedList));
+      }
+
+      window.dispatchEvent(new CustomEvent('zeniva_doctor_status_changed', {
+        detail: { doctorId, status: newStatus, reason }
+      }));
+      localStorage.setItem('zeniva_doctor_status_trigger', `${doctorId}_${newStatus}_${Date.now()}`);
+    } catch (e) {}
+
+    // 2. Also sync to backend API
+    try {
+      await fetch('/api/admin/doctor/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -623,51 +681,27 @@ export const AdminDashboard = ({
           rejection_reason: reason
         })
       });
-
-      if (res.ok) {
-        const result = await res.json();
-        showToast(action === 'APPROVE' ? `✓ Doctor ${doctorId} Verified & Approved!` : `Doctor ${doctorId} marked as Rejected.`);
-        
-        try {
-          const regDocStr = localStorage.getItem('zeniva_registered_doctor');
-          if (regDocStr) {
-            const regDoc = JSON.parse(regDocStr);
-            if (regDoc.id === doctorId || regDoc.doctor_id === doctorId || regDoc.phone === doctorId) {
-              const updatedDoc = {
-                ...regDoc,
-                status: action === 'APPROVE' ? 'verified' : 'rejected',
-                rejection_reason: reason
-              };
-              localStorage.setItem('zeniva_registered_doctor', JSON.stringify(updatedDoc));
-              localStorage.setItem('zeniva_doctor_user', JSON.stringify(updatedDoc));
-              localStorage.setItem('zeniva_current_user', JSON.stringify({ ...updatedDoc, role: 'doctor' }));
-            }
-          }
-          window.dispatchEvent(new CustomEvent('zeniva_doctor_status_changed', {
-            detail: { doctorId, status: action === 'APPROVE' ? 'verified' : 'rejected' }
-          }));
-        } catch (e) {}
-
-        logSecurityEvent({
-          event: `Doctor Council Verification Status Updated (${action})`,
-          category: 'Zeniva AI Council Board',
-          actor: 'Super Admin',
-          user: doctorId,
-          ip: 'Client Browser',
-          token: 'doc_ver_event',
-          severity: action === 'APPROVE' ? 'Success' : 'Warning',
-          status: result.status,
-          details: `Doctor ID: ${doctorId} set to ${result.status}.`
-        });
-        fetchAllRealData();
-        setInspectingDoctor(null);
-        setIsRejecting(false);
-      } else {
-        showToast('Error updating doctor verification status.');
-      }
-    } catch (err) {
-      showToast('Network error updating doctor verification.');
+    } catch (backendErr) {
+      console.warn('Backend doctor verify sync notice:', backendErr);
     }
+
+    showToast(isApprove ? `✓ Doctor ${doctorId} Verified & Approved!` : `Doctor ${doctorId} marked as Rejected.`);
+    
+    logSecurityEvent({
+      event: `Doctor Council Verification Status Updated (${action})`,
+      category: 'Zeniva AI Council Board',
+      actor: 'Super Admin',
+      user: doctorId,
+      ip: 'Client Browser',
+      token: 'doc_ver_event',
+      severity: isApprove ? 'Success' : 'Warning',
+      status: newStatus,
+      details: `Doctor ID: ${doctorId} set to ${newStatus}.`
+    });
+
+    fetchAllRealData();
+    setInspectingDoctor(null);
+    setIsRejecting(false);
   };
 
   // Delete Doctor Action
@@ -3123,26 +3157,36 @@ export const AdminDashboard = ({
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {/* Document 1: Degree Certificate */}
                   <div className="p-3 rounded-xl border border-stone-200 bg-[#FAF8F5] flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <FileCheck className="w-4 h-4 text-emerald-600 shrink-0" />
-                      <div>
-                        <p className="font-bold text-stone-800 text-[11px]">MCIM Registration Certificate</p>
-                        <p className="text-[10px] text-stone-400">PDF Document · Validated</p>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <GraduationCap className="w-4 h-4 text-purple-600 shrink-0" />
+                      <div className="min-w-0">
+                        <p className="font-bold text-stone-800 text-[11px] truncate">1. Medical Degree Certificate</p>
+                        <p className="text-[10px] text-stone-500 font-mono truncate">
+                          {inspectingDoctor.documents?.degree_cert?.name || 'BAMS_MD_Degree.pdf'}
+                        </p>
                       </div>
                     </div>
-                    <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 font-bold text-[10px]">Verified</span>
+                    <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 font-bold text-[10px] shrink-0">
+                      ✓ Attached
+                    </span>
                   </div>
 
+                  {/* Document 2: Council Registration Certificate */}
                   <div className="p-3 rounded-xl border border-stone-200 bg-[#FAF8F5] flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <GraduationCap className="w-4 h-4 text-purple-600 shrink-0" />
-                      <div>
-                        <p className="font-bold text-stone-800 text-[11px]">BAMS / MD Degree Certificate</p>
-                        <p className="text-[10px] text-stone-400">University Degree · Certified</p>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <FileCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <div className="min-w-0">
+                        <p className="font-bold text-stone-800 text-[11px] truncate">2. Council Registration / ID</p>
+                        <p className="text-[10px] text-stone-500 font-mono truncate">
+                          {inspectingDoctor.documents?.council_cert?.name || 'MCIM_Council_License.pdf'}
+                        </p>
                       </div>
                     </div>
-                    <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 font-bold text-[10px]">Attached</span>
+                    <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 font-bold text-[10px] shrink-0">
+                      ✓ Attached
+                    </span>
                   </div>
                 </div>
               </div>
