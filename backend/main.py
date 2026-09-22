@@ -1019,14 +1019,23 @@ def approve_or_reject_doctor(req: DoctorApprovalRequest):
         "message": f"Doctor {req.doctor_id} status updated to {new_status.upper()}."
     }
 
+class DeleteDoctorRequest(BaseModel):
+    doctor_id: str
+
 @app.delete("/api/admin/doctor/{doctor_id}")
-def delete_doctor(doctor_id: str):
+@app.post("/api/admin/doctor/delete")
+def delete_doctor(doctor_id: Optional[str] = None, req: Optional[DeleteDoctorRequest] = None):
+    target_id = doctor_id or (req.doctor_id if req else None)
+    if not target_id:
+        raise HTTPException(status_code=400, detail="doctor_id is required")
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("DELETE FROM doctors WHERE id = ?", (doctor_id,))
+    clean_id = str(target_id).replace("+91", "").replace(" ", "").replace("-", "")
+    cursor.execute("DELETE FROM doctors WHERE id = ? OR phone = ?", (target_id, clean_id))
+    cursor.execute("DELETE FROM users WHERE (id = ? OR phone = ?) AND role = 'doctor'", (target_id, clean_id))
     conn.commit()
     conn.close()
-    return {"success": True, "message": f"Doctor {doctor_id} removed from database."}
+    return {"success": True, "message": f"Doctor {target_id} removed from database."}
 
 
 # =====================================================================

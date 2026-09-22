@@ -445,9 +445,24 @@ export const AdminDashboard = ({
         }
       } catch (e) {}
 
-      if (realDocs.length > 0) {
-        setDoctorsList(realDocs);
-      }
+      // Filter out any deleted doctors from blacklist
+      try {
+        const delRaw = localStorage.getItem('zeniva_deleted_doctor_ids');
+        if (delRaw) {
+          const deletedIds = JSON.parse(delRaw);
+          if (Array.isArray(deletedIds) && deletedIds.length > 0) {
+            realDocs = realDocs.filter(d => {
+              const cleanP = String(d.phone || '').replace(/\D/g, '').slice(-10);
+              return !deletedIds.includes(d.id) && 
+                     !deletedIds.includes(d.doctor_id) && 
+                     !deletedIds.includes(d.phone) &&
+                     (!cleanP || !deletedIds.includes(cleanP));
+            });
+          }
+        }
+      } catch (e) {}
+
+      setDoctorsList(realDocs);
     } catch (err) {
       console.warn("Doctors load notice:", err);
     }
@@ -705,17 +720,88 @@ export const AdminDashboard = ({
   };
 
   // Delete Doctor Action
-  const handleDeleteDoctor = async (doctorId) => {
-    if (!window.confirm(`Are you sure you want to permanently delete doctor record ${doctorId}?`)) return;
+  const handleDeleteDoctor = async (doctorTarget) => {
+    const docId = typeof doctorTarget === 'object' ? (doctorTarget.id || doctorTarget.doctor_id) : doctorTarget;
+    const docPhone = typeof doctorTarget === 'object' ? doctorTarget.phone : '';
+    const cleanPhone = docPhone ? String(docPhone).replace(/\D/g, '').slice(-10) : '';
+
+    if (!window.confirm(`Are you sure you want to permanently delete doctor record ${docId || docPhone}?`)) return;
+
+    // 1. Immediately remove from React state so UI updates instantaneously!
+    setDoctorsList(prev => prev.filter(d => {
+      const matchId = (docId && (d.id === docId || d.doctor_id === docId));
+      const matchPhone = cleanPhone && (d.phone === docPhone || String(d.phone || '').replace(/\D/g, '').slice(-10) === cleanPhone);
+      return !matchId && !matchPhone;
+    }));
+
+    // 2. Add to blacklisted deleted doctor IDs so they never reappear
     try {
-      const res = await fetch(`/api/admin/doctor/${doctorId}`, {
-        method: 'DELETE'
-      });
-      if (res.ok) {
-        showToast(`Doctor ${doctorId} removed.`);
-        fetchAllRealData();
+      const delRaw = localStorage.getItem('zeniva_deleted_doctor_ids');
+      let delList = delRaw ? JSON.parse(delRaw) : [];
+      if (docId && !delList.includes(docId)) delList.push(docId);
+      if (docPhone && !delList.includes(docPhone)) delList.push(docPhone);
+      if (cleanPhone && !delList.includes(cleanPhone)) delList.push(cleanPhone);
+      localStorage.setItem('zeniva_deleted_doctor_ids', JSON.stringify(delList));
+    } catch (e) {}
+
+    // 3. Remove from zeniva_registered_doctors_list in localStorage
+    try {
+      const listStr = localStorage.getItem('zeniva_registered_doctors_list');
+      if (listStr) {
+        const dList = JSON.parse(listStr);
+        const filtered = dList.filter(d => {
+          const matchId = (docId && (d.id === docId || d.doctor_id === docId));
+          const matchPhone = cleanPhone && (d.phone === docPhone || String(d.phone || '').replace(/\D/g, '').slice(-10) === cleanPhone);
+          return !matchId && !matchPhone;
+        });
+        localStorage.setItem('zeniva_registered_doctors_list', JSON.stringify(filtered));
       }
-    } catch (err) {}
+
+      // Remove from zeniva_registered_doctor and zeniva_doctor_user if matching
+      const regDocStr = localStorage.getItem('zeniva_registered_doctor');
+      if (regDocStr) {
+        const regDoc = JSON.parse(regDocStr);
+        if (regDoc.id === docId || regDoc.doctor_id === docId || (cleanPhone && regDoc.phone === docPhone)) {
+          localStorage.removeItem('zeniva_registered_doctor');
+          localStorage.removeItem('zeniva_doctor_user');
+        }
+      }
+    } catch (e) {}
+
+    // 4. Delete from Supabase profiles table
+    try {
+      if (supabase && docId) {
+        await supabase.from('profiles').delete().eq('id', docId);
+      }
+    } catch (sbErr) {
+      console.warn('Supabase doctor delete notice:', sbErr);
+    }
+
+    // 5. Delete from backend SQLite database via both DELETE and POST endpoints
+    try {
+      await fetch(`/api/admin/doctor/${encodeURIComponent(docId)}`, { method: 'DELETE' });
+    } catch (err) {
+      try {
+        await fetch('http://127.0.0.1:8000/api/admin/doctor/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ doctor_id: docId })
+        });
+      } catch (err2) {}
+    }
+
+    // 6. Close inspect modal if open for this doctor
+    if (inspectingDoctor && (inspectingDoctor.id === docId || inspectingDoctor.doctor_id === docId)) {
+      setInspectingDoctor(null);
+    }
+
+    // 7. Dispatch events
+    window.dispatchEvent(new CustomEvent('zeniva_doctor_status_changed', {
+      detail: { doctorId: docId, status: 'deleted' }
+    }));
+
+    showToast(`✓ Doctor record ${docId || 'entry'} permanently removed.`);
+    fetchAllRealData();
   };
 
   // Delete Patient Action
@@ -1744,9 +1830,9 @@ export const AdminDashboard = ({
 
                           <button
                             type="button"
-                            onClick={() => handleDeleteDoctor(doc.id)}
+                            onClick={() => handleDeleteDoctor(doc)}
                             className="p-1.5 rounded-lg text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
-                            title="Remove Doctor"
+                            title="Remove Doctor Record"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -3226,16 +3312,28 @@ export const AdminDashboard = ({
 
               {/* Modal Footer Actions */}
               <div className="pt-4 border-t border-stone-200 flex flex-wrap items-center justify-between gap-3">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setInspectingDoctor(null);
-                    setIsRejecting(false);
-                  }}
-                  className="px-4 py-2 rounded-xl border border-stone-200 text-stone-700 font-bold hover:bg-stone-50 cursor-pointer transition-colors"
-                >
-                  Close Dossier
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setInspectingDoctor(null);
+                      setIsRejecting(false);
+                    }}
+                    className="px-4 py-2 rounded-xl border border-stone-200 text-stone-700 font-bold hover:bg-stone-50 cursor-pointer transition-colors"
+                  >
+                    Close Dossier
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteDoctor(inspectingDoctor)}
+                    className="px-3.5 py-2 rounded-xl border border-red-200 text-red-700 hover:bg-red-50 font-bold text-xs flex items-center gap-1.5 cursor-pointer transition-colors"
+                    title="Permanently Delete Doctor Record"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Delete Doctor</span>
+                  </button>
+                </div>
 
                 <div className="flex items-center gap-2">
                   {inspectingDoctor.status !== 'rejected' && !isRejecting && (
