@@ -136,8 +136,11 @@ export const PatientAuthModal = ({
 
       if (supaErr) {
         if (supaErr.message && supaErr.message.toLowerCase().includes('email not confirmed')) {
-          console.log('Supabase email confirmation bypassed: logging in directly.');
-        } else if (supaErr.message && supaErr.message.toLowerCase().includes('invalid login credentials')) {
+          setErrorMessage(`⚠️ Email verification required! Please check your inbox at "${cleanEmail}" or click "Resend Verification Email" below.`);
+          setIsSubmitting(false);
+          return;
+        }
+        if (supaErr.message && supaErr.message.toLowerCase().includes('invalid login credentials')) {
           setErrorMessage('Invalid email or password. Please verify your details.');
           setIsSubmitting(false);
           return;
@@ -192,7 +195,7 @@ export const PatientAuthModal = ({
         if (savedPat) {
           const parsed = JSON.parse(savedPat);
           if (parsed && (parsed.email === cleanEmail || parsed.name)) {
-            authenticatedPatient = { ...parsed, isLoggedIn: true, isRegistered: true, status: 'active' };
+            authenticatedPatient = { ...parsed, isLoggedIn: true, isRegistered: true };
           }
         }
       } catch (e) {}
@@ -233,7 +236,7 @@ export const PatientAuthModal = ({
     }, 400);
   };
 
-  // 2. SIGN UP (DIRECT INSTANT CREATION & ACCESS - NO OTP / NO EMAIL VERIFICATION BLOCK)
+  // 2. SIGN UP (SUPABASE AUTH WITH EMAIL VERIFICATION)
   const handleSignUp = async (e) => {
     e.preventDefault();
     const enteredName = fullName.trim();
@@ -262,9 +265,10 @@ export const PatientAuthModal = ({
 
     setIsSubmitting(true);
     setErrorMessage('');
-    setSuccessMessage('Creating account & preparing your Ayurvedic health profile...');
+    setSuccessMessage('Creating account & sending verification email...');
 
     let createdUser = null;
+    let needsEmailVerification = false;
 
     // 1. Register in backend SQLite database
     try {
@@ -290,13 +294,14 @@ export const PatientAuthModal = ({
       console.warn('Backend register notice:', backendErr);
     }
 
-    // 2. Register in Supabase Auth in background (without blocking user on verification)
+    // 2. Register in Supabase Auth & trigger email verification
     let supaUser = null;
     try {
       const { data: supaData, error: supaErr } = await supabase.auth.signUp({
         email: cleanEmail,
         password: password,
         options: {
+          emailRedirectTo: `${window.location.origin}/#patient/home`,
           data: {
             full_name: enteredName,
             phone: cleanPhone,
@@ -307,8 +312,13 @@ export const PatientAuthModal = ({
         }
       });
 
+      if (supaErr) {
+        throw supaErr;
+      }
+
       if (supaData?.user) {
         supaUser = supaData.user;
+        // Also ensure auth.users phone is updated with formatted E.164 phone
         if (formattedPhone) {
           try {
             await supabase.auth.updateUser({ phone: formattedPhone });
@@ -316,14 +326,22 @@ export const PatientAuthModal = ({
             console.warn('Direct auth phone update notice:', phErr);
           }
         }
+        // If email verification is required by Supabase:
+        if (!supaData.session || !supaData.user.confirmed_at) {
+          needsEmailVerification = true;
+        }
       }
     } catch (supaErr) {
-      console.warn('Supabase sign up notice:', supaErr);
+      if (supaErr.message && !supaErr.message.includes('Failed to fetch')) {
+        setErrorMessage(supaErr.message);
+        setIsSubmitting(false);
+        return;
+      }
     }
 
     const patientId = supaUser?.id || createdUser?.id || `PAT-${absHash(cleanEmail)}`;
 
-    // 3. Upsert active profile in Supabase profiles table
+    // 3. Upsert profile in Supabase profiles table
     try {
       if (supaUser?.id || patientId) {
         await supabase.from('profiles').upsert({
@@ -334,12 +352,10 @@ export const PatientAuthModal = ({
           city: cleanCity,
           prakriti: doshaFocus,
           role: 'patient',
-          status: 'active'
+          status: needsEmailVerification ? 'pending_verification' : 'active'
         }, { onConflict: 'id' });
       }
     } catch (e) {}
-
-    const cachedAvatar = typeof localStorage !== 'undefined' ? localStorage.getItem('zeniva_patient_avatar') : null;
 
     const newPatient = {
       id: patientId,
@@ -351,27 +367,51 @@ export const PatientAuthModal = ({
       location: cleanCity,
       prakriti: doshaFocus,
       dosha: doshaFocus,
-      avatar: cachedAvatar || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150',
-      status: 'active',
+      avatar: (typeof localStorage !== 'undefined' && localStorage.getItem('zeniva_patient_avatar')) || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150',
+      status: 'pending_verification',
       isRegistered: true,
-      isLoggedIn: true,
+      isLoggedIn: false,
       auth_provider: 'supabase'
     };
 
     try {
       const thirtyDaysExpiry = Date.now() + 30 * 24 * 60 * 60 * 1000;
       localStorage.setItem('zeniva_patient_user', JSON.stringify(newPatient));
-      localStorage.setItem('zeniva_current_user', JSON.stringify(newPatient));
       localStorage.setItem('zeniva_session_expiry', thirtyDaysExpiry.toString());
       localStorage.setItem('zeniva_remember_me', 'true');
     } catch (e) {}
 
-    setSuccessMessage(`✓ Account created successfully! Welcome, ${enteredName}! Opening Patient Portal...`);
-    setTimeout(() => {
+    setIsSubmitting(false);
+
+    // ALWAYS navigate to Verify Email view upon Sign Up
+    setActiveTab('verify_email');
+    setSuccessMessage(`✓ Verification email sent to ${cleanEmail}! Please check your inbox or spam folder.`);
+  };
+
+  // 3. RESEND VERIFICATION EMAIL
+  const handleResendVerification = async () => {
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail || !cleanEmail.includes('@')) {
+      setErrorMessage('Please enter a valid email address.');
+      return;
+    }
+    setIsSubmitting(true);
+    setErrorMessage('');
+    try {
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email: cleanEmail,
+        options: {
+          emailRedirectTo: `${window.location.origin}/#patient/home`
+        }
+      });
+      if (error) throw error;
+      setSuccessMessage(`✓ Verification email resent to ${cleanEmail}! Please check your inbox or Spam folder.`);
+    } catch (err) {
+      setErrorMessage(err.message || 'Could not resend verification email.');
+    } finally {
       setIsSubmitting(false);
-      onAuthSuccess(newPatient);
-      onClose();
-    }, 500);
+    }
   };
 
   // 4. FORGOT PASSWORD
@@ -786,6 +826,64 @@ export const PatientAuthModal = ({
                 </button>
               </div>
             </form>
+          )}
+
+          {/* ======================================================== */}
+          {/* 4. VERIFY EMAIL TAB                                      */}
+          {/* ======================================================== */}
+          {activeTab === 'verify_email' && (
+            <div className="text-center py-3 space-y-4 animate-in fade-in">
+              <div className="w-16 h-16 rounded-3xl bg-amber-100 border border-amber-300 text-amber-700 flex items-center justify-center mx-auto shadow-md">
+                <Mail className="w-8 h-8 animate-pulse text-amber-600" />
+              </div>
+
+              <div>
+                <h4 className="text-base sm:text-lg font-bold text-stone-900 font-serif">
+                  Verify Your Email Address
+                </h4>
+                <p className="text-xs text-stone-600 mt-1 max-w-xs mx-auto">
+                  We have sent an activation verification link to:
+                </p>
+                <div className="mt-2 px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 font-mono text-xs font-bold inline-block shadow-2xs">
+                  {email || 'your email'}
+                </div>
+              </div>
+
+              <div className="bg-stone-100 p-3.5 rounded-2xl text-left text-xs text-stone-700 space-y-2 border border-stone-200">
+                <div className="flex items-center gap-2 font-bold text-stone-900">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  <span>Activation Steps:</span>
+                </div>
+                <p>1. Open your inbox and look for an email from <strong>Zeniva AI / Supabase</strong>.</p>
+                <p>2. Click the <strong>"Confirm your email"</strong> link to activate your account.</p>
+                <p className="text-[11px] text-stone-500">3. If not received, please check your <em>Spam / Junk</em> folder.</p>
+              </div>
+
+              <div className="pt-2 flex flex-col gap-2">
+                <button
+                  type="button"
+                  disabled={isSubmitting}
+                  onClick={handleResendVerification}
+                  className="w-full py-2.5 rounded-xl bg-stone-200 hover:bg-stone-300 text-stone-800 font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isSubmitting ? 'animate-spin' : ''}`} />
+                  <span>Resend Verification Email</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab('signin');
+                    setErrorMessage('');
+                    setSuccessMessage('Please enter your password to sign in after clicking the email link.');
+                  }}
+                  className="w-full py-2.5 rounded-xl bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-600 hover:to-indigo-600 text-white font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md"
+                >
+                  <LogIn className="w-3.5 h-3.5" />
+                  <span>Proceed to Sign In</span>
+                </button>
+              </div>
+            </div>
           )}
 
           {/* Footer Security Badge */}
