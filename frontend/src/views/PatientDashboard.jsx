@@ -178,14 +178,8 @@ export const PatientDashboard = ({
     return () => clearInterval(interval);
   }, [isVideoPlaying, ambientVideos.length]);
 
-  // Dedicated Flash / Splash Screen Video State (Controlled by Admin & Presented on Initial Dashboard Entry)
-  const [isPopupVideoOpen, setIsPopupVideoOpen] = useState(() => {
-    try {
-      return !sessionStorage.getItem('zeniva_flash_screen_seen');
-    } catch (e) {
-      return true;
-    }
-  });
+  // Dedicated Flash / Splash Screen Video State (Always triggers on every page refresh / entry)
+  const [isPopupVideoOpen, setIsPopupVideoOpen] = useState(true);
   const [isVideoMuted, setIsVideoMuted] = useState(true);
   const [broadcastVideo, setBroadcastVideo] = useState({
     title: 'Zeniva AI Video Project: Classical Introduction',
@@ -217,9 +211,6 @@ export const PatientDashboard = ({
         modalVideoRef.current.pause();
       } catch (e) {}
     }
-    try {
-      sessionStorage.setItem('zeniva_flash_screen_seen', 'true');
-    } catch (e) {}
     setIsPopupVideoOpen(false);
   };
 
@@ -504,16 +495,6 @@ export const PatientDashboard = ({
                 >
                   <Scan className="w-3.5 h-3.5 text-amber-300 group-hover:rotate-90 transition-transform" />
                   <span>AI Skin Scan</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setIsPopupVideoOpen(true)}
-                  className="px-4 py-2.5 rounded-full bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white text-xs font-bold tracking-wide flex items-center gap-2 shadow-lg hover:shadow-xl transition-all group cursor-pointer shrink-0 border border-amber-300/40"
-                  title="Watch Zeniva AI Project Flash Screen Video"
-                >
-                  <Video className="w-3.5 h-3.5 text-amber-200 animate-pulse group-hover:scale-110 transition-transform" />
-                  <span>🎬 Video Project (0:10)</span>
                 </button>
 
                 <div 
