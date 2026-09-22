@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   ArrowRight, RefreshCw, Lock, 
   CheckCircle2, HeartPulse, Stethoscope, Sparkles, AlertCircle,
-  User, Shield, Key, KeyRound, ShieldCheck, Mail, Check, X, Eye, EyeOff, Building, Database,
+  User, Shield, Key, KeyRound, ShieldCheck, Mail, Phone, Check, X, Eye, EyeOff, Building, Database,
   UploadCloud, FileText, FileCheck, GraduationCap, Award
 } from 'lucide-react';
 import { ZenivaLogo } from '../components/ZenivaIcons';
