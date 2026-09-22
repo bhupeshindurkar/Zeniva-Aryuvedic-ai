@@ -1,3 +1,4 @@
+import React, { useState, useEffect } from 'react';
 import { 
   ArrowRight, RefreshCw, Lock, 
   CheckCircle2, HeartPulse, Stethoscope, Sparkles, AlertCircle,
