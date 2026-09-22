@@ -192,6 +192,30 @@ export const PatientDashboard = ({
   const [videoError, setVideoError] = useState(false);
   const modalVideoRef = React.useRef(null);
 
+  // Cough Care & Medicine Reminder Schedule
+  const [coughSchedule, setCoughSchedule] = useState(() => {
+    try {
+      const saved = localStorage.getItem('zeniva_cough_medicine_schedule');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return {
+      morning: false,
+      afternoon: false,
+      night: false,
+      lastUpdated: new Date().toDateString()
+    };
+  });
+
+  const toggleCoughDose = (slot) => {
+    setCoughSchedule(prev => {
+      const next = { ...prev, [slot]: !prev[slot], lastUpdated: new Date().toDateString() };
+      try {
+        localStorage.setItem('zeniva_cough_medicine_schedule', JSON.stringify(next));
+      } catch (e) {}
+      return next;
+    });
+  };
+
   // Automatic Voice / Audio Playback Handler
   useEffect(() => {
     if (isPopupVideoOpen && modalVideoRef.current) {
@@ -747,6 +771,139 @@ export const PatientDashboard = ({
 
         </div>
 
+      </div>
+
+      {/* Dedicated Ayurvedic Cough Care & Medicine Protocol Reminder */}
+      <div className="rounded-3xl p-5 sm:p-6 bg-gradient-to-br from-[#FFFBEB] via-[#FEF3C7] to-[#FDE68A] border-2 border-amber-300 shadow-md space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-amber-600 text-white flex items-center justify-center shadow-sm shrink-0">
+              <Sparkles className="w-5 h-5 text-amber-100" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-700 text-white tracking-wide uppercase shadow-2xs">
+                  Active Clinical Care
+                </span>
+                <span className="text-[11px] font-bold text-amber-900">
+                  कास व प्रतिश्याय (Cough & Respiratory Protocol)
+                </span>
+              </div>
+              <h3 className="text-base sm:text-lg font-serif font-bold text-stone-900 pt-0.5">
+                खोकला व घसा निगा — औषध व दिनचर्या स्मरणिका (Medicine Reminder)
+              </h3>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => onOpenAIChat('मला खोकल्यासाठी आयुर्वेदिक औषध हवे आहे')}
+            className="px-4 py-2 rounded-2xl bg-[#5B3E8C] hover:bg-[#4A2F75] text-white text-xs font-bold shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0"
+          >
+            <span>Ask Zeniva AI for Cough</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
+
+        {/* 3 Medicine Slots for the Day with Interactive Checkboxes */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+          {/* Slot 1: Morning */}
+          <div 
+            onClick={() => toggleCoughDose('morning')}
+            className={`p-3.5 rounded-2xl border transition-all cursor-pointer select-none flex items-start justify-between gap-2 shadow-2xs ${
+              coughSchedule.morning 
+                ? 'bg-emerald-50/90 border-emerald-300 text-emerald-950' 
+                : 'bg-white/80 border-amber-200 hover:border-amber-400 text-stone-900'
+            }`}
+          >
+            <div className="space-y-1">
+              <div className="flex items-center gap-1.5 text-[11px] font-extrabold text-amber-800 uppercase tracking-wider">
+                <Clock className="w-3 h-3 text-amber-600" />
+                <span>सकाळी (Morning Dose)</span>
+              </div>
+              <p className="text-xs font-bold text-stone-900">सितोपलादी चूर्ण + १ चमचा मध</p>
+              <p className="text-[11px] text-stone-600 leading-snug">
+                १/२ चमचा चूर्ण चाटून घ्यावे (कफ विरघळवून श्वसनमार्ग मोकळा होतो).
+              </p>
+            </div>
+            <div className={`w-5 h-5 rounded-lg flex items-center justify-center shrink-0 border ${
+              coughSchedule.morning 
+                ? 'bg-emerald-600 border-emerald-600 text-white' 
+                : 'border-stone-300 bg-stone-50'
+            }`}>
+              {coughSchedule.morning && <Check className="w-3.5 h-3.5" />}
+            </div>
+          </div>
+
+          {/* Slot 2: Afternoon */}
+          <div 
+            onClick={() => toggleCoughDose('afternoon')}
+            className={`p-3.5 rounded-2xl border transition-all cursor-pointer select-none flex items-start justify-between gap-2 shadow-2xs ${
+              coughSchedule.afternoon 
+                ? 'bg-emerald-50/90 border-emerald-300 text-emerald-950' 
+                : 'bg-white/80 border-amber-200 hover:border-amber-400 text-stone-900'
+            }`}
+          >
+            <div className="space-y-1">
+              <div className="flex items-center gap-1.5 text-[11px] font-extrabold text-amber-800 uppercase tracking-wider">
+                <Clock className="w-3 h-3 text-amber-600" />
+                <span>दुपारी (Afternoon Dose)</span>
+              </div>
+              <p className="text-xs font-bold text-stone-900">तुळशी-आले काढा किंवा कंठसुधारक वटी</p>
+              <p className="text-[11px] text-stone-600 leading-snug">
+                घशातील खवखव व कोरडी उबळ थांबवण्यासाठी अत्यंत गुणकारी.
+              </p>
+            </div>
+            <div className={`w-5 h-5 rounded-lg flex items-center justify-center shrink-0 border ${
+              coughSchedule.afternoon 
+                ? 'bg-emerald-600 border-emerald-600 text-white' 
+                : 'border-stone-300 bg-stone-50'
+            }`}>
+              {coughSchedule.afternoon && <Check className="w-3.5 h-3.5" />}
+            </div>
+          </div>
+
+          {/* Slot 3: Night */}
+          <div 
+            onClick={() => toggleCoughDose('night')}
+            className={`p-3.5 rounded-2xl border transition-all cursor-pointer select-none flex items-start justify-between gap-2 shadow-2xs ${
+              coughSchedule.night 
+                ? 'bg-emerald-50/90 border-emerald-300 text-emerald-950' 
+                : 'bg-white/80 border-amber-200 hover:border-amber-400 text-stone-900'
+            }`}
+          >
+            <div className="space-y-1">
+              <div className="flex items-center gap-1.5 text-[11px] font-extrabold text-amber-800 uppercase tracking-wider">
+                <Clock className="w-3 h-3 text-amber-600" />
+                <span>रात्री (Night Dose)</span>
+              </div>
+              <p className="text-xs font-bold text-stone-900">हळदीचे कोमट दूध + निलगिरी वाफ</p>
+              <p className="text-[11px] text-stone-600 leading-snug">
+                रात्री झोपताना खोकल्याची उबळ न येण्यासाठी आणि शांत झोपेसाठी.
+              </p>
+            </div>
+            <div className={`w-5 h-5 rounded-lg flex items-center justify-center shrink-0 border ${
+              coughSchedule.night 
+                ? 'bg-emerald-600 border-emerald-600 text-white' 
+                : 'border-stone-300 bg-stone-50'
+            }`}>
+              {coughSchedule.night && <Check className="w-3.5 h-3.5" />}
+            </div>
+          </div>
+        </div>
+
+        {/* Quick Precautions Strip */}
+        <div className="p-3 rounded-2xl bg-amber-900/10 border border-amber-400/50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs text-amber-950">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-amber-600 shrink-0"></span>
+            <span className="font-semibold">
+              <strong>पथ्य (Care):</strong> थंड पाणी, फ्रीजमधील अन्न, दही, केळी व तेलकट पदार्थ टाळा. दिवसभर कोमट पाणी प्या.
+            </span>
+          </div>
+          <span className="text-[11px] font-mono text-amber-900 bg-amber-200/80 px-2.5 py-0.5 rounded-md shrink-0">
+            {Object.values(coughSchedule).filter(Boolean).length - 1}/3 Doses Taken Today ✓
+          </span>
+        </div>
       </div>
 
       {/* Middle Section: "Your Health Dashboard" 4 Cards */}

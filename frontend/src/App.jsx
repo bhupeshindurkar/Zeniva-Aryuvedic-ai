@@ -173,11 +173,21 @@ export default function App() {
         if (savedPat) {
           const parsed = JSON.parse(savedPat);
           if (parsed && (parsed.role === 'patient' || parsed.name || parsed.email)) {
-            return {
-              ...parsed,
-              role: 'patient',
-              isLoggedIn: parsed.isLoggedIn ?? true
-            };
+            // 30-day session persistence check
+            const expiry = localStorage.getItem('zeniva_session_expiry');
+            if (expiry && Date.now() > parseInt(expiry, 10)) {
+              localStorage.removeItem('zeniva_patient_user');
+              localStorage.removeItem('zeniva_current_user');
+              localStorage.removeItem('zeniva_session_expiry');
+            } else {
+              const cachedAvatar = typeof localStorage !== 'undefined' ? localStorage.getItem('zeniva_patient_avatar') : null;
+              return {
+                ...parsed,
+                avatar: cachedAvatar || parsed.avatar || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150',
+                role: 'patient',
+                isLoggedIn: parsed.isLoggedIn ?? true
+              };
+            }
           }
         }
       } else if (initialState.role === 'admin') {
@@ -328,15 +338,18 @@ export default function App() {
             diet: profile?.diet || localPat.diet || 'Vegan Whole Plant Foods',
             agribalam: profile?.agribalam || localPat.agribalam || 'Madhyama Agni (Moderate Digestion)',
             vikriti: profile?.vikriti || localPat.vikriti || '',
-            avatar: localPat.avatar || profile?.avatar_url || session.user.user_metadata?.avatar_url || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150',
+            avatar: (typeof localStorage !== 'undefined' && localStorage.getItem('zeniva_patient_avatar')) || localPat.avatar || profile?.avatar_url || session.user.user_metadata?.avatar_url || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150',
             status: profile?.status || localPat.status || 'active',
             isLoggedIn: true,
             isRegistered: true,
             auth_provider: 'supabase'
           };
 
+          const thirtyDaysExpiry = Date.now() + 30 * 24 * 60 * 60 * 1000;
           setCurrentUser(updatedUser);
           localStorage.setItem('zeniva_current_user', JSON.stringify(updatedUser));
+          localStorage.setItem('zeniva_session_expiry', thirtyDaysExpiry.toString());
+          localStorage.setItem('zeniva_remember_me', 'true');
           if (userRole === 'doctor') {
             localStorage.setItem('zeniva_doctor_user', JSON.stringify(updatedUser));
           } else if (userRole === 'patient') {

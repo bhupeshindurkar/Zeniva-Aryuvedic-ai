@@ -155,17 +155,29 @@ export const PatientAuthModal = ({
           if (p) profile = p;
         } catch (e) {}
 
+        const userPhone = user.phone || profile.phone || user.user_metadata?.phone || authenticatedPatient?.phone || '';
+        // If auth user phone is missing, sync formatted phone to auth.users
+        if (!user.phone && userPhone) {
+          const cleanP = userPhone.replace(/\D/g, '');
+          const fmtP = cleanP.length === 10 ? `+91${cleanP}` : (cleanP ? `+${cleanP}` : '');
+          if (fmtP) {
+            supabase.auth.updateUser({ phone: fmtP }).catch(() => {});
+          }
+        }
+
+        const cachedAvatar = typeof localStorage !== 'undefined' ? localStorage.getItem('zeniva_patient_avatar') : null;
+
         authenticatedPatient = {
           id: user.id,
           name: profile.full_name || user.user_metadata?.full_name || authenticatedPatient?.name || 'Zeniva Patient',
           email: user.email,
-          phone: profile.phone || user.user_metadata?.phone || authenticatedPatient?.phone || '',
+          phone: userPhone,
           role: 'patient',
           city: profile.city || user.user_metadata?.city || authenticatedPatient?.city || 'Nagpur, Maharashtra',
           location: profile.city || user.user_metadata?.city || authenticatedPatient?.city || 'Nagpur, Maharashtra',
           prakriti: profile.prakriti || user.user_metadata?.prakriti || doshaFocus,
           dosha: profile.prakriti || user.user_metadata?.prakriti || doshaFocus,
-          avatar: profile.avatar_url || authenticatedPatient?.avatar || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150',
+          avatar: cachedAvatar || profile.avatar_url || user.user_metadata?.avatar_url || authenticatedPatient?.avatar || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150',
           status: 'active',
           isRegistered: true,
           isLoggedIn: true,
@@ -190,6 +202,7 @@ export const PatientAuthModal = ({
     }
 
     if (!authenticatedPatient) {
+      const cachedAvatar = typeof localStorage !== 'undefined' ? localStorage.getItem('zeniva_patient_avatar') : null;
       authenticatedPatient = {
         id: `PAT-${absHash(cleanEmail)}`,
         name: fullName.trim() || cleanEmail.split('@')[0],
@@ -200,7 +213,7 @@ export const PatientAuthModal = ({
         location: city || 'Nagpur, Maharashtra',
         prakriti: doshaFocus,
         dosha: doshaFocus,
-        avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150',
+        avatar: cachedAvatar || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150',
         status: 'active',
         isRegistered: true,
         isLoggedIn: true
@@ -208,8 +221,11 @@ export const PatientAuthModal = ({
     }
 
     try {
+      const thirtyDaysExpiry = Date.now() + 30 * 24 * 60 * 60 * 1000;
       localStorage.setItem('zeniva_patient_user', JSON.stringify(authenticatedPatient));
       localStorage.setItem('zeniva_current_user', JSON.stringify(authenticatedPatient));
+      localStorage.setItem('zeniva_session_expiry', thirtyDaysExpiry.toString());
+      localStorage.setItem('zeniva_remember_me', 'true');
     } catch (e) {}
 
     setSuccessMessage(`✓ Welcome back, ${authenticatedPatient.name}! Opening Patient Portal...`);
@@ -240,7 +256,11 @@ export const PatientAuthModal = ({
       return;
     }
 
-    const cleanPhone = phone.trim().replace(/\D/g, '') || '';
+    const cleanDigits = phone.trim().replace(/\D/g, '') || '';
+    const formattedPhone = cleanDigits.length === 10
+      ? `+91${cleanDigits}`
+      : (cleanDigits.length === 12 && cleanDigits.startsWith('91') ? `+${cleanDigits}` : (cleanDigits ? `+${cleanDigits}` : ''));
+    const cleanPhone = formattedPhone || cleanDigits;
     const cleanCity = city.trim() || 'Nagpur, Maharashtra';
 
     setIsSubmitting(true);
@@ -298,6 +318,14 @@ export const PatientAuthModal = ({
 
       if (supaData?.user) {
         supaUser = supaData.user;
+        // Also ensure auth.users phone is updated with formatted E.164 phone
+        if (formattedPhone) {
+          try {
+            await supabase.auth.updateUser({ phone: formattedPhone });
+          } catch (phErr) {
+            console.warn('Direct auth phone update notice:', phErr);
+          }
+        }
         // If email verification is required by Supabase:
         if (!supaData.session || !supaData.user.confirmed_at) {
           needsEmailVerification = true;
@@ -339,7 +367,7 @@ export const PatientAuthModal = ({
       location: cleanCity,
       prakriti: doshaFocus,
       dosha: doshaFocus,
-      avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150',
+      avatar: (typeof localStorage !== 'undefined' && localStorage.getItem('zeniva_patient_avatar')) || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150',
       status: 'pending_verification',
       isRegistered: true,
       isLoggedIn: false,
@@ -347,7 +375,10 @@ export const PatientAuthModal = ({
     };
 
     try {
+      const thirtyDaysExpiry = Date.now() + 30 * 24 * 60 * 60 * 1000;
       localStorage.setItem('zeniva_patient_user', JSON.stringify(newPatient));
+      localStorage.setItem('zeniva_session_expiry', thirtyDaysExpiry.toString());
+      localStorage.setItem('zeniva_remember_me', 'true');
     } catch (e) {}
 
     setIsSubmitting(false);

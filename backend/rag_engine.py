@@ -837,6 +837,38 @@ class AyurvedicRAGEngine:
                     "🔐 For an authentic clinical diagnosis, Charaka Samhita herbal formulations, precise dosages, and personalized Ayurvedic treatment, **please first log in or register your Patient Account!**\n\n"
                     "Once logged in, Zeniva AI unlocks complete clinical treatment plans tailored to your Prakriti. Click the **'Login / Register'** button below to proceed."
                 )
+        # Condition: Gratitude, Pleasantries, Greetings (धन्यवाद / Thanks / Hello)
+        elif any(w in prompt_lower for w in [
+            "धन्यवाद", "ठीक आहे धन्यवाद", "थँक्यू", "थॅन्क्स", "आभार", "ओके", "thanks", "thank you",
+            "bye", "अलविदा", "नमस्ते", "नमस्कार", "hello", "hi", "hey", "काळजी घ्या", "good morning", "good night"
+        ]):
+            if target_lang == "mr" or any(ord(c) >= 0x0900 and ord(c) <= 0x097F for c in prompt):
+                fallback_reply = (
+                    f"🙏 **आपले मनःपूर्वक स्वागत आहे! (Welcome & Health Greetings)**\n\n"
+                    f"नमस्कार {pat_name if pat_name else ''}! झेनिव्हा AI आपल्या निरोगी आयुष्यासाठी सदैव तत्पर आहे.\n\n"
+                    "**🌿 आरोग्य दिनचर्या सूत्र:**\n"
+                    "- **१. वेळेवर सात्विक आहार:** ताजे, कोमट आणि सुपाच्य अन्न वेळेवर घ्या.\n"
+                    "- **२. संतुलित विश्रांती:** पुरेशी झोप, नियमित प्राणायाम आणि कोमट पाण्याचे सेवन ठेवा.\n\n"
+                    "आपल्याला आरोग्य, औषधे किंवा आहाराबद्दल कोणताही नवीन प्रश्न असल्यास नक्की विचारा. **आपली काळजी घ्या आणि सदैव निरोगी राहा! 🌿✨**"
+                )
+            elif target_lang == "hi":
+                fallback_reply = (
+                    f"🙏 **आपका हार्दिक स्वागत है! (Welcome & Stay Healthy)**\n\n"
+                    f"नमस्ते {pat_name if pat_name else ''} जी! ज़ेनिवा AI आपके स्वास्थ्य और खुशहाली के लिए हमेशा उपस्थित है।\n\n"
+                    "**🌿 स्वास्थ्य दिनचर्या:**\n"
+                    "- **१. सात्विक भोजन:** समय पर ताजा और सुपाच्य भोजन लें।\n"
+                    "- **२. पर्याप्त नींद व योग:** नियमित प्राणायाम करें और गुनगुने पानी का सेवन करें।\n\n"
+                    "आयुर्वेद, औषधि या दिनचर्या से जुड़े किसी भी सवाल के लिए बेझिझक पूछें। **अपना ध्यान रखें और स्वस्थ रहें! 🌿✨**"
+                )
+            else:
+                fallback_reply = (
+                    f"🙏 **You are warmly welcome!**\n\n"
+                    f"Hello {pat_name if pat_name else ''}! Zeniva AI is always dedicated to your health and holistic well-being.\n\n"
+                    "**🌿 Daily Wellness Wisdom:**\n"
+                    "- Maintain balanced nutrition, adequate rest, and mindful hydration.\n"
+                    "- Follow your daily routine (Dinacharya) in harmony with nature.\n\n"
+                    "Feel free to ask whenever you need Ayurvedic remedies, diet tips, or wellness guidance. **Take care and stay healthy! 🌿✨**"
+                )
         # Condition 1: Fever / ताप / फिवर (Jwara Chikitsa)
         elif any(w in prompt_lower for w in ["fever", "ताप", "फिवर", "fevar", "jwar", "ज्वर", "उष्णता"]):
             if target_lang == "mr" or any(ord(c) >= 0x0900 and ord(c) <= 0x097F for c in prompt):
@@ -943,24 +975,39 @@ class AyurvedicRAGEngine:
         elif any(w in prompt_lower for w in ["cough", "cold", "खोकला", "सर्दी", "खांसी", "जुकाम", "कफ", "throat", "घसा"]):
             if target_lang == "mr" or any(ord(c) >= 0x0900 and ord(c) <= 0x097F for c in prompt):
                 fallback_reply = (
-                    f"नमस्कार {pat_name if pat_name else ''}! खोकला आणि सर्दीसाठी (कास व प्रतिश्याय) प्रभावी आयुर्वेदिक उपचार:\n\n"
-                    "**१. घरगुती उपाय:** १/२ चमचा हळद व सुंठ कोमट दुधात किंवा मधात मिसळून चाटावे. निलगिरी तेलाची वाफ (Steam) घ्यावी.\n"
-                    "**२. औषधी:** **सितोपलादी चूर्ण** १ चमचा मधात दिवसातून ३ वेळा आणि **कंठसुधारक वटी** चोखावी.\n"
-                    "**३. पथ्य:** थंड पाणी, आईस्क्रीम, दही आणि केळी टाळावीत."
+                    f"नमस्कार {pat_name if pat_name else ''}! खोकला (कास) आणि सर्दीसाठी चरक संहितेवर आधारित संपूर्ण आयुर्वेदिक औषधोपचार व पथ्य:\n\n"
+                    "**१. शास्त्रीय औषधे व मात्रा (Medicine & Dosage):**\n"
+                    "- **सितोपलादी चूर्ण:** १/२ ते १ चमचा सितोपलादी चूर्ण १ चमचा शुद्ध मधात कालवून दिवसातून ३ वेळा (सकाळी, दुपारी व रात्री) चाटावे.\n"
+                    "- **कंठसुधारक वटी / लवंगादी वटी:** घशात खवखव किंवा कोरडी उबळ आल्यास १-१ गोळी चोखावी.\n"
+                    "- **तुळशी-आले काढा:** ५ तुळशीची पाने, १/२ चमचा किसलेले आले व २ काळी मिरी पाण्यात उकळून कोमट असताना घोट-घोट प्या.\n\n"
+                    "**२. घरगुती उपचार व वाफ:**\n"
+                    "- रात्री झोपताना १ कप कोमट दुधात १/४ चमचा शुद्ध हळद घालून प्या.\n"
+                    "- गरम पाण्यात निलगिरी तेल किंवा ओवा टाकून दिवसातून दोनदा वाफ (Steam) घ्या.\n\n"
+                    "**३. पथ्य व काळजी:** थंड पाणी, दही, आईस्क्रीम, केळी व तेलकट पदार्थ पूर्णपणे टाळा. नेहमी कोमट पाणीच प्या."
                 )
             elif target_lang == "hi":
                 fallback_reply = (
-                    f"नमस्ते {pat_name if pat_name else ''} जी! खांसी व जुकाम (कास एवं प्रतिश्याय) के लिए आयुर्वेदिक समाधान:\n\n"
-                    "**१. घरेलू नुस्खा:** शहद में थोड़ी सी हल्दी और पिपली मिलाकर चाटें। गर्म पानी की भाप लें।\n"
-                    "**२. औषधियां:** सितोपलादि चूर्ण (१ चम्मच शहद के साथ) और त्रिकटु चूर्ण।\n"
-                    "**३. परहेज:** ठंडा पानी, दही और तैलीय भोजन न लें।"
+                    f"नमस्ते {pat_name if pat_name else ''} जी! खांसी व जुकाम (कास एवं प्रतिश्याय) के लिए संपूर्ण आयुर्वेदिक उपचार व खुराक:\n\n"
+                    "**१. शास्त्रीय औषधियां व खुराक (Medicine & Dosage):**\n"
+                    "- **सितोपलादि चूर्ण:** आधा से १ चम्मच सितोपलादि चूर्ण १ चम्मच शहद में मिलाकर दिन में ३ बार (सुबह, दोपहर, रात) चाटें।\n"
+                    "- **कंठसुधारक वटी:** गले में खराश या खांसी का दौरा पड़ने पर १-१ गोली मुंह में रखकर चूसें।\n"
+                    "- **तुलसी-सोंठ काढ़ा:** तुलसी, अदरक और काली मिर्च का गुनगुना काढ़ा दिन में दो बार लें।\n\n"
+                    "**२. घरेलू उपचार व भाप:**\n"
+                    "- रात को सोने से पहले हल्दी वाला गुनगुना दूध लें।\n"
+                    "- गर्म पानी में अजवाइन या नीलगिरी डालकर भाप (Steam) लें।\n\n"
+                    "**३. परहेज:** ठंडा पानी, दही, केला और तली-भुनी चीजों से पूरी तरह बचें। केवल गुनगुना पानी पिएं।"
                 )
             else:
                 fallback_reply = (
-                    f"Hello {pat_name if pat_name else ''}! For respiratory relief (Kasa & Pratishyaya):\n\n"
-                    "**1. Home Remedies:** Golden Turmeric Milk and Herbal Steam Inhalation with ajwain.\n"
-                    "**2. Classical Formulations:** Sitopaladi Churna with raw honey 3 times daily.\n"
-                    "**3. Pathya:** Strictly avoid iced water, curds, and cold breezes."
+                    f"Hello {pat_name if pat_name else ''}! Classical Ayurvedic protocol for Cough (Kasa) and Cold (Pratishyaya):\n\n"
+                    "**1. Classical Medicine & Dosage:**\n"
+                    "- **Sitopaladi Churna:** 1/2 to 1 tsp mixed with 1 tsp organic honey 3 times daily (morning, noon, night).\n"
+                    "- **Kantasudharak Vati:** Slowly dissolve 1 lozenge in the mouth for throat irritation.\n"
+                    "- **Tulsi-Ginger Decoction:** Sip warm decoction of fresh ginger, tulsi leaves, and crushed peppercorns.\n\n"
+                    "**2. Supportive Care:**\n"
+                    "- Golden Turmeric Milk at bedtime.\n"
+                    "- Herbal steam inhalation with ajwain or eucalyptus twice daily.\n\n"
+                    "**3. Pathya (Precautions):** Strictly avoid cold drinks, curds, bananas, and fried food. Drink only warm water."
                 )
         # Condition 5: Headache / Migraine / डोकेदुखी (Shirashoola)
         elif any(w in prompt_lower for w in ["headache", "migraine", "डोकेदुखी", "सिरदर्द", "माथा", "शिर"]):
@@ -1012,7 +1059,7 @@ class AyurvedicRAGEngine:
         else:
             if target_lang == "mr" or any(ord(c) >= 0x0900 and ord(c) <= 0x097F for c in prompt):
                 fallback_reply = (
-                    f"नमस्कार {pat_name if pat_name else ''}! तुमच्या प्रश्नासाठी ('{prompt}') चरक संहितेवर आधारित शास्त्रीय आयुर्वेदिक मार्गदर्शन खालीलप्रमाणे आहे:\n\n"
+                    f"नमस्कार {pat_name if pat_name else ''}! चरक संहितेवर आधारित आपल्या आरोग्यासाठी शास्त्रीय आयुर्वेदिक मार्गदर्शन खालीलप्रमाणे आहे:\n\n"
                     "**१. आयुर्वेदिक मूळ कारण व दोष समतोल:** शरीरातील त्रिदोष (वात, पित्त, कफ) आणि जठराग्नीचे संतुलन हेच निरोगी आरोग्याचे मूळ आहे.\n\n"
                     "**२. घरगुती व औषधी उपाय:**\n"
                     "- **कोमट पाणी व त्रिफळा चूर्ण:** रात्री झोपताना १/२ चमचा कोमट पाण्यासह त्रिफळा चूर्ण घ्या.\n"
@@ -1022,14 +1069,14 @@ class AyurvedicRAGEngine:
                 )
             elif target_lang == "hi":
                 fallback_reply = (
-                    f"नमस्ते {pat_name if pat_name else ''} जी! आपके प्रश्न ('{prompt}') के लिए चरक संहिता आधारित शास्त्रीय आयुर्वेदिक मार्गदर्शन:\n\n"
+                    f"नमस्ते {pat_name if pat_name else ''} जी! चरक संहिता आधारित आपके उत्तम स्वास्थ्य के लिए शास्त्रीय आयुर्वेदिक मार्गदर्शन:\n\n"
                     "**१. दोष व अग्नि संतुलन:** त्रिदोष (वात, पित्त, कफ) का संतुलन ही आरोग्य है।\n"
                     "**२. औषधीय सुझाव:** रात को त्रिफला चूर्ण गुनगुने जल से लें और दिनभर गुनगुना पानी पिएं।\n"
                     "**३. आहार व दिनचर्या:** ताजा, सुपाच्य भोजन लें और नियमित प्राणायाम करें।"
                 )
             else:
                 fallback_reply = (
-                    f"Hello {pat_name if pat_name else ''}! Based on authentic Charaka Samhita wisdom for your query ('{prompt}'):\n\n"
+                    f"Hello {pat_name if pat_name else ''}! Based on authentic Charaka Samhita wisdom for your holistic health:\n\n"
                     "- **Dietary Care:** Favor warm, freshly prepared wholesome meals with moderate cow ghee.\n"
                     "- **Herbal Remedies:** Triphala powder at bedtime with warm water and ginger-cumin herbal tea during the day.\n"
                     "- **Lifestyle:** Follow consistent Dinacharya, early morning rising, and pranayama."

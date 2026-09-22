@@ -35,6 +35,7 @@ export const MyProfileView = ({ currentUser = {}, onUpdateUser = () => {} }) => 
 
   useEffect(() => {
     if (currentUser && (currentUser.name || currentUser.email)) {
+      const cachedAvatar = typeof localStorage !== 'undefined' ? localStorage.getItem('zeniva_patient_avatar') : null;
       setProfileData({
         name: currentUser.name || '',
         phone: currentUser.phone || '',
@@ -47,7 +48,7 @@ export const MyProfileView = ({ currentUser = {}, onUpdateUser = () => {} }) => 
         vikriti: currentUser.vikriti || '',
         bloodGroup: currentUser.blood_group || currentUser.bloodGroup || 'B+',
         agribalam: currentUser.agribalam || 'Madhyama Agni (Moderate Digestion)',
-        avatar: currentUser.avatar || defaultAvatar
+        avatar: cachedAvatar || currentUser.avatar || defaultAvatar
       });
     }
   }, [currentUser]);
@@ -60,9 +61,23 @@ export const MyProfileView = ({ currentUser = {}, onUpdateUser = () => {} }) => 
 
   // Helper to sync to Supabase & Backend
   const syncProfileRemotely = async (updatedUser) => {
-    // 1. Supabase Profiles Table
+    // 1. Supabase Profiles Table & Auth Metadata
     try {
       if (updatedUser.id || updatedUser.email) {
+        // Sync avatar & phone to auth.users user_metadata
+        try {
+          const cleanP = rawPhone || (updatedUser.phone ? updatedUser.phone.replace(/\D/g, '') : '');
+          const fmtP = cleanP.length === 10 ? `+91${cleanP}` : (cleanP ? `+${cleanP}` : '');
+          await supabase.auth.updateUser({
+            phone: fmtP || undefined,
+            data: {
+              avatar_url: updatedUser.avatar,
+              phone: fmtP || cleanP,
+              full_name: updatedUser.name
+            }
+          });
+        } catch (metaErr) {}
+
         await supabase.from('profiles').upsert({
           id: updatedUser.id,
           full_name: updatedUser.name,
@@ -110,6 +125,7 @@ export const MyProfileView = ({ currentUser = {}, onUpdateUser = () => {} }) => 
         setProfileData(prev => ({ ...prev, avatar: base64Url }));
         onUpdateUser(updatedUser);
         try {
+          localStorage.setItem('zeniva_patient_avatar', base64Url);
           localStorage.setItem('zeniva_current_user', JSON.stringify(updatedUser));
           if (updatedUser.role === 'doctor') {
             localStorage.setItem('zeniva_doctor_user', JSON.stringify(updatedUser));
