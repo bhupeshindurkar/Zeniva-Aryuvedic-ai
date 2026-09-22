@@ -1288,6 +1288,31 @@ def create_appointment(req: AppointmentCreateRequest):
 # 6. VEDIC RAG & CLINICAL CHAT ENDPOINTS
 # =====================================================================
 
+def extract_concern_and_dosha(query: str, reply: str):
+    q_lower = (query or "").lower()
+    concern = "General Health Consultation"
+    dosha = "Tridoshic Balance"
+    
+    if any(k in q_lower for k in ["khasi", "kasa", "cough", "kaph", "phlegm", "cold", "sardi", "throat", "shwas", "khokla"]):
+        concern = "Cough & Respiratory Congestion (कास विकार)"
+        dosha = "Kapha-Vata Prakopa"
+    elif any(k in q_lower for k in ["pitta", "acidity", "acid", "heartburn", "burning", "pitt", "daha", "ulcer", "gastric"]):
+        concern = "Hyperacidity & Digestive Heat (अम्लपित्त)"
+        dosha = "Pitta Vriddhi / Teekshna Agni"
+    elif any(k in q_lower for k in ["sandhi", "joint", "knee", "pain", "arthritis", "stiff", "dardi", "vata", "backache", "sciatica"]):
+        concern = "Joint Mobility & Vata Discomfort (संधिगत वात)"
+        dosha = "Vata Prakopa / Asthidhatu"
+    elif any(k in q_lower for k in ["skin", "twak", "itching", "rash", "acne", "pimple", "eczema", "kandu", "kushtha"]):
+        concern = "Skin & Blood Purification (त्वक् विकार)"
+        dosha = "Rakta-Pitta Dushti"
+    elif any(k in q_lower for k in ["sleep", "stress", "tension", "anxiety", "insomnia", "nindra", "headache", "shiras"]):
+        concern = "Stress Relief & Sleep Wellness (अनिद्रा / मानसरोग)"
+        dosha = "Prana Vata / Tarpaka Kapha"
+    elif any(k in q_lower for k in ["digestion", "gas", "bloating", "constipation", "pet", "stomach", "kabz", "malabaddhata", "agni"]):
+        concern = "Digestive Agni & Bowel Health (मंदाग्नि / मलबद्धता)"
+        dosha = "Samana Vata / Mandagni"
+    return concern, dosha
+
 @app.post("/api/chat")
 @app.post("/api/rag/chat")
 def chat_with_ayurveda(req: ChatRequest):
@@ -1301,6 +1326,72 @@ def chat_with_ayurveda(req: ChatRequest):
         target_lang=lang,
         patient_context=req.patient_context
     )
+
+    reply_text = res.get("reply", "")
+
+    # Auto-record patient chat session into SQLite for instant Doctor Portal visibility
+    try:
+        pat_ctx = req.patient_context or {}
+        pat_name = pat_ctx.get("name", "Aarav Patil")
+        pat_id = pat_ctx.get("id") or f"PAT-{abs(hash(pat_name)) % 1000000:06d}"
+        concern, dosha_imb = extract_concern_and_dosha(user_prompt, reply_text)
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        chat_id = f"chat-{pat_id}"
+        
+        # Fetch existing messages
+        cursor.execute("SELECT messages_json FROM patient_ai_chats WHERE id = ?", (chat_id,))
+        existing_row = cursor.fetchone()
+        msgs = []
+        if existing_row and existing_row["messages_json"]:
+            try:
+                msgs = json.loads(existing_row["messages_json"])
+            except Exception:
+                msgs = []
+        
+        msgs.append({
+            "sender": "user",
+            "text": user_prompt,
+            "timestamp": datetime.now().strftime("%I:%M %p")
+        })
+        msgs.append({
+            "sender": "ai",
+            "text": reply_text,
+            "citations": res.get("citations", ""),
+            "timestamp": datetime.now().strftime("%I:%M %p")
+        })
+        
+        cursor.execute("""
+        INSERT INTO patient_ai_chats (id, patient_id, patient_name, phone, city, prakriti, primary_concern, dosha_imbalance, last_query, last_reply, messages_json, status, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_doctor_review', CURRENT_TIMESTAMP)
+        ON CONFLICT(id) DO UPDATE SET
+            patient_name = excluded.patient_name,
+            primary_concern = excluded.primary_concern,
+            dosha_imbalance = excluded.dosha_imbalance,
+            last_query = excluded.last_query,
+            last_reply = excluded.last_reply,
+            messages_json = excluded.messages_json,
+            status = 'pending_doctor_review',
+            updated_at = CURRENT_TIMESTAMP
+        """, (
+            chat_id,
+            pat_id,
+            pat_name,
+            pat_ctx.get("phone", "+91 9876543210"),
+            pat_ctx.get("city", "Nagpur, Maharashtra"),
+            pat_ctx.get("prakriti", "Vata-Pitta"),
+            concern,
+            dosha_imb,
+            user_prompt,
+            reply_text,
+            json.dumps(msgs[-12:])
+        ))
+        conn.commit()
+        conn.close()
+    except Exception as db_err:
+        print("[Auto-Save Patient Chat Notice]:", db_err)
+
     return {
         "success": True,
         "reply": res.get("reply", ""),
@@ -1313,6 +1404,157 @@ def chat_with_ayurveda(req: ChatRequest):
         "requires_login": res.get("requires_login", False),
         "is_team_query": res.get("is_team_query", False)
     }
+
+class SaveChatSessionRequest(BaseModel):
+    id: Optional[str] = None
+    patient_id: Optional[str] = "PAT-001"
+    patient_name: Optional[str] = "Aarav Patil"
+    phone: Optional[str] = "+91 9876543210"
+    city: Optional[str] = "Nagpur"
+    prakriti: Optional[str] = "Vata-Pitta"
+    primary_concern: Optional[str] = "Ayurvedic Health Query"
+    dosha_imbalance: Optional[str] = "Kapha-Vata Imbalance"
+    last_query: Optional[str] = ""
+    last_reply: Optional[str] = ""
+    messages: Optional[list] = []
+    status: Optional[str] = "pending_doctor_review"
+
+@app.post("/api/doctor/patient-chats")
+@app.post("/api/chat/save-session")
+def save_patient_chat_session(req: SaveChatSessionRequest):
+    try:
+        pat_id = req.patient_id or f"PAT-{abs(hash(req.patient_name or 'Patient')) % 1000000:06d}"
+        chat_id = req.id or f"chat-{pat_id}"
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+        INSERT INTO patient_ai_chats (id, patient_id, patient_name, phone, city, prakriti, primary_concern, dosha_imbalance, last_query, last_reply, messages_json, status, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(id) DO UPDATE SET
+            patient_name = excluded.patient_name,
+            primary_concern = excluded.primary_concern,
+            dosha_imbalance = excluded.dosha_imbalance,
+            last_query = excluded.last_query,
+            last_reply = excluded.last_reply,
+            messages_json = excluded.messages_json,
+            status = excluded.status,
+            updated_at = CURRENT_TIMESTAMP
+        """, (
+            chat_id,
+            pat_id,
+            req.patient_name or "Patient",
+            req.phone or "+91 9876543210",
+            req.city or "Nagpur",
+            req.prakriti or "Vata-Pitta",
+            req.primary_concern or "Health Inquiry",
+            req.dosha_imbalance or "Vata-Kapha",
+            req.last_query or "",
+            req.last_reply or "",
+            json.dumps(req.messages or []),
+            req.status or "pending_doctor_review"
+        ))
+        conn.commit()
+        conn.close()
+        return {"success": True, "chat_id": chat_id}
+    except Exception as e:
+        print("[Save Patient Chat Session Error]:", e)
+        return {"success": False, "error": str(e)}
+
+@app.get("/api/doctor/patient-chats")
+def get_doctor_patient_chats():
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM patient_ai_chats ORDER BY updated_at DESC LIMIT 20")
+        rows = cursor.fetchall()
+        conn.close()
+        
+        results = []
+        for r in rows:
+            msgs = []
+            if r["messages_json"]:
+                try:
+                    msgs = json.loads(r["messages_json"])
+                except Exception:
+                    msgs = []
+            results.append({
+                "id": r["id"],
+                "patient_id": r["patient_id"],
+                "patient_name": r["patient_name"],
+                "phone": r["phone"],
+                "city": r["city"],
+                "prakriti": r["prakriti"],
+                "primary_concern": r["primary_concern"],
+                "dosha_imbalance": r["dosha_imbalance"],
+                "last_query": r["last_query"],
+                "last_reply": r["last_reply"],
+                "messages": msgs,
+                "status": r["status"] or "pending_doctor_review",
+                "time": "Just now"
+            })
+            
+        if not results:
+            results = [
+                {
+                    "id": "chat-PAT-101",
+                    "patient_id": "PAT-101",
+                    "patient_name": "Rohan Deshmukh",
+                    "phone": "+91 98330 44556",
+                    "city": "Nagpur",
+                    "prakriti": "Kapha-Vata",
+                    "primary_concern": "Dry Cough & Chest Congestion (कास विकार)",
+                    "dosha_imbalance": "Kapha-Vata Prakopa",
+                    "last_query": "Mujhe 4 din se sookhi khasi aur gale me kharash hai, kya lu?",
+                    "last_reply": "कास (Cough) उपशमनासाठी सितोपलादि चूर्ण (Sitopaladi Churna 3g) मध व आल्याच्या रसासोबत दिवसातून २-३ वेळा घ्यावे. कोमट पाणी प्यावे.",
+                    "messages": [
+                        {"sender": "user", "text": "Mujhe 4 din se sookhi khasi aur gale me kharash hai, kya lu?", "timestamp": "10:14 AM"},
+                        {"sender": "ai", "text": "कास (Cough) उपशमनासाठी सितोपलादि चूर्ण (Sitopaladi Churna 3g) मध व आल्याच्या रसासोबत दिवसातून २-३ वेळा घ्यावे. कोमट पाणी प्यावे.", "timestamp": "10:14 AM"}
+                    ],
+                    "status": "pending_doctor_review",
+                    "time": "5 mins ago"
+                },
+                {
+                    "id": "chat-PAT-102",
+                    "patient_id": "PAT-102",
+                    "patient_name": "Neha Kulkarni",
+                    "phone": "+91 98220 11223",
+                    "city": "Pune",
+                    "prakriti": "Pitta Pradhana",
+                    "primary_concern": "Hyperacidity & Heartburn (अम्लपित्त)",
+                    "dosha_imbalance": "Pitta Teekshna Agni",
+                    "last_query": "Gale aur chhati me jalan ho rahi hai khane ke baad.",
+                    "last_reply": "अम्लपित्त शांत करण्यासाठी कामदुधा रस किंवा अविपत्तिकर चूर्ण (3g) जेवणापूर्वी कोमट पाण्यासोबत घ्यावे. तिखट, आंबट व तेलकट पदार्थ टाळावेत.",
+                    "messages": [
+                        {"sender": "user", "text": "Gale aur chhati me jalan ho rahi hai khane ke baad.", "timestamp": "09:30 AM"},
+                        {"sender": "ai", "text": "अम्लपित्त शांत करण्यासाठी कामदुधा रस किंवा अविपत्तिकर चूर्ण (3g) जेवणापूर्वी कोमट पाण्यासोबत घ्यावे. तिखट, आंबट व तेलकट पदार्थ टाळावेत.", "timestamp": "09:30 AM"}
+                    ],
+                    "status": "pending_doctor_review",
+                    "time": "18 mins ago"
+                },
+                {
+                    "id": "chat-PAT-103",
+                    "patient_id": "PAT-103",
+                    "patient_name": "Aarav Patil",
+                    "phone": "+91 98765 43210",
+                    "city": "Nagpur",
+                    "prakriti": "Vata-Kapha",
+                    "primary_concern": "Joint Stiffness & Morning Pain (संधिशूल)",
+                    "dosha_imbalance": "Vata Asthidhatu Dushti",
+                    "last_query": "Subah uthne par ghutno me dard aur jakdan rehti hai.",
+                    "last_reply": "संधिगत वात कमी करण्यासाठी योगराज गुग्गुळू (Yogaraj Guggulu - 2 गोळ्या) सकाळी व संध्याकाळी कोमट पाण्यासोबत घ्याव्यात आणि महानारायण तेलाने शेक करावा.",
+                    "messages": [
+                        {"sender": "user", "text": "Subah uthne par ghutno me dard aur jakdan rehti hai.", "timestamp": "Yesterday"},
+                        {"sender": "ai", "text": "संधिगत वात कमी करण्यासाठी योगराज गुग्गुळू (Yogaraj Guggulu - 2 गोळ्या) सकाळी व संध्याकाळी कोमट पाण्यासोबत घ्याव्यात आणि महानारायण तेलाने शेक करावा.", "timestamp": "Yesterday"}
+                    ],
+                    "status": "reviewed",
+                    "time": "Yesterday"
+                }
+            ]
+        return {"success": True, "chats": results}
+    except Exception as e:
+        print("[Get Doctor Patient Chats Error]:", e)
+        return {"success": False, "chats": []}
 
 @app.post("/api/translate")
 def translate_text_endpoint(req: ChatRequest):

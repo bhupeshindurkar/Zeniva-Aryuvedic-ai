@@ -603,6 +603,88 @@ export const AyurvedicAIChatModal = ({
     }
   };
 
+  // Real-Time Doctor Visibility Sync Helper
+  const syncChatToDoctorPortal = (userQuery, aiReply, currentHistory = []) => {
+    try {
+      const qLower = (userQuery || '').toLowerCase();
+      let concern = "General Ayurvedic Consultation";
+      let dosha = "Tridosha Balance";
+
+      if (/khasi|kasa|cough|kaph|phlegm|cold|sardi|throat|shwas|khokla/.test(qLower)) {
+        concern = "Cough & Respiratory Congestion (कास विकार)";
+        dosha = "Kapha-Vata Prakopa";
+      } else if (/pitta|acidity|acid|heartburn|burning|pitt|daha|ulcer|gastric/.test(qLower)) {
+        concern = "Hyperacidity & Digestive Heat (अम्लपित्त)";
+        dosha = "Pitta Vriddhi / Teekshna Agni";
+      } else if (/sandhi|joint|knee|pain|arthritis|stiff|dardi|vata|backache|sciatica/.test(qLower)) {
+        concern = "Joint Mobility & Vata Discomfort (संधिगत वात)";
+        dosha = "Vata Prakopa / Asthidhatu";
+      } else if (/skin|twak|itching|rash|acne|pimple|eczema|kandu|kushtha/.test(qLower)) {
+        concern = "Skin & Blood Purification (त्वक् विकार)";
+        dosha = "Rakta-Pitta Dushti";
+      } else if (/sleep|stress|tension|anxiety|insomnia|nindra|headache|shiras/.test(qLower)) {
+        concern = "Stress Relief & Sleep Wellness (अनिद्रा / मानसरोग)";
+        dosha = "Prana Vata / Tarpaka Kapha";
+      } else if (/digestion|gas|bloating|constipation|pet|stomach|kabz|malabaddhata|agni/.test(qLower)) {
+        concern = "Digestive Agni & Bowel Health (मंदाग्नि / मलबद्धता)";
+        dosha = "Samana Vata / Mandagni";
+      }
+
+      const patientNameClean = patientName || activeUser?.name || 'Aarav Patil';
+      const patientId = activeUser?.id || `PAT-${Date.now().toString().slice(-4)}`;
+      const phone = activeUser?.phone || '+91 98765 43210';
+      const city = activeUser?.city || 'Nagpur, Maharashtra';
+      const prakriti = activeUser?.prakriti || 'Vata-Pitta';
+
+      const newChatRecord = {
+        id: `chat-${patientId}`,
+        patient_id: patientId,
+        patient_name: patientNameClean,
+        phone: phone,
+        city: city,
+        prakriti: prakriti,
+        primary_concern: concern,
+        dosha_imbalance: dosha,
+        last_query: userQuery,
+        last_reply: aiReply,
+        time: 'Just now',
+        timestamp: Date.now(),
+        status: 'pending_doctor_review',
+        messages: [
+          ...currentHistory.map(m => ({ sender: m.sender, text: m.text, timestamp: m.timestamp || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) })),
+          { sender: 'user', text: userQuery, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) },
+          { sender: 'ai', text: aiReply, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }
+        ]
+      };
+
+      // 1. Save to LocalStorage for instant cross-tab & live sync
+      const saved = localStorage.getItem('zeniva_patient_ai_chat_sessions');
+      let sessions = [];
+      if (saved) {
+        try { sessions = JSON.parse(saved); } catch (e) {}
+      }
+      const existingIdx = sessions.findIndex(s => s.patient_id === patientId || s.id === newChatRecord.id);
+      if (existingIdx >= 0) {
+        sessions[existingIdx] = newChatRecord;
+      } else {
+        sessions.unshift(newChatRecord);
+      }
+      localStorage.setItem('zeniva_patient_ai_chat_sessions', JSON.stringify(sessions));
+
+      // 2. Dispatch custom event for real-time live listener in DoctorDashboard
+      window.dispatchEvent(new CustomEvent('zeniva_new_ai_chat', { detail: newChatRecord }));
+
+      // 3. Post to backend
+      fetch('/api/chat/save-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newChatRecord)
+      }).catch(() => {});
+    } catch (syncErr) {
+      console.warn('Sync to doctor portal notice:', syncErr);
+    }
+  };
+
   const sendMessage = async (overrideText) => {
     const queryToSend = (overrideText !== undefined ? overrideText : inputQuery).trim();
     const currentImg = imagePreview;
@@ -679,6 +761,8 @@ export const AyurvedicAIChatModal = ({
         }
       ]);
 
+      syncChatToDoctorPortal(queryToSend, aiReplyText, messages);
+
       if (autoSpeak && aiReplyText) {
         setTimeout(() => speakText(aiReplyText, newMsgId, langToUse), 300);
       }
@@ -732,6 +816,7 @@ Always give direct, actionable, customized advice for the patient's specific que
                   lang: langToUse
                 }
               ]);
+              syncChatToDoctorPortal(queryToSend, directText.trim(), messages);
               if (autoSpeak) {
                 setTimeout(() => speakText(directText.trim(), newMsgId, langToUse), 300);
               }
@@ -876,6 +961,8 @@ Always give direct, actionable, customized advice for the patient's specific que
           lang: langToUse
         }
       ]);
+
+      syncChatToDoctorPortal(queryToSend, fallbackText, messages);
 
       if (autoSpeak) {
         setTimeout(() => speakText(fallbackText, newMsgId, langToUse), 300);

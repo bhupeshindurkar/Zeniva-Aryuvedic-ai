@@ -107,6 +107,122 @@ export const DoctorDashboard = ({
     { id: 5, time: '04:30 PM', name: 'Mahesh Jadhav', condition: '🍃 Immunity & Energy Recharge', type: 'Consultation', status: 'Upcoming', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=120' },
   ]);
 
+  // Real-Time Patient AI Chatbot Triage Sessions (Synced with Patient AIChatModal)
+  const [aiChatSessions, setAiChatSessions] = useState(() => {
+    try {
+      const saved = localStorage.getItem('zeniva_patient_ai_chat_sessions');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return [
+      {
+        id: 'chat-PAT-101',
+        patient_id: 'PAT-101',
+        patient_name: 'Rohan Deshmukh',
+        phone: '+91 98330 44556',
+        city: 'Nagpur',
+        prakriti: 'Kapha-Vata',
+        primary_concern: 'Dry Cough & Chest Congestion (कास विकार)',
+        dosha_imbalance: 'Kapha-Vata Prakopa',
+        last_query: 'Mujhe 4 din se sookhi khasi aur gale me kharash hai, kya lu?',
+        last_reply: 'कास (Cough) उपशमनासाठी सितोपलादि चूर्ण (Sitopaladi Churna 3g) मध व आल्याच्या रसासोबत दिवसातून २-३ वेळा घ्यावे. कोमट पाणी प्यावे.',
+        time: '5 mins ago',
+        status: 'pending_doctor_review',
+        messages: [
+          { sender: 'user', text: 'Mujhe 4 din se sookhi khasi aur gale me kharash hai, kya lu?', timestamp: '10:14 AM' },
+          { sender: 'ai', text: 'कास (Cough) उपशमनासाठी सितोपलादि चूर्ण (Sitopaladi Churna 3g) मध व आल्याच्या रसासोबत दिवसातून २-३ वेळा घ्यावे. कोमट पाणी प्यावे.', timestamp: '10:14 AM' }
+        ]
+      },
+      {
+        id: 'chat-PAT-102',
+        patient_id: 'PAT-102',
+        patient_name: 'Neha Kulkarni',
+        phone: '+91 98220 11223',
+        city: 'Pune',
+        prakriti: 'Pitta Pradhana',
+        primary_concern: 'Hyperacidity & Heartburn (अम्लपित्त)',
+        dosha_imbalance: 'Pitta Teekshna Agni',
+        last_query: 'Gale aur chhati me jalan ho rahi hai khane ke baad.',
+        last_reply: 'अम्लपित्त शांत करण्यासाठी कामदुधा रस किंवा अविपत्तिकर चूर्ण (3g) जेवणापूर्वी कोमट पाण्यासोबत घ्यावे. तिखट, आंबट व तेलकट पदार्थ टाळावेत.',
+        time: '18 mins ago',
+        status: 'pending_doctor_review',
+        messages: [
+          { sender: 'user', text: 'Gale aur chhati me jalan ho rahi hai khane ke baad.', timestamp: '09:30 AM' },
+          { sender: 'ai', text: 'अम्लपित्त शांत करण्यासाठी कामदुधा रस किंवा अविपत्तिकर चूर्ण (3g) जेवणापूर्वी कोमट पाण्यासोबत घ्यावे. तिखट, आंबट व तेलकट पदार्थ टाळावेत.', timestamp: '09:30 AM' }
+        ]
+      },
+      {
+        id: 'chat-PAT-103',
+        patient_id: 'PAT-103',
+        patient_name: 'Aarav Patil',
+        phone: '+91 98765 43210',
+        city: 'Nagpur',
+        prakriti: 'Vata-Kapha',
+        primary_concern: 'Joint Stiffness & Morning Pain (संधिशूल)',
+        dosha_imbalance: 'Vata Asthidhatu Dushti',
+        last_query: 'Subah uthne par ghutno me dard aur jakdan rehti hai.',
+        last_reply: 'संधिगत वात कमी करण्यासाठी योगराज गुग्गुळू (Yogaraj Guggulu - 2 गोळ्या) सकाळी व संध्याकाळी कोमट पाण्यासोबत घ्याव्यात आणि महानारायण तेलाने शेक करावा.',
+        time: 'Yesterday',
+        status: 'reviewed',
+        messages: [
+          { sender: 'user', text: 'Subah uthne par ghutno me dard aur jakdan rehti hai.', timestamp: 'Yesterday' },
+          { sender: 'ai', text: 'संधिगत वात कमी करण्यासाठी योगराज गुग्गुळू (Yogaraj Guggulu - 2 गोळ्या) सकाळी व संध्याकाळी कोमट पाण्यासोबत घ्याव्यात आणि महानारायण तेलाने शेक करावा.', timestamp: 'Yesterday' }
+        ]
+      }
+    ];
+  });
+
+  const [selectedChatForTranscript, setSelectedChatForTranscript] = useState(null);
+
+  // Real-Time Live Sync Listener for new patient AI chatbot queries
+  useEffect(() => {
+    const handleNewLiveChat = (e) => {
+      const incoming = e.detail;
+      if (incoming) {
+        setAiChatSessions(prev => {
+          const filtered = prev.filter(s => s.patient_id !== incoming.patient_id && s.id !== incoming.id);
+          const updated = [incoming, ...filtered];
+          try {
+            localStorage.setItem('zeniva_patient_ai_chat_sessions', JSON.stringify(updated));
+          } catch (err) {}
+          return updated;
+        });
+        showToast(`🔔 New Live AI Patient Query: ${incoming.patient_name} asked about "${incoming.primary_concern}"`);
+      }
+    };
+
+    window.addEventListener('zeniva_new_ai_chat', handleNewLiveChat);
+    const handleStorageChange = () => {
+      try {
+        const saved = localStorage.getItem('zeniva_patient_ai_chat_sessions');
+        if (saved) setAiChatSessions(JSON.parse(saved));
+      } catch (e) {}
+    };
+    window.addEventListener('storage', handleStorageChange);
+
+    // Initial fetch from backend if available
+    fetch('http://127.0.0.1:8000/api/doctor/patient-chats')
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (data?.chats && data.chats.length > 0) {
+          setAiChatSessions(prev => {
+            const combined = [...data.chats];
+            prev.forEach(p => {
+              if (!combined.some(c => c.id === p.id || c.patient_id === p.patient_id)) {
+                combined.push(p);
+              }
+            });
+            return combined;
+          });
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      window.removeEventListener('zeniva_new_ai_chat', handleNewLiveChat);
+      window.removeEventListener('storage', handleStorageChange);
+    };
+  }, []);
+
   // Patients Roster for Doctor
   const [patientsRoster, setPatientsRoster] = useState([
     { id: 'PAT-201', name: 'Aarav Patil', age: 34, gender: 'Male', phone: '9876543210', dosha: '⚡ Joint & Stamina Care', visits: 4, lastVisit: '28 Aug 2025', diagnosis: 'Joint Mobility & Digestive Support' },
@@ -666,6 +782,120 @@ export const DoctorDashboard = ({
               </div>
             </div>
 
+          </div>
+
+          {/* ============================================================= */}
+          {/* REAL-TIME PATIENT AI CHATBOT TRIAGE & CLINICAL INQUIRY FEED   */}
+          {/* ============================================================= */}
+          <div className="bg-gradient-to-r from-[#21123D] via-[#1B1638] to-[#12281D] rounded-3xl p-5 sm:p-6 text-white shadow-xl border border-purple-500/30 relative overflow-hidden animate-in fade-in">
+            <div className="absolute -right-12 -top-12 w-48 h-48 bg-purple-600/20 rounded-full blur-3xl pointer-events-none"></div>
+            <div className="absolute -left-12 -bottom-12 w-48 h-48 bg-emerald-600/20 rounded-full blur-3xl pointer-events-none"></div>
+
+            <div className="relative z-10">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-white/10">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-amber-400 to-amber-600 text-stone-950 flex items-center justify-center font-bold text-lg shadow-md shrink-0">
+                    🌿
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-base sm:text-lg font-serif font-bold text-white tracking-wide">
+                        Live Patient AI Chat Triage & Health Inquiries
+                      </h2>
+                      <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 font-mono text-[10px] font-bold">
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                        LIVE REAL-TIME SYNC
+                      </span>
+                    </div>
+                    <p className="text-xs text-stone-300 mt-0.5">
+                      Patients discussing symptoms on Zeniva AI Chatbot are streamed here instantly for attending doctor review.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="px-3 py-1 rounded-full bg-white/10 text-stone-200 font-mono text-[11px] font-bold border border-white/15">
+                    {aiChatSessions.length} Active AI Inquiries
+                  </span>
+                </div>
+              </div>
+
+              {/* Triage Cards Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4">
+                {aiChatSessions.map((session) => (
+                  <div 
+                    key={session.id}
+                    className="bg-white/10 hover:bg-white/15 backdrop-blur-md rounded-2xl p-4 border border-white/15 transition-all space-y-3 flex flex-col justify-between"
+                  >
+                    <div className="space-y-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-white text-xs">{session.patient_name}</span>
+                            <span className="text-[10px] text-amber-300 font-mono">({session.prakriti || 'Vata-Pitta'})</span>
+                          </div>
+                          <p className="text-[11px] text-stone-400 font-mono">{session.phone || '+91 98765 43210'}</p>
+                        </div>
+                        <span className="px-2 py-0.5 rounded-full bg-white/10 text-stone-300 text-[9px] font-mono shrink-0">
+                          {session.time || 'Just now'}
+                        </span>
+                      </div>
+
+                      {/* Primary Concern & Imbalance Badges */}
+                      <div className="space-y-1">
+                        <div className="inline-block px-2.5 py-1 rounded-xl bg-purple-500/30 border border-purple-400/40 text-purple-200 text-[10px] font-bold">
+                          ⚡ {session.primary_concern}
+                        </div>
+                        <div className="text-[10px] text-amber-300 font-medium">
+                          <strong>दोष प्रकोप:</strong> {session.dosha_imbalance}
+                        </div>
+                      </div>
+
+                      {/* Snippet of Patient's Last Query */}
+                      <div className="p-2.5 rounded-xl bg-black/30 border border-white/10 text-[11px] text-stone-200 line-clamp-2">
+                        <span className="text-stone-400 font-bold block text-[10px] uppercase">Patient Said:</span>
+                        "{session.last_query}"
+                      </div>
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="pt-2 border-t border-white/10 flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedChatForTranscript(session)}
+                        className="flex-1 py-2 px-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-[11px] font-bold flex items-center justify-center gap-1 transition-all cursor-pointer shadow-sm"
+                      >
+                        <MessageSquare className="w-3.5 h-3.5" />
+                        <span>Chat Transcript</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedPatientForRx(session.patient_name);
+                          if (session.primary_concern.includes('Cough') || session.primary_concern.includes('कास')) {
+                            setRxFormulation('Sitopaladi Churna (3g) with Honey & Ginger juice twice daily + Talisadi Churna');
+                            setRxDietAdvice('Warm boiled water, avoid cold refrigerated items, curds, and fried oily meals.');
+                          } else if (session.primary_concern.includes('Acidity') || session.primary_concern.includes('अम्लपित्त')) {
+                            setRxFormulation('Kamadudha Rasa (250mg) + Avipattikar Churna (3g) before meals with water');
+                            setRxDietAdvice('Avoid fermented, excessively sour, and spicy foods; drink cooling coconut water.');
+                          } else if (session.primary_concern.includes('Joint') || session.primary_concern.includes('वात')) {
+                            setRxFormulation('Yogaraj Guggulu (2 tabs) + Ashwagandha Rasayana (3g) twice daily with milk');
+                            setRxDietAdvice('Warm freshly cooked meals, gentle Abhyanga massage with Mahanarayana oil.');
+                          }
+                          setIsPrescriptionModalOpen(true);
+                        }}
+                        className="py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold flex items-center justify-center gap-1 transition-all cursor-pointer shadow-sm"
+                        title="Issue Prescription"
+                      >
+                        <MortarPestleGraphic className="w-3.5 h-3.5" />
+                        <span>Prescribe</span>
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
 
           {/* --------------------------------------------------------------------- */}
@@ -1827,6 +2057,85 @@ export const DoctorDashboard = ({
               Issue Digital Rx
             </button>
           </div>
+
+          {/* AI Chatbot Inquiries Table in Consultations Desk */}
+          <div className="pt-4 border-t border-stone-100 space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-stone-900 flex items-center gap-2">
+                <span>🌿 Live Patient AI Chat Inquiries & Transcripts</span>
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+              </h3>
+              <span className="text-xs text-stone-500 font-mono">{aiChatSessions.length} Patient sessions</span>
+            </div>
+
+            <div className="overflow-x-auto rounded-2xl border border-stone-200">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="bg-stone-50 text-[10px] text-stone-500 border-b border-stone-200 uppercase font-bold tracking-wider">
+                    <th className="p-3">Patient</th>
+                    <th className="p-3">Primary Concern</th>
+                    <th className="p-3">Dosha Imbalance</th>
+                    <th className="p-3">Last Query</th>
+                    <th className="p-3">Time</th>
+                    <th className="p-3 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-stone-100">
+                  {aiChatSessions.map((session) => (
+                    <tr key={session.id} className="hover:bg-purple-50/30 transition-colors">
+                      <td className="p-3">
+                        <span className="font-bold text-stone-900 block">{session.patient_name}</span>
+                        <span className="text-[10px] text-stone-400 font-mono">{session.phone}</span>
+                      </td>
+                      <td className="p-3">
+                        <span className="px-2 py-0.5 rounded-full bg-purple-100 text-purple-900 text-[10px] font-bold">
+                          {session.primary_concern}
+                        </span>
+                      </td>
+                      <td className="p-3 font-semibold text-amber-900">
+                        {session.dosha_imbalance}
+                      </td>
+                      <td className="p-3 text-stone-600 max-w-xs truncate">
+                        "{session.last_query}"
+                      </td>
+                      <td className="p-3 text-stone-400 font-mono text-[10px]">
+                        {session.time || 'Just now'}
+                      </td>
+                      <td className="p-3 text-right space-x-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedChatForTranscript(session)}
+                          className="px-2.5 py-1 rounded-lg bg-purple-100 hover:bg-purple-200 text-purple-900 text-[10px] font-bold cursor-pointer"
+                        >
+                          View Chat
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedPatientForRx(session.patient_name);
+                            if (session.primary_concern.includes('Cough') || session.primary_concern.includes('कास')) {
+                              setRxFormulation('Sitopaladi Churna (3g) with Honey & Ginger juice twice daily + Talisadi Churna (2g)');
+                              setRxDietAdvice('Warm boiled water, avoid cold refrigerated items, curds, and oily food.');
+                            } else if (session.primary_concern.includes('Acidity') || session.primary_concern.includes('अम्लपित्त')) {
+                              setRxFormulation('Kamadudha Rasa (250mg) + Avipattikar Churna (3g) before meals with water');
+                              setRxDietAdvice('Avoid fermented, excessively sour and spicy foods; drink cooling coconut water.');
+                            } else if (session.primary_concern.includes('Joint') || session.primary_concern.includes('वात')) {
+                              setRxFormulation('Yogaraj Guggulu (2 tabs) + Ashwagandha Rasayana (3g) twice daily with milk');
+                              setRxDietAdvice('Warm freshly cooked meals, gentle Abhyanga massage with Mahanarayana oil.');
+                            }
+                            setIsPrescriptionModalOpen(true);
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold cursor-pointer"
+                        >
+                          Prescribe
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       )}
 
@@ -2155,6 +2464,143 @@ export const DoctorDashboard = ({
                 <button type="submit" className="px-5 py-2 rounded-xl bg-[#5B3E8C] text-white font-bold cursor-pointer shadow-sm">Sign & Issue Prescription</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* PATIENT AI CHATBOT TRANSCRIPT MODAL (FULL CLINICAL HISTORY)              */}
+      {/* ========================================================================= */}
+      {selectedChatForTranscript && (
+        <div className="fixed inset-0 z-50 bg-stone-950/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-[#FAF7F2] w-full max-w-2xl max-h-[90vh] rounded-3xl shadow-2xl border-2 border-[#EBE3D5] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 text-[#1C1917]">
+            
+            {/* Header */}
+            <div className="p-4 sm:p-5 bg-gradient-to-r from-[#21123D] to-[#12281D] text-white flex items-center justify-between border-b border-purple-500/30">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-amber-400 to-amber-600 text-stone-950 flex items-center justify-center font-bold text-lg shadow-md shrink-0">
+                  🌿
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm sm:text-base font-serif font-bold text-white">
+                      AI Triage History · {selectedChatForTranscript.patient_name}
+                    </h3>
+                    <span className="px-2 py-0.5 rounded-full bg-amber-400/20 text-amber-300 text-[10px] font-mono font-bold">
+                      {selectedChatForTranscript.prakriti || 'Vata-Pitta'}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-stone-300">
+                    Phone: {selectedChatForTranscript.phone || 'N/A'} · City: {selectedChatForTranscript.city || 'Nagpur'}
+                  </p>
+                </div>
+              </div>
+
+              <button 
+                onClick={() => setSelectedChatForTranscript(null)}
+                className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-stone-300 hover:text-white flex items-center justify-center cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Clinical Overview Bar */}
+            <div className="px-5 py-3 bg-purple-50 border-b border-purple-100 flex flex-wrap items-center justify-between gap-2 text-xs">
+              <div className="flex items-center gap-2">
+                <span className="text-stone-500 font-bold">Primary Concern:</span>
+                <span className="font-bold text-purple-900 bg-purple-100 px-2 py-0.5 rounded-md">
+                  {selectedChatForTranscript.primary_concern}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-stone-500 font-bold">Dosha Imbalance:</span>
+                <span className="font-bold text-amber-900 bg-amber-100 px-2 py-0.5 rounded-md">
+                  {selectedChatForTranscript.dosha_imbalance}
+                </span>
+              </div>
+            </div>
+
+            {/* Conversation Messages */}
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-3.5 bg-white/60">
+              {(selectedChatForTranscript.messages && selectedChatForTranscript.messages.length > 0) ? (
+                selectedChatForTranscript.messages.map((m, idx) => (
+                  <div 
+                    key={idx} 
+                    className={`flex flex-col ${m.sender === 'user' ? 'items-end' : 'items-start'}`}
+                  >
+                    <div className="flex items-center gap-1.5 mb-1 text-[10px] text-stone-400 font-mono">
+                      <span>{m.sender === 'user' ? selectedChatForTranscript.patient_name : 'Zeniva Ayurvedic AI'}</span>
+                      <span>·</span>
+                      <span>{m.timestamp || m.time || '10:00 AM'}</span>
+                    </div>
+                    <div className={`p-3.5 rounded-2xl max-w-[85%] text-xs leading-relaxed ${
+                      m.sender === 'user'
+                        ? 'bg-purple-900 text-white rounded-tr-none shadow-sm'
+                        : 'bg-[#F4F1EA] text-stone-900 border border-[#E5DAC6] rounded-tl-none shadow-xs'
+                    }`}>
+                      <p className="whitespace-pre-wrap">{m.text}</p>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="space-y-3">
+                  <div className="flex flex-col items-end">
+                    <span className="text-[10px] text-stone-400 mb-1">{selectedChatForTranscript.patient_name}</span>
+                    <div className="p-3.5 rounded-2xl bg-purple-900 text-white text-xs max-w-[85%]">
+                      {selectedChatForTranscript.last_query}
+                    </div>
+                  </div>
+                  <div className="flex flex-col items-start">
+                    <span className="text-[10px] text-stone-400 mb-1">Zeniva Ayurvedic AI</span>
+                    <div className="p-3.5 rounded-2xl bg-[#F4F1EA] text-stone-900 border border-[#E5DAC6] text-xs max-w-[85%] whitespace-pre-wrap">
+                      {selectedChatForTranscript.last_reply}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Footer with Doctor Actions */}
+            <div className="p-4 bg-white border-t border-stone-200 flex flex-col sm:flex-row items-center justify-between gap-3">
+              <span className="text-[11px] text-stone-500 font-medium">
+                Clinical guidance provided by Charaka RAG 70B · Awaiting doctor validation
+              </span>
+
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <button
+                  type="button"
+                  onClick={() => setSelectedChatForTranscript(null)}
+                  className="flex-1 sm:flex-none px-4 py-2 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-bold cursor-pointer"
+                >
+                  Close
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const session = selectedChatForTranscript;
+                    setSelectedChatForTranscript(null);
+                    setSelectedPatientForRx(session.patient_name);
+                    if (session.primary_concern.includes('Cough') || session.primary_concern.includes('कास')) {
+                      setRxFormulation('Sitopaladi Churna (3g) with Honey & Ginger juice twice daily + Talisadi Churna (2g)');
+                      setRxDietAdvice('Warm boiled water, avoid cold refrigerated items, curds, and oily food.');
+                    } else if (session.primary_concern.includes('Acidity') || session.primary_concern.includes('अम्लपित्त')) {
+                      setRxFormulation('Kamadudha Rasa (250mg) + Avipattikar Churna (3g) before meals with water');
+                      setRxDietAdvice('Avoid fermented, excessively sour and spicy foods; drink cooling coconut water.');
+                    } else if (session.primary_concern.includes('Joint') || session.primary_concern.includes('वात')) {
+                      setRxFormulation('Yogaraj Guggulu (2 tabs) + Ashwagandha Rasayana (3g) twice daily with milk');
+                      setRxDietAdvice('Warm freshly cooked meals, gentle Abhyanga massage with Mahanarayana oil.');
+                    }
+                    setIsPrescriptionModalOpen(true);
+                  }}
+                  className="flex-1 sm:flex-none px-5 py-2 rounded-xl bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-600 hover:to-indigo-600 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-md cursor-pointer"
+                >
+                  <MortarPestleGraphic className="w-4 h-4" />
+                  <span>Issue Doctor Prescription</span>
+                </button>
+              </div>
+            </div>
+
           </div>
         </div>
       )}

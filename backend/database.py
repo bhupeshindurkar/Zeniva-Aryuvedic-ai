@@ -202,6 +202,26 @@ def init_db():
     )
     """)
 
+    # Real-Time Patient AI Chat Triage & Doctor Visibility Table
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS patient_ai_chats (
+        id TEXT PRIMARY KEY,
+        patient_id TEXT,
+        patient_name TEXT,
+        phone TEXT,
+        city TEXT,
+        prakriti TEXT,
+        primary_concern TEXT,
+        dosha_imbalance TEXT,
+        last_query TEXT,
+        last_reply TEXT,
+        messages_json TEXT,
+        status TEXT DEFAULT 'pending_doctor_review',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
+
     # System Broadcast Video Table (Universal Cross-Browser Persistence)
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS system_broadcasts (
