@@ -539,12 +539,14 @@ def login_doctor_account(req: DoctorAuthLoginRequest):
     conn = get_db_connection()
     cursor = conn.cursor()
 
+    clean_phone = identifier.replace("+91", "").replace(" ", "").replace("-", "")
+
     # Search in doctors table first
     cursor.execute("""
     SELECT * FROM doctors 
-    WHERE LOWER(email) = ? OR phone = ? OR LOWER(name) = ? OR LOWER(name) LIKE ?
+    WHERE LOWER(email) = ? OR phone = ? OR phone = ? OR LOWER(name) = ? OR LOWER(name) LIKE ?
     LIMIT 1
-    """, (identifier, identifier, identifier, f"%{identifier}%"))
+    """, (identifier, identifier, clean_phone, identifier, f"%{identifier}%"))
     doc = cursor.fetchone()
 
     # Also search in users table if needed
@@ -552,9 +554,9 @@ def login_doctor_account(req: DoctorAuthLoginRequest):
     if not doc:
         cursor.execute("""
         SELECT * FROM users 
-        WHERE (LOWER(email) = ? OR phone = ? OR LOWER(name) = ? OR LOWER(name) LIKE ?) AND role = 'doctor'
+        WHERE (LOWER(email) = ? OR phone = ? OR phone = ? OR LOWER(name) = ? OR LOWER(name) LIKE ?) AND role = 'doctor'
         LIMIT 1
-        """, (identifier, identifier, identifier, f"%{identifier}%"))
+        """, (identifier, identifier, clean_phone, identifier, f"%{identifier}%"))
         user = cursor.fetchone()
 
     conn.close()
@@ -1031,8 +1033,8 @@ def delete_doctor(doctor_id: Optional[str] = None, req: Optional[DeleteDoctorReq
     conn = get_db_connection()
     cursor = conn.cursor()
     clean_id = str(target_id).replace("+91", "").replace(" ", "").replace("-", "")
-    cursor.execute("DELETE FROM doctors WHERE id = ? OR phone = ?", (target_id, clean_id))
-    cursor.execute("DELETE FROM users WHERE (id = ? OR phone = ?) AND role = 'doctor'", (target_id, clean_id))
+    cursor.execute("DELETE FROM doctors WHERE id = ? OR phone = ? OR email = ?", (target_id, clean_id, target_id))
+    cursor.execute("DELETE FROM users WHERE (id = ? OR phone = ? OR email = ?) AND role = 'doctor'", (target_id, clean_id, target_id))
     conn.commit()
     conn.close()
     return {"success": True, "message": f"Doctor {target_id} removed from database."}

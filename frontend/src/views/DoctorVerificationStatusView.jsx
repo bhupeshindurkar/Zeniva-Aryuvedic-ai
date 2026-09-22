@@ -248,7 +248,7 @@ export const DoctorVerificationStatusView = ({
         user: { name: 'Bhupesh Indurkar (Super Admin)', role: 'SUPER_ADMIN' }
       });
     } else {
-      setAdminError('Invalid Admin Password. Access Denied. (Master Password is: bhupesh@123)');
+      setAdminError('Invalid Admin Password. Access Denied.');
     }
     setIsAdminLoading(false);
   };
@@ -352,7 +352,7 @@ export const DoctorVerificationStatusView = ({
             <div className="min-w-0 flex-1 space-y-0.5">
               <div className="flex items-center gap-2">
                 <h2 className="text-base font-serif font-bold text-stone-900 truncate">
-                  {doctorProfile.name?.startsWith('Dr.') ? doctorProfile.name : `Dr. ${doctorProfile.name || 'Bhupesh Indurkar'}`}
+                  {doctorProfile.name?.startsWith('Dr.') ? doctorProfile.name : `Dr. ${doctorProfile.name || 'Ayurvedic Vaidya'}`}
                 </h2>
                 {isVerified && <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0" />}
               </div>
@@ -642,12 +642,7 @@ export const DoctorVerificationStatusView = ({
               </div>
 
               <div>
-                <div className="flex justify-between items-center mb-1">
-                  <label className="block font-bold text-stone-700">Admin Password *</label>
-                  <span className="text-[10px] text-purple-700 font-mono font-bold bg-purple-50 px-2 py-0.5 rounded">
-                    Key: bhupesh@123
-                  </span>
-                </div>
+                <label className="block font-bold text-stone-700 mb-1">Admin Password *</label>
                 <div className="relative">
                   <KeyRound className="w-4 h-4 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2" />
                   <input
@@ -655,13 +650,10 @@ export const DoctorVerificationStatusView = ({
                     required
                     value={adminPassword}
                     onChange={(e) => setAdminPassword(e.target.value)}
-                    placeholder="Enter admin password (e.g. bhupesh@123)"
+                    placeholder="Enter admin password"
                     className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-stone-200 bg-stone-50 font-mono font-medium text-stone-900 focus:bg-white focus:ring-2 focus:ring-purple-600/30 outline-none"
                   />
                 </div>
-                <p className="text-[10px] text-stone-400 mt-1 font-mono">
-                  Master Password: <strong className="text-purple-800">bhupesh@123</strong> (or PIN: <strong>2027</strong>)
-                </p>
               </div>
 
               <button
@@ -733,7 +725,7 @@ export const DoctorVerificationStatusView = ({
               <div className="min-w-0 flex-1 space-y-1">
                 <div className="flex items-center gap-2">
                   <h3 className="text-base font-bold font-serif text-white truncate">
-                    {(verifiedDocData || doctorProfile).name?.startsWith('Dr.') ? (verifiedDocData || doctorProfile).name : `Dr. ${(verifiedDocData || doctorProfile).name || 'Bhupesh Indurkar'}`}
+                    {(verifiedDocData || doctorProfile).name?.startsWith('Dr.') ? (verifiedDocData || doctorProfile).name : `Dr. ${(verifiedDocData || doctorProfile).name || 'Ayurvedic Vaidya'}`}
                   </h3>
                   <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-bold border border-emerald-400/40">Active</span>
                 </div>

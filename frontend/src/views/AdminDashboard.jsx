@@ -34,30 +34,30 @@ export const AdminDashboard = ({
     setTimeout(() => setToastMessage(''), 3000);
   };
 
-  // 1. Live Backend State & Datasets (Real Database Doctors Only)
-  const [doctorsList, setDoctorsList] = useState([
-    {
-      id: 'ZEN-DOC-644980',
-      name: 'Dr. Bhupesh Indurkar',
-      phone: '8766903403',
-      email: 'dr.bhupesh@zeniva.ai',
-      dob: '1990-01-01',
-      gender: 'Male',
-      profession: 'Chief Ayurvedic Physician & Lead Architect',
-      role: 'Consultant Vaidya',
-      specialization: 'Kayachikitsa & Panchakarma',
-      qualification: 'BAMS, MD (Kayachikitsa)',
-      experience_years: 8,
-      organization: 'Shri Dhanvantari Ayurvedic Clinic & Research Center',
-      city: 'Nagpur',
-      council_name: 'Maharashtra Council of Indian Medicine (MCIM)',
-      council_reg_number: 'AYU-MAH-8921',
-      avatar: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=400',
-      status: 'verified',
-      created_at: '2026-09-02 15:15:11',
-      verified_at: '2026-09-02 15:15:28'
-    }
-  ]);
+  // 1. Live Backend State & Datasets (Real Database Doctors Only - Zero Hardcoded Dummy Doctors)
+  const [doctorsList, setDoctorsList] = useState(() => {
+    try {
+      const delRaw = localStorage.getItem('zeniva_deleted_doctor_ids');
+      const deletedIds = delRaw ? JSON.parse(delRaw) : ['ZEN-DOC-644980'];
+      const listStr = localStorage.getItem('zeniva_registered_doctors_list');
+      if (listStr) {
+        const list = JSON.parse(listStr);
+        if (Array.isArray(list)) {
+          return list.filter(d => {
+            if (!d || !d.name) return false;
+            const cleanP = String(d.phone || '').replace(/\D/g, '').slice(-10);
+            const cleanE = (d.email || '').trim().toLowerCase();
+            return !deletedIds.includes(d.id) && 
+                   !deletedIds.includes(d.doctor_id) && 
+                   !deletedIds.includes(d.phone) &&
+                   (!cleanP || !deletedIds.includes(cleanP)) &&
+                   (!cleanE || !deletedIds.includes(cleanE));
+          });
+        }
+      }
+    } catch (e) {}
+    return [];
+  });
 
   const [patientsList, setPatientsList] = useState([
     {
@@ -445,20 +445,22 @@ export const AdminDashboard = ({
         }
       } catch (e) {}
 
-      // Filter out any deleted doctors from blacklist
+      // Filter out any deleted doctors from blacklist (including legacy test records)
       try {
         const delRaw = localStorage.getItem('zeniva_deleted_doctor_ids');
-        if (delRaw) {
-          const deletedIds = JSON.parse(delRaw);
-          if (Array.isArray(deletedIds) && deletedIds.length > 0) {
-            realDocs = realDocs.filter(d => {
-              const cleanP = String(d.phone || '').replace(/\D/g, '').slice(-10);
-              return !deletedIds.includes(d.id) && 
-                     !deletedIds.includes(d.doctor_id) && 
-                     !deletedIds.includes(d.phone) &&
-                     (!cleanP || !deletedIds.includes(cleanP));
-            });
-          }
+        let deletedIds = delRaw ? JSON.parse(delRaw) : [];
+        if (!deletedIds.includes('ZEN-DOC-644980')) deletedIds.push('ZEN-DOC-644980');
+        if (Array.isArray(deletedIds) && deletedIds.length > 0) {
+          realDocs = realDocs.filter(d => {
+            if (!d || !d.name) return false;
+            const cleanP = String(d.phone || '').replace(/\D/g, '').slice(-10);
+            const cleanE = (d.email || '').trim().toLowerCase();
+            return !deletedIds.includes(d.id) && 
+                   !deletedIds.includes(d.doctor_id) && 
+                   !deletedIds.includes(d.phone) &&
+                   (!cleanP || !deletedIds.includes(cleanP)) &&
+                   (!cleanE || !deletedIds.includes(cleanE));
+          });
         }
       } catch (e) {}
 
@@ -723,16 +725,24 @@ export const AdminDashboard = ({
   const handleDeleteDoctor = async (doctorTarget) => {
     const docId = typeof doctorTarget === 'object' ? (doctorTarget.id || doctorTarget.doctor_id) : doctorTarget;
     const docPhone = typeof doctorTarget === 'object' ? doctorTarget.phone : '';
+    const docEmail = typeof doctorTarget === 'object' ? (doctorTarget.email || '') : '';
     const cleanPhone = docPhone ? String(docPhone).replace(/\D/g, '').slice(-10) : '';
+    const cleanEmail = docEmail ? docEmail.trim().toLowerCase() : '';
+    const docName = typeof doctorTarget === 'object' ? doctorTarget.name : (docId || docPhone);
 
-    if (!window.confirm(`Are you sure you want to permanently delete doctor record ${docId || docPhone}?`)) return;
+    if (!window.confirm(`Are you sure you want to permanently delete doctor record for ${docName}?`)) return;
 
     // 1. Immediately remove from React state so UI updates instantaneously!
     setDoctorsList(prev => prev.filter(d => {
       const matchId = (docId && (d.id === docId || d.doctor_id === docId));
       const matchPhone = cleanPhone && (d.phone === docPhone || String(d.phone || '').replace(/\D/g, '').slice(-10) === cleanPhone);
-      return !matchId && !matchPhone;
+      const matchEmail = cleanEmail && d.email && d.email.trim().toLowerCase() === cleanEmail;
+      return !matchId && !matchPhone && !matchEmail;
     }));
+
+    // Close inspect modal if open on this doctor
+    setIsDoctorInspectModalOpen(false);
+    setInspectingDoctor(null);
 
     // 2. Add to blacklisted deleted doctor IDs so they never reappear
     try {
@@ -741,6 +751,7 @@ export const AdminDashboard = ({
       if (docId && !delList.includes(docId)) delList.push(docId);
       if (docPhone && !delList.includes(docPhone)) delList.push(docPhone);
       if (cleanPhone && !delList.includes(cleanPhone)) delList.push(cleanPhone);
+      if (cleanEmail && !delList.includes(cleanEmail)) delList.push(cleanEmail);
       localStorage.setItem('zeniva_deleted_doctor_ids', JSON.stringify(delList));
     } catch (e) {}
 
@@ -752,7 +763,8 @@ export const AdminDashboard = ({
         const filtered = dList.filter(d => {
           const matchId = (docId && (d.id === docId || d.doctor_id === docId));
           const matchPhone = cleanPhone && (d.phone === docPhone || String(d.phone || '').replace(/\D/g, '').slice(-10) === cleanPhone);
-          return !matchId && !matchPhone;
+          const matchEmail = cleanEmail && d.email && d.email.trim().toLowerCase() === cleanEmail;
+          return !matchId && !matchPhone && !matchEmail;
         });
         localStorage.setItem('zeniva_registered_doctors_list', JSON.stringify(filtered));
       }
@@ -761,7 +773,7 @@ export const AdminDashboard = ({
       const regDocStr = localStorage.getItem('zeniva_registered_doctor');
       if (regDocStr) {
         const regDoc = JSON.parse(regDocStr);
-        if (regDoc.id === docId || regDoc.doctor_id === docId || (cleanPhone && regDoc.phone === docPhone)) {
+        if (regDoc.id === docId || regDoc.doctor_id === docId || (cleanPhone && regDoc.phone === docPhone) || (cleanEmail && regDoc.email === cleanEmail)) {
           localStorage.removeItem('zeniva_registered_doctor');
           localStorage.removeItem('zeniva_doctor_user');
         }

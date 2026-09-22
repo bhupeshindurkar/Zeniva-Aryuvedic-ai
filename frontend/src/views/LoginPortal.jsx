@@ -59,7 +59,8 @@ export const LoginPortal = ({
   const [doctorName, setDoctorName] = useState('');
   const [specialization, setSpecialization] = useState('Kayachikitsa & Panchakarma');
   const [qualification, setQualification] = useState('BAMS, MD (Ayurveda)');
-  const [contactInfo, setContactInfo] = useState('');
+  const [doctorEmail, setDoctorEmail] = useState('');
+  const [doctorPhone, setDoctorPhone] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -143,12 +144,17 @@ export const LoginPortal = ({
     }
 
     const formattedName = entered.startsWith('Dr.') || entered.startsWith('Dr ') ? entered : `Dr. ${entered}`;
-    const contactVal = contactInfo.trim();
-    const isEmail = contactVal.includes('@');
-    const email = isEmail 
-      ? contactVal 
-      : (contactVal ? `${contactVal.toLowerCase().replace(/[^a-z0-9]/g, '.')}@zeniva.ai` : `dr.${entered.toLowerCase().replace(/[^a-z0-9]/g, '.')}@zeniva.ai`);
-    const phone = !isEmail ? contactVal : '';
+    const email = doctorEmail.trim().toLowerCase();
+    const phone = doctorPhone.trim().replace(/\D/g, '');
+
+    if (!email || !email.includes('@')) {
+      setErrorMessage('Please enter a valid Doctor Email Address.');
+      return;
+    }
+    if (!phone || phone.length < 10) {
+      setErrorMessage('Please enter a valid 10-digit Doctor Mobile Number.');
+      return;
+    }
 
     setIsSubmitting(true);
     setErrorMessage('');
@@ -586,20 +592,41 @@ export const LoginPortal = ({
                 </div>
               </div>
 
-              {/* Email / Mobile */}
-              <div>
-                <label className="font-bold text-[#44403C] block mb-1">
-                  Email or Mobile Number
-                </label>
-                <div className="relative">
-                  <Mail className="w-4 h-4 text-[#A8A29E] absolute left-3.5 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    value={contactInfo}
-                    onChange={(e) => setContactInfo(e.target.value)}
-                    placeholder="e.g. dr.ramesh@gmail.com or 9876543210"
-                    className="w-full pl-10 pr-4 py-2.5 rounded-2xl border border-[#D6CBB8] text-xs font-semibold text-[#1C1917] focus:outline-none focus:ring-2 focus:ring-purple-600/30 bg-white"
-                  />
+              {/* Separate Doctor Email & Mobile Inputs */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div>
+                  <label className="font-bold text-[#44403C] block mb-1">
+                    Email Address <span className="text-red-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <Mail className="w-4 h-4 text-[#A8A29E] absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="email"
+                      required
+                      value={doctorEmail}
+                      onChange={(e) => setDoctorEmail(e.target.value)}
+                      placeholder="e.g. dr.ramesh@gmail.com"
+                      className="w-full pl-10 pr-3 py-2.5 rounded-2xl border border-[#D6CBB8] text-xs font-semibold text-[#1C1917] focus:outline-none focus:ring-2 focus:ring-purple-600/30 bg-white"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="font-bold text-[#44403C] block mb-1">
+                    Mobile Number <span className="text-red-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <Phone className="w-4 h-4 text-[#A8A29E] absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="tel"
+                      required
+                      maxLength={10}
+                      value={doctorPhone}
+                      onChange={(e) => setDoctorPhone(e.target.value.replace(/\D/g, ''))}
+                      placeholder="10-digit mobile"
+                      className="w-full pl-10 pr-3 py-2.5 rounded-2xl border border-[#D6CBB8] text-xs font-semibold text-[#1C1917] focus:outline-none focus:ring-2 focus:ring-purple-600/30 bg-white"
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -807,19 +834,19 @@ export const LoginPortal = ({
           {activeTab === 'signin' && (
             <form onSubmit={handleSignIn} className="space-y-3.5 text-left text-xs pt-1">
               
-              {/* Doctor Name / Email */}
+              {/* Doctor Email or Mobile */}
               <div>
                 <label className="font-bold text-[#44403C] block mb-1">
-                  Doctor Name or Email <span className="text-red-500">*</span>
+                  Email or Mobile Number <span className="text-red-500">*</span>
                 </label>
                 <div className="relative">
-                  <User className="w-4 h-4 text-[#A8A29E] absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <Mail className="w-4 h-4 text-[#A8A29E] absolute left-3.5 top-1/2 -translate-y-1/2" />
                   <input
                     type="text"
                     required
                     value={signinIdentifier}
                     onChange={(e) => setSigninIdentifier(e.target.value)}
-                    placeholder="Enter doctor full name or email"
+                    placeholder="Enter registered email or 10-digit mobile number"
                     className="w-full pl-10 pr-4 py-2.5 rounded-2xl border border-[#D6CBB8] text-xs font-semibold text-[#1C1917] focus:outline-none focus:ring-2 focus:ring-purple-600/30 bg-white"
                   />
                 </div>
