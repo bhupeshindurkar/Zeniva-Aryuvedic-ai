@@ -8,7 +8,8 @@ import {
   HelpCircle, Settings, ChevronDown, CheckSquare, Trash2,
   Edit, Save, Phone, Eye, Star, FileSpreadsheet, Download,
   Headphones, Flame, Droplet, Wind, Shield, AlertCircle,
-  Navigation, Compass, ExternalLink, RefreshCw, Camera, Video
+  Navigation, Compass, ExternalLink, RefreshCw, Camera, Video,
+  BarChart3
 } from 'lucide-react';
 import { MortarPestleGraphic, ZenivaLogo } from '../components/ZenivaIcons';
 

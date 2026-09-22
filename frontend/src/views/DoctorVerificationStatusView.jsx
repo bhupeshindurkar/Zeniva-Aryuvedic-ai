@@ -3,7 +3,7 @@ import {
   ShieldCheck, Clock, CheckCircle2, AlertCircle, FileText, 
   ArrowRight, Shield, Award, User, RefreshCw, LogOut, Check,
   RotateCcw, AlertTriangle, Lock, KeyRound, X, Sparkles,
-  Stethoscope, ChevronRight
+  Stethoscope, ChevronRight, FileCheck, GraduationCap
 } from 'lucide-react';
 import { ZenivaLogo, MeditatingYogi } from '../components/ZenivaIcons';
 
