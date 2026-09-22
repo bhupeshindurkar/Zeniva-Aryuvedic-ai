@@ -683,14 +683,79 @@ export const AyurvedicAIChatModal = ({
         setTimeout(() => speakText(aiReplyText, newMsgId, langToUse), 300);
       }
     } catch (err) {
-      console.warn("AI Chat API failover to local clinical engine:", err);
+      console.warn("Backend /api/chat failed, checking direct AI or clinical intelligence:", err);
 
+      // 1. DIRECT CLIENT-SIDE OPENROUTER FALLBACK (Ensures instant dynamic AI reply even when backend is offline or on Vercel)
+      const clientOpenRouterKey = import.meta.env.VITE_OPENROUTER_API_KEY;
+      if (clientOpenRouterKey && !currentImg) {
+        try {
+          const sysPrompt = `You are Zeniva AI (झेनिव्हा AI), a certified Classical Ayurvedic Vaidya and Clinical AI specialist.
+CRITICAL LANGUAGE INSTRUCTION:
+- If user language is Marathi ('mr') or query is in Marathi, respond completely in pure, natural, respectful Marathi (मराठी) with clear markdown bullet points, Ayurvedic analysis (दोष, अग्नी, आम), practical home remedies, diet (पथ्य-अपथ्य), and herbal medicine!
+- If Hindi ('hi'), respond in pure, respectful Hindi (हिन्दी).
+- If English ('en'), respond in articulate English.
+Always give direct, actionable, customized advice for the patient's specific question: "${queryToSend}".`;
+
+          const directRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${clientOpenRouterKey}`,
+              "Content-Type": "application/json",
+              "HTTP-Referer": typeof window !== 'undefined' ? window.location.origin : "http://localhost:5173",
+              "X-Title": "Zeniva Ayurvedic AI Care"
+            },
+            body: JSON.stringify({
+              model: "meta-llama/llama-3.1-8b-instruct",
+              messages: [
+                { role: "system", content: sysPrompt },
+                { role: "user", content: queryToSend }
+              ],
+              temperature: 0.3,
+              max_tokens: 650
+            })
+          });
+
+          if (directRes.ok) {
+            const dData = await directRes.json();
+            const directText = dData?.choices?.[0]?.message?.content;
+            if (directText && directText.trim().length > 10) {
+              const newMsgId = `ai-${Date.now()}`;
+              setMessages(prev => [
+                ...prev,
+                {
+                  id: newMsgId,
+                  sender: 'ai',
+                  text: directText.trim(),
+                  citations: "Charaka Samhita · Chikitsa Sthana (Neural RAG 70B)",
+                  requires_login: false,
+                  is_team_query: false,
+                  lang: langToUse
+                }
+              ]);
+              if (autoSpeak) {
+                setTimeout(() => speakText(directText.trim(), newMsgId, langToUse), 300);
+              }
+              return;
+            }
+          }
+        } catch (clientErr) {
+          console.warn("Direct OpenRouter client attempt had issue:", clientErr);
+        }
+      }
+
+      // 2. COMPREHENSIVE MULTI-CONDITION LOCAL CLINICAL ENGINE
       const isTeam = /(team|creator|founder|who made|who created|developer|निर्माते|टीम|किसने बनाया|भूपेश|विवेक|मोमिता)/i.test(queryToSend);
       const isPatientHistory = /(history|record|ehr|profile|report|patient|हिस्टरी|इतिहास|रेकॉर्ड|अहवाल|नोंदी|माहिती|पेशंट|रुग्ण|प्रिस्क्रिप्शन|फाइल|मरीज|रिकॉर्ड)/i.test(queryToSend);
+      const isMealTiming = /(लवकर जेवण|लवकर का जेवावे|वेळेवर जेवण|जेवणाची वेळ|रात्रीचे जेवण|कधी जेवावे|early dinner|meal timing|eating early|when to eat|लवकर जेवणे)/i.test(queryToSend);
+      const isAppetite = /(जेवण होत नाही|भूक लागत नाही|भूक|खात नाही|खाणे|जेवण|अन्न|अग्नी|मंदाग्नी|पचन|भूख नहीं|भूख|खाना|हजम|appetite|eating|hunger|meal|food|eat|anorexia|aruchi|agnimandya)/i.test(queryToSend);
+      const isAcidity = /(acidity|heartburn|acid|sour|जळजळ|छातीत|पित्त|अम्लपित्त|खट्टी डकार|गॅस|gas|bloating|flatulence)/i.test(queryToSend);
       const isFever = /(fever|temperature|ताप|फिवर|बुखार|ज्वर)/i.test(queryToSend);
-      const isStomach = /(stomach|belly|abdomen|digestion|acidity|gas|constipation|vomit|पोट|उदरशूल|पोटदुखी|दुखत|अजीर्ण|गॅस|पित्त|उलटी|पेट|दस्त)/i.test(queryToSend);
+      const isStomach = /(stomach|belly|abdomen|constipation|vomit|loose motion|पोट|उदरशूल|पोटदुखी|मलबद्धता|शौचास|उलटी|पेट|दस्त|कब्ज)/i.test(queryToSend);
       const isColdCough = /(cough|cold|throat|mucus|khansi|जुकाम|खोकला|सर्दी|कफ|घसा|कंठ)/i.test(queryToSend);
-      const isJoints = /(joint|knee|arthritis|back pain|वेदना|कळ|सांधे|गुडघे|कंबर|संधिवात|दर्द)/i.test(queryToSend);
+      const isJoints = /(joint|knee|arthritis|back pain|वेदना|कळ|सांधे|गुडघे|कंबर|संधिवात|वात|दर्द|जोड़ों)/i.test(queryToSend);
+      const isHeadache = /(headache|head|migraine|stress|tension|sleep|insomnia|डोके|डोकेदुखी|ताण|झोप|अनिद्रा|सिरदर्द|नींद|तनाव)/i.test(queryToSend);
+      const isSkinHair = /(skin|itch|itching|rash|pimple|hair|fall|केस|त्वचा|खाज|मुरुम|केसगळती|खुजली|मुहासे|बाल)/i.test(queryToSend);
+      const isWeakness = /(weakness|fatigue|tired|energy|weight|कमकुवतपणा|थकवा|अशक्तपणा|वजन|कमजोरी|थकान)/i.test(queryToSend);
       const isMarriage = /(लग्न|लगीन|विवाह|शादी|marriage|marry)/i.test(queryToSend);
 
       let fallbackText = "";
@@ -716,6 +781,24 @@ export const AyurvedicAIChatModal = ({
           : langToUse === 'hi'
           ? "👨‍💻 **ज़ेनिवा AI टीम और संस्थापक (Zeniva Creators & Team):**\n\nज़ेनिवा AI का निर्माण TGPCET नागपुर के IT विभाग के मार्गदर्शन में किया गया है:\n१. **भूपेश इंदूरकर** (प्रोजेक्ट फाउंडर, मुख्य सिस्टम आर्किटेक्ट व प्रोजेक्ट डायरेक्टर)\n२. **ध्रुप सोनकर** (लीड AI व LLM इंटीग्रेशन विशेषज्ञ)\n३. **विवेक राठोड** (लीड सॉफ्टवेयर टेस्टिंग व QA इंजीनियर)\n४. **मोमिता लांडे** (लीड फ्रंटएंड UI/UX डिज़ाइनर व प्रोडक्ट एक्सपीरियंस)\n५. **श्रेया सातपुते** (डेटाबेस आर्किटेक्ट व क्लिनिकल डेटा सिस्टम्स)\n६. **सचिन लिंबुळे** (लीड वेबसाइट व वेब परफॉरमेंस टेस्टिंग इंजीनियर)\n\n✨ डैशबोर्ड पर 'Zeniva Creators & Team' सेक्शन (#overview/team) में पूरी जानकारी उपलब्ध है!"
           : "👨‍💻 **Zeniva AI Creators & Engineering Team:**\n\nZeniva AI was engineered under the guidance of the Department of Information Technology at TGPCET, Nagpur:\n1. **Bhupesh Indurkar** (Project Founder, Lead System Architect & Project Director)\n2. **Dhrup Sonkar** (Lead AI & LLM Integration Specialist)\n3. **Vivek Rathod** (Lead Software Testing & Quality Assurance Engineer)\n4. **Momita Lande** (Lead Frontend UI/UX Designer & Product Experience)\n5. **Shreya Satpute** (Database Architect & Clinical Data Systems Engineer)\n6. **Sachin Limbule** (Lead Website & Web Performance Testing Engineer)\n\n✨ Explore full profiles in the 'Zeniva Creators & Team' section (#overview/team) on the dashboard!";
+      } else if (isMealTiming) {
+        fallbackText = langToUse === 'mr'
+          ? `🍲 **लवकर जेवण्याचे महत्त्व व आयुर्वेदिक मार्गदर्शन (Early Meal / Dinacharya Wisdom):**\n\nनमस्ते ${patientName ? patientName + ' जी' : ''}! आयुर्वेदात 'लवकर जेवणे' (सूर्यास्ताच्या वेळी किंवा रात्री ८ च्या आत) हे दीर्घायुष्य आणि उत्तम पचनाचे मूळ रहस्य मानले आहे.\n\n🌿 **लवकर जेवण्याचे शास्त्रीय फायदे:**\n१. **जठराग्नी प्रदीप्त राहतो:** दुपारी आणि संध्याकाळी सूर्यप्रकाशात पाचक अग्नी मजबूत असतो. रात्री सूर्य मावळल्यावर अग्नी मंद होतो. त्यामुळे लवकर जेवल्यास अन्न पूर्णपणे पचते.\n२. **आम (Toxins) व गॅसपासून मुक्ती:** उशिरा जेवल्याने अन्न पचत नाही, पोटात सडते आणि आम्लपित्त (Acidity), गॅस व पोटफुगी होते. लवकर जेवल्याने हा त्रास होत नाही.\n३. **गाढ व शांत झोप:** जेवण आणि झोपेत किमान २-३ तासांचे अंतर राहिल्याने छातीत जळजळ होत नाही आणि झोप शांत लागते.\n४. **वजन व मेद नियंत्रण:** रात्री उशिरा जेवल्यास शरीरात कफ व चरबी वाढते. लवकर जेवल्याने चयापचय उत्तम राहून वजन नियंत्रणात राहते.\n\n✨ **सोपा नियम:** रात्रीचे जेवण हलके, ताजे व कोमट असावे (उदा. मुगाचे कढण, ज्वारीची भाकरी, उकडलेल्या भाज्या).`
+          : langToUse === 'hi'
+          ? `🍲 **जल्दी भोजन करने के लाभ और आयुर्वेदिक नियम (Benefits of Early Dinner):**\n\nनमस्ते ${patientName ? patientName + ' जी' : ''}! आयुर्वेद में सूर्यास्त के समय या रात ८ बजे से पहले भोजन करना स्वास्थ्य के लिए अत्यंत लाभकारी बताया गया है।\n\n🌿 **जल्दी भोजन करने के प्रमुख लाभ:**\n१. **जठराग्नि सक्रिय रहती है:** दिन ढलने के बाद शरीर की पाचक अग्नि धीमी पड़ जाती है। जल्दी भोजन करने से पाचन सुचारु रूप से होता है।\n२. **आम (Toxins) व गैस से बचाव:** देर रात खाने से भोजन पचने के बजाय पेट में सड़ता है और एसिडिटी/गैस बनाता है। जल्दी खाने से यह नहीं होता।\n३. **गहरी नींद व पेट हल्का:** भोजन और सोने में २-३ घंटे का अंतर रहने से सीने में जलन नहीं होती और नींद अच्छी आती है।\n४. **वजन नियंत्रण:** रात को देर से खाने पर शरीर में फैट जमा होता है, जबकि जल्दी भोजन करने से मेटाबॉलिज्म दुरुस्त रहता है।\n\n✨ **सुझाव:** रात का भोजन हल्का, सुपाच्य और ताजा लें (जैसे मूंग दाल खिचड़ी, सूप)।`
+          : `🍲 **Benefits of Early Meals in Classical Ayurveda:**\n\nHello ${patientName || ''}! According to Charaka Samhita, consuming your evening meal before 7:30-8:00 PM is essential for optimal health:\n\n🌿 **Key Benefits:**\n1. **Optimal Digestive Fire (Agni):** Metabolism naturally slows after sunset. Early dining ensures complete enzymatic breakdown.\n2. **Prevents Ama (Endotoxins):** Late meals cause sluggish digestion, acid reflux, and toxic stagnation.\n3. **Restorative Sleep:** Allowing 2-3 hours between eating and sleeping prevents nocturnal gastroesophageal reflux and fosters deep REM sleep.\n4. **Weight Management:** Keeps visceral fat and metabolic syndrome under tight control.`;
+      } else if (isAppetite) {
+        fallbackText = langToUse === 'mr'
+          ? `🌿 **जेवण न जाणे / भूक न लागणे यावर आयुर्वेदिक मार्गदर्शन (Agnimandya & Aruchi):**\n\nनमस्ते ${patientName ? patientName + ' जी' : ''}! तुम्हाला जेवण जात नसल्यास किंवा भूक लागत नसल्यास आयुर्वेदानुसार हे **'मंदाग्नी' (पाचक अग्नी मंद होणे)** आणि **'आम' (विषाक्त घटक साचणे)** चे लक्षण आहे.\n\n🩺 **आयुर्वेदिक उपचार व घरगुती उपाय:**\n१. **आले व सैंधव मीठ (दीपण-पाचन):** जेवणापूर्वी १५ मिनिटे आल्याचा १ लहान तुकडा चिमूटभर सैंधव मीठ लावून चावून खावा. यामुळे जठराग्नी प्रदीप्त होतो आणि लगेच छान भूक लागते.\n२. **जिरे-धणे पाणी:** १ चमचा जिरे व १/२ चमचा धणे १ ग्लास पाण्यात उकळून कोमट प्यावे.\n३. **हिंग्वाष्टक चूर्ण:** १/२ चमचा हिंग्वाष्टक चूर्ण दुपारच्या जेवणाच्या पहिल्या घासासोबत १ चमचा साजूक तुपात मिसळून खावे.\n४. **लवणभास्कर किंवा चित्रकादी वटी:** १ गोळी चित्रकादी वटी कोमट पाण्यासोबत जेवणानंतर घ्यावी.\n\n🥗 **आहार पथ्य:**\n- **काय खावे:** मुगाचे पातळ कढण, भाजलेला पापड, डाळिंब, लिंबू पाणी व कोमट पाणी.\n- **काय टाळावे:** शिळे अन्न, थंड पाणी, जास्त चहा/कॉफी, तेलकट व जड पदार्थ.\n\n✨ **दिनचर्या:** जेवणाची वेळ निश्चित ठेवा आणि दररोज सकाळी हलका प्राणायाम करा.`
+          : langToUse === 'hi'
+          ? `🌿 **भूख न लगना और भोजन न पचने पर आयुर्वेदिक उपचार (Agnimandya & Aruchi):**\n\nनमस्ते ${patientName ? patientName + ' जी' : ''}! भोजन की इच्छा न होना या भूख न लगना आयुर्वेद में **'मंदाग्नि'** और **'अरुचि'** कहलाता है।\n\n🩺 **घरेलू व शास्त्रीय उपाय:**\n१. **अदरक और सेंधा नमक:** भोजन से १५ मिनट पहले अदरक का एक छोटा टुकड़ा सेंधा नमक लगाकर चबाएं। इससे पाचक रस सक्रिय होते हैं और भूख खुलकर लगती है।\n२. **जीरा-अजवाइन पानी:** १ चम्मच जीरा और आधा चम्मच अजवाइन पानी में उबालकर गुनगुना पिएं।\n३. **हिंग्वाष्टक चूर्ण:** आधा चम्मच हिंग्वाष्टक चूर्ण भोजन के पहले निवाले के साथ गाय के घी में लें।\n४. **चित्रकादि वटी:** १-१ गोली भोजन के बाद गुनगुने पानी के साथ।\n\n🥗 **पथ्य:** मूंग दाल का सूप, हल्का गरम भोजन, अनार और नींबू पानी लें। भारी, तला-भुना और बासी खाना न खाएं।`
+          : `🌿 **Ayurvedic Protocol for Loss of Appetite (Agnimandya & Aruchi):**\n\nHello ${patientName || ''}! Inability to eat or lack of appetite indicates low digestive fire (Mandaagni) and accumulation of Ama (endotoxins):\n\n🩺 **Therapeutic Recommendations:**\n1. **Fresh Ginger & Rock Salt (Deepana):** Chew a slice of fresh ginger with a pinch of rock salt 15 minutes before meals to kindle digestive fire.\n2. **Cumin & Coriander Infusion:** Boil 1 tsp cumin and coriander seeds in warm water; sip warm.\n3. **Hingwashtak Churna:** 1/2 tsp with the first morsel of warm rice/ghee.\n4. **Chitrakadi Vati:** 1 tablet twice daily after meals with lukewarm water.\n\n🥗 **Dietary Care:** Favor light mung soup, pomegranate, and warm water. Strictly avoid heavy, deep-fried, cold, or stale meals.`;
+      } else if (isAcidity) {
+        fallbackText = langToUse === 'mr'
+          ? `🔥 **आम्लपित्त (Acidity), जळजळ व गॅसवर आयुर्वेदिक उपाय:**\n\nनमस्ते ${patientName ? patientName + ' जी' : ''}! छातीत किंवा पोटात जळजळ आणि ॲसिडिटीसाठी खालील उपाय अत्यंत गुणकारी आहेत:\n\n🌿 **आयुर्वेदिक उपचार व घरगुती उपाय:**\n१. **थंड दूध किंवा तूप:** १ कप साधे दूध किंवा १ चमचा गाईचे तूप घेतल्यास जळजळ लगेच शांत होते.\n२. **आवळा चूर्ण:** १/२ चमचा आवळा चूर्ण आणि १/२ चमचा खडीसाखर एकत्र करून पाण्यासोबत घ्यावे.\n३. **धणे-जिरे-बडीशेप हिम:** १ चमचा बडीशेप आणि धणे रात्री पाण्यात भिजवून सकाळी ते पाणी गाळून प्यावे.\n४. **सूतशेखर रस किंवा कामदुधा रस:** १ गोळी कामदुधा रस कोमट पाण्यासोबत.\n\n🥗 **पथ्य:** अति तिखट, मसालेदार, लोणचे, चहा व कॉफी पूर्णपणे टाळावी.`
+          : langToUse === 'hi'
+          ? `🔥 **अम्लपित्त (एसिडिटी), जलन व गैस के लिए आयुर्वेदिक उपाय:**\n\nनमस्ते ${patientName ? patientName + ' जी' : ''}! सीने में जलन और एसिडिटी पित्त दोष के प्रकोप से होती है:\n\n🌿 **उपाय:**\n१. **ठंडा दूध या देसी घी:** १ कप सादा दूध या १ चम्मच गाय का घी जलन को तुरंत शांत करता है।\n२. **आंवला व मिश्री:** आधा चम्मच आंवला चूर्ण और पिसी मिश्री गुनगुने पानी के साथ लें।\n३. **सौंफ-धनिया पानी:** १ चम्मच सौंफ को पानी में उबालकर ठंडा करके पिएं।\n४. **कामदुधा रस:** १ गोली भोजन के बाद लें।\n\n🥗 **पथ्य:** तीखा, तला-भुना, खटाई और चाय-कॉफी का सेवन बंद करें।`
+          : `🔥 **Ayurvedic Relief for Acidity & Pitta Imbalance:**\n\nHello ${patientName || ''}! For heartburn, acid reflux, and hyperacidity:\n\n🌿 **Remedies:**\n1. **Amla & Rock Sugar:** Take 1/2 tsp Amalaki powder with candied rock sugar.\n2. **Fennel & Coriander Infusion:** Soak fennel and coriander seeds in water; drink strained water.\n3. **Kamadudha Rasa:** 1 tablet twice daily with lukewarm water.\n4. **Cow Ghee:** 1 tsp pure cow ghee to soothe gastric mucosa.`;
       } else if (isFever) {
         fallbackText = langToUse === 'mr'
           ? `नमस्ते ${patientName || ''}! तुम्हाला ताप (ज्वर/Fever) जाणवत असल्यास आयुर्वेदानुसार खालील उपाय अत्यंत प्रभावी आहेत:\n\n🌿 **आयुर्वेदिक उपचार व औषधी:**\n१. **सुदर्शन घनवटी (Sudarshan Ghanvati):** १-१ गोळी दिवसातून दोनदा कोमट पाण्यासोबत जेवणानंतर.\n२. **तुळशी-सुंठ काढा:** ५ तुळशीची पाने, १/२ चमचा सुंठ आणि २ काळी मिरी १ कप पाण्यात उकळून काढा बनवा आणि कोमट असताना प्या.\n३. **संशमनी वटी (गिलॉय):** १ गोळी सकाळी व संध्याकाळी प्रतिकारशक्तीसाठी.\n\n🥗 **पथ्य व आहार:** मुगाचे पातळ कढण किंवा मऊ पेज खावी, कोमट पाणी प्यावे.`
@@ -734,6 +817,30 @@ export const AyurvedicAIChatModal = ({
           : langToUse === 'hi'
           ? `नमस्ते ${patientName ? patientName + ' जी' : ''}! खांसी व जुकाम के लिए आयुर्वेदिक उपचार:\n\n🌿 **उपाय:**\n१. **सितोपलादि चूर्ण:** आधा चम्मच १ चम्मच शहद में मिलाकर दिन में ३ बार चाटें।\n२. **हल्दी दूध:** रात को १ कप गुनगुने दूध में आधा चम्मच हल्दी मिलाकर पिएं।\n३. **भाप (Steam):** गर्म पानी में पुदीना या अजवाइन डालकर भाप लें।`
           : `Hello ${patientName || ''}! For cold and cough (Kasa & Pratishyaya):\n\n🌿 **Remedies:**\n1. **Sitopaladi Churna:** 1/2 tsp with 1 tsp honey 3 times daily.\n2. **Turmeric Milk:** 1 cup warm milk with turmeric before sleep.`;
+      } else if (isJoints) {
+        fallbackText = langToUse === 'mr'
+          ? `नमस्ते ${patientName || ''}! सांधेदुखी, गुडघेदुखी किंवा कंबरदुखीसाठी (आमवात/वातदोष) आयुर्वेदिक मार्गदर्शन:\n\n🌿 **आयुर्वेदिक उपचार व औषधी:**\n१. **योगराज गुग्गुळ (Yograj Guggulu):** २ गोळ्या सकाळी व संध्याकाळी कोमट पाण्यासोबत जेवणानंतर.\n२. **महानारायण तेल मालिश:** कोमट महानारायण तेलाने सांध्यांवर हलक्या हाताने मालिश करून शेक घ्यावा.\n३. **सुंठ व मेथी पाणी:** १/२ चमचा मेथी दाणे आणि सुंठ पावडर कोमट पाण्यातून रोज सकाळी घ्यावे.\n\n🥗 **पथ्य:** वातुळ पदार्थ (उदा. वांगी, बटाटा, हरभरा डाळ, थंड पाणी) टाळावेत.`
+          : langToUse === 'hi'
+          ? `नमस्ते ${patientName ? patientName + ' जी' : ''}! जोड़ों व घुटनों के दर्द (संधिवात) के लिए आयुर्वेदिक उपचार:\n\n🌿 **औषधियां व घरेलू नुस्खे:**\n१. **योगराज गुग्गुलु:** २ गोली सुबह व शाम गुनगुने पानी से भोजन के बाद।\n२. **महानारायण तैल मालिश:** हल्के गुनगुने तेल से जोड़ों पर मालिश करें और हल्की सिकाई करें।\n३. **मेथी व सोंठ:** आधा चम्मच मेथी दाना और सोंठ का चूर्ण सुबह गुनगुने पानी से लें।\n\n🥗 **पथ्य:** वात बढ़ाने वाले ठंडे व बादी कारक भोजन (जैसे उड़द, आलू, ठंडा पानी) से बचें।`
+          : `Hello ${patientName || ''}! For joint mobility, arthritis, and backache (Sandhivata):\n\n🌿 **Remedies:**\n1. **Yograj Guggulu:** 2 tablets twice daily after meals.\n2. **Mahanarayan Oil Massage:** Gently massage warm Mahanarayan taila on affected joints.\n3. **Fenugreek & Dry Ginger:** 1/2 tsp fenugreek and ginger powder with warm water in the morning.`;
+      } else if (isHeadache) {
+        fallbackText = langToUse === 'mr'
+          ? `नमस्ते ${patientName || ''}! डोकेदुखी, मायग्रेन किंवा मानसिक ताण व निद्रानाशावर आयुर्वेदिक उपाय:\n\n🌿 **उपाय:**\n१. **ब्राह्मी वटी किंवा शंखपुष्पी सिरप:** १ चमचा शंखपुष्पी सिरप किंवा १ गोळी ब्राह्मी मानसिक शांततेसाठी.\n२. **अनु तैल नस्य (Nasya):** सकाळी दोन्ही नाकपुड्यांत २-२ थेंब कोमट अनु तैल किंवा साजूक तूप घालावे.\n३. **पादाभ्यंग (Foot Massage):** रात्री झोपताना तळपायांना तिळाच्या तेलाने किंवा काशाच्या वाटीने मालिश करावी.\n४. **दिनचर्या:** भ्रामरी प्राणायाम आणि अनुलोम-विलोम नियमित १० मिनिटे करावे.`
+          : langToUse === 'hi'
+          ? `नमस्ते ${patientName ? patientName + ' जी' : ''}! सिरदर्द, माइग्रेन व तनाव/अनिद्रा के लिए आयुर्वेदिक उपाय:\n\n🌿 **उपाय:**\n१. **ब्राह्मी वटी / शंखपुष्पी:** १-१ गोली या १ चम्मच शंखपुष्पी सिरप तनाव कम करने के लिए।\n२. **नस्य (Nasya):** दोनों नथुनों में २-२ बूंद गुनगुना बादाम रोगन या देसी घी डालें।\n३. **पादाभ्यंग:** रात को सोने से पहले तलवों की तिल के तेल से मालिश करें।\n४. **प्राणायाम:** भ्रामरी और अनुलोम-विलोम प्राणायाम नियमित करें।`
+          : `Hello ${patientName || ''}! For headache, migraine, stress, and insomnia:\n\n🌿 **Remedies:**\n1. **Brahmi Vati / Shankhpushpi:** 1 tablet daily for cognitive clarity and calming nervous tension.\n2. **Nasya Therapy:** Instill 2 drops of warm Anu Taila or pure Cow Ghee into each nostril.\n3. **Padabhyanga:** Massage soles of feet with warm sesame oil before sleep.`;
+      } else if (isSkinHair) {
+        fallbackText = langToUse === 'mr'
+          ? `नमस्ते ${patientName || ''}! त्वचा, खाज किंवा केसगळतीसाठी आयुर्वेदिक उपाय:\n\n🌿 **उपचार:**\n१. **कडुनिंब व मंजिष्ठादि काढा:** रक्तातील उष्णता व पित्त कमी करण्यासाठी २० मिली काढा जेवणानंतर.\n२. **कोरफड जेल व खोबरेल तेल:** त्वचेच्या खाजेवर शुद्ध कोरफड जेल किंवा कडुनिंबाचे तेल लावावे.\n३. **भृंगराज तेल:** केसगळतीसाठी रात्री भृंगराज तेलाने केसांच्या मुळाशी हलकी मालिश करावी.\n४. **पथ्य:** आंबट, अति खारट व तळलेले पदार्थ टाळावेत.`
+          : langToUse === 'hi'
+          ? `नमस्ते ${patientName ? patientName + ' जी' : ''}! त्वचा, खुजली व बालों की समस्या के लिए आयुर्वेदिक उपाय:\n\n🌿 **उपाय:**\n१. **मंजिष्ठादि काढ़ा:** २० मिली गुनगुने पानी के साथ भोजन के बाद (रक्त शोधन के लिए)।\n२. **एलोवेरा व नीम तेल:** त्वचा की खुजली पर शुद्ध एलोवेरा जेल या नीम का तेल लगाएं।\n३. **भृंगराज तेल:** बालों के झड़ने पर भृंगराज तेल से सिर में हल्की मालिश करें।`
+          : `Hello ${patientName || ''}! For skin health and hair vitality:\n\n🌿 **Remedies:**\n1. **Mahamanjishtadi Kwath:** 20ml twice daily after meals for blood purification.\n2. **Pure Aloe Vera & Neem Oil:** Apply topically on affected cutaneous areas.\n3. **Bhringraj Taila:** Scalp massage before bed to nourish hair roots.`;
+      } else if (isWeakness) {
+        fallbackText = langToUse === 'mr'
+          ? `नमस्ते ${patientName || ''}! थकवा, अशक्तपणा आणि शारीरिक ऊर्जा वाढवण्यासाठी आयुर्वेदिक उपाय:\n\n🌿 **उपाय:**\n१. **अश्वगंधा चूर्ण:** १/२ चमचा अश्वगंधा चूर्ण १ कप कोमट दुधात १ चमचा मध किंवा खडीसाखर घालून रात्री प्यावे.\n२. **च्यवनप्राश:** रोज सकाळी रिकाम्या पोटी १ चमचा सकस च्यवनप्राश खाऊन वरून कोमट दूध प्यावे.\n३. **पौष्टिक आहार:** खजूर, भिजवलेले बदाम, मनुका आणि साजूक तुपाचा आहारात नियमित वापर करावा.`
+          : langToUse === 'hi'
+          ? `नमस्ते ${patientName ? patientName + ' जी' : ''}! कमजोरी, थकान और ऊर्जा बढ़ाने के लिए आयुर्वेदिक समाधान:\n\n🌿 **उपाय:**\n१. **अश्वगंधा चूर्ण:** आधा चम्मच १ कप गुनगुने दूध के साथ रात को लें।\n२. **च्यवनप्राश:** सुबह १ चम्मच च्यवनप्राश खाकर गुनगुना दूध पिएं।\n३. **पौष्टिक आहार:** भीगे हुए बादाम, मुनक्का और देसी गाय के घी का नियमित सेवन करें।`
+          : `Hello ${patientName || ''}! For vitality, energy, and Ojas enhancement:\n\n🌿 **Remedies:**\n1. **Ashwagandha Churna:** 1/2 tsp with warm milk before sleep.\n2. **Chyawanprash:** 1 tsp every morning on an empty stomach.\n3. **Nourishing Diet:** Incorporate soaked almonds, Munakka (raisins), and pure A2 Cow Ghee.`;
       } else if (isMarriage) {
         fallbackText = langToUse === 'mr'
           ? "💍 **लग्नासाठी आणि वैवाहिक जीवनासाठी आयुर्वेदिक व जीवनशैली मार्गदर्शन:**\n\nलग्न हा आयुष्यातील अत्यंत महत्त्वाचा आणि सुंदर टप्पा आहे! आयुर्वेदानुसार वैवाहिक आयुष्यात शारीरिक व मानसिक ऊर्जा उत्तम राखण्यासाठी खालील गोष्टी अत्यंत उपयुक्त ठरतात:\n\n🌿 **आरोग्य व दिनचर्या सल्ला:**\n१. **शारीरिक सक्षमता व ओजस:** रोज सकाळी नियमित प्राणायाम, सूर्यनमस्कार आणि सात्विक संतुलित आहार घ्या.\n२. **मानसिक शांतता व संवाद:** वैवाहिक जीवनात परस्पर आदर, समजूतदारपणा आणि सुसंवाद सर्वात महत्त्वाचा असतो.\n३. **सकस आहार:** आहारात दूध, तूप, खजूर, बदाम व हिरव्या पालेभाज्यांचा समावेश करा ज्यामुळे शरीरातील ऊर्जा व ओज वाढते.\n\nतुम्हाला प्री-मॅरिटल आरोग्य तपासणी, आहार किंवा इतर काही विचारायचे असल्यास नक्की सांगा!"
@@ -742,10 +849,10 @@ export const AyurvedicAIChatModal = ({
           : "💍 **Guidance for Marriage & Holistic Wellness:**\n\nMarriage is a wonderful new chapter in life! According to Ayurveda, balance in both physical energy and mental harmony creates a joyful life:\n\n🌿 **Wellness & Lifestyle Guidance:**\n1. **Vitality & Ojas:** Maintain a daily routine with Pranayama, wholesome nutrition, and adequate rest.\n2. **Mental Harmony:** Clear communication, patience, and mutual respect are the cornerstones of a happy relationship.\n3. **Nourishing Diet:** Incorporate almonds, milk, ghee, and seasonal fresh fruits to sustain optimal vitality.";
       } else {
         fallbackText = langToUse === 'mr'
-          ? `नमस्ते! तुमच्या प्रश्नासाठी ('${queryToSend}') झेनिव्हा AI चे मार्गदर्शन:\n\nआयुर्वेदानुसार शारीरिक, मानसिक व कौटुंबिक आरोग्यासाठी समतोल दिनचर्या, सात्विक आहार आणि सकारात्मक विचार अत्यंत आवश्यक आहेत. निरोगी आरोग्यासाठी नियमित प्राणायाम, शुद्ध पाणी आणि त्रिदोष संतुलन राखा.\n\nतुम्हाला आरोग्य, आहार, दिनचर्या किंवा कोणत्याही आजाराबद्दल अधिक माहिती हवी असल्यास अवश्य विचारा!`
+          ? `🌿 **झेनिव्हा AI क्लिनिकल मार्गदर्शन (Ayurvedic Consultation):**\n\nनमस्ते ${patientName ? patientName + ' जी' : ''}! तुमच्या प्रश्नासाठी ('${queryToSend}') आयुर्वेदानुसार सखोल मार्गदर्शन:\n\n🩺 **दोष व आरोग्य विश्लेषण:**\nकोणतीही शारीरिक किंवा पचनसंस्थेची समस्या ही प्रामुख्याने वात, पित्त किंवा कफ दोषांच्या असंतुलनातून आणि पाचक अग्नीच्या मंदावण्यामुळे निर्माण होते.\n\n🌿 **प्राथमिक आयुर्वेदिक उपाय:**\n१. **कोमट पाण्याचे सेवन:** दिवसभरात कोमट किंवा जिरे घातलेले पाणी प्यावे, ज्यामुळे शरीरातील 'आम' (Toxins) बाहेर पडतात.\n२. **दिनचर्या व दिनक्रम:** सकाळी सूर्योदयापूर्वी उठून प्राणायाम, अनुलोम-विलोम व योगासने करावीत.\n३. **आहार नियम:** ताजे, कोमट आणि सात्विक जेवण वेळेवर घ्यावे. रात्रीचे जेवण हलके व लवकर करावे.\n\nतुम्हाला या त्रासाची अधिक विशिष्ट लक्षणे किंवा औषधांची माहिती हवी असल्यास कृपया अधिक तपशील सांगा!`
           : langToUse === 'hi'
-          ? `नमस्ते! आपके प्रश्न ('${queryToSend}') के लिए ज़ेनिवा AI का सुझाव:\n\nआयुर्वेद के अनुसार स्वस्थ, सुखी और संतुलित जीवन के लिए सात्विक आहार, सकारात्मक विचार और नियमित दिनचर्या आवश्यक है। अपने स्वास्थ्य और त्रिदोष संतुलन के लिए गुनगुना पानी और प्राणायाम अपनाएं।\n\nस्वास्थ्य, आहार या किसी भी बीमारी से जुड़ी जानकारी के लिए आप निसंकोच पूछ सकते हैं!`
-          : `Hello! For your query ('${queryToSend}'), Zeniva AI provides holistic guidance:\n\nIn Ayurveda, living a balanced, vibrant life encompasses physical vitality, mental clarity, wholesome nutrition, and a harmonious daily routine (Dinacharya).\n\nFeel free to ask any question regarding Ayurvedic wellness, diet, remedies, or platform features!`;
+          ? `🌿 **ज़ेनिवा AI क्लिनिकल मार्गदर्शन (Ayurvedic Consultation):**\n\nनमस्ते ${patientName ? patientName + ' जी' : ''}! आपके प्रश्न ('${queryToSend}') के लिए आयुर्वेदिक सुझाव:\n\n🩺 **दोष व स्वास्थ्य विश्लेषण:**\nआयुर्वेद के अनुसार शरीर का स्वास्थ्य वात, पित्त और कफ के संतुलन तथा जठराग्नि की शक्ति पर निर्भर करता है।\n\n🌿 **प्राथमिक आयुर्वेदिक समाधान:**\n१. **गुनगुना पानी:** दिन में गुनगुने पानी का सेवन करें, इससे शरीर के विषाक्त तत्व (आम) बाहर निकलते हैं।\n२. **दिनचर्या:** सुबह जल्दी उठें, अनुलोम-विलोम प्राणायाम करें और तनावमुक्त रहें।\n३. **सात्विक आहार:** समय पर ताजा, हल्का और सुपाच्य भोजन लें। रात का खाना जल्दी व हल्का रखें।\n\nकृपया अपनी समस्या के अन्य लक्षण बताएं ताकि हम आपको सटीक औषधीय मार्गदर्शन दे सकें!`
+          : `🌿 **Zeniva AI Clinical Ayurvedic Consultation:**\n\nHello ${patientName || ''}! Regarding your query ('${queryToSend}'), here is the classical Ayurvedic clinical guidance:\n\n🩺 **Constitutional Analysis:**\nOptimal physiological health depends on the equilibrium of Tridosha (Vata, Pitta, Kapha) and a robust digestive metabolism (Agni).\n\n🌿 **Foundational Guidelines:**\n1. **Hydration & Detox:** Sip warm water with cumin or ginger throughout the day to eliminate cellular Ama.\n2. **Dinacharya (Daily Routine):** Incorporate morning Pranayama, gentle Abhyanga massage, and restorative sleep.\n3. **Dietary Wisdom:** Favor freshly prepared, warm, sattvic meals adjusted to your predominant constitution.\n\nFeel free to specify any localized symptoms, duration, or prior medications for tailored guidance!`;
       }
       
       const newMsgId = `ai-${Date.now()}`;

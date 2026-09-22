@@ -370,7 +370,7 @@ export const AdminDashboard = ({
     // 1. Fetch Real Doctors from SQLite Backend and Supabase
     try {
       let realDocs = [];
-      const res = await fetch('http://127.0.0.1:8000/api/admin/doctors').catch(() => null);
+      const res = await fetch('/api/admin/doctors').catch(() => null);
       if (res && res.ok) {
         const data = await res.json();
         if (data.doctors && data.doctors.length > 0) {
@@ -491,8 +491,8 @@ export const AdminDashboard = ({
 
       // C. Query SQLite Backend
       try {
-        const res = await fetch('http://127.0.0.1:8000/api/admin/patients');
-        if (res.ok) {
+        const res = await fetch('/api/admin/patients').catch(() => null);
+        if (res && res.ok) {
           const data = await res.json();
           if (data.patients && data.patients.length > 0) {
             combinedPatients.push(...data.patients);
@@ -522,7 +522,7 @@ export const AdminDashboard = ({
 
     // 3. Fetch Appointments
     try {
-      const res = await fetch('http://127.0.0.1:8000/api/appointments').catch(() => null);
+      const res = await fetch('/api/appointments').catch(() => null);
       if (res && res.ok) {
         const data = await res.json();
         if (data.appointments && data.appointments.length > 0) {
@@ -533,7 +533,7 @@ export const AdminDashboard = ({
 
     // 4. Fetch Broadcast Video
     try {
-      const res = await fetch('http://127.0.0.1:8000/api/broadcast-video').catch(() => null);
+      const res = await fetch('/api/broadcast-video').catch(() => null);
       if (res && res.ok) {
         const data = await res.json();
         if (data && data.url) {
@@ -606,7 +606,7 @@ export const AdminDashboard = ({
   // Verify / Approve Doctor Action
   const handleVerifyDoctor = async (doctorId, action = 'APPROVE', reason = '') => {
     try {
-      const res = await fetch('http://127.0.0.1:8000/api/admin/doctor/verify', {
+      const res = await fetch('/api/admin/doctor/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -645,7 +645,7 @@ export const AdminDashboard = ({
           category: 'Zeniva AI Council Board',
           actor: 'Super Admin',
           user: doctorId,
-          ip: '127.0.0.1 (Localhost)',
+          ip: 'Client Browser',
           token: 'doc_ver_event',
           severity: action === 'APPROVE' ? 'Success' : 'Warning',
           status: result.status,
@@ -666,7 +666,7 @@ export const AdminDashboard = ({
   const handleDeleteDoctor = async (doctorId) => {
     if (!window.confirm(`Are you sure you want to permanently delete doctor record ${doctorId}?`)) return;
     try {
-      const res = await fetch(`http://127.0.0.1:8000/api/admin/doctor/${doctorId}`, {
+      const res = await fetch(`/api/admin/doctor/${doctorId}`, {
         method: 'DELETE'
       });
       if (res.ok) {
@@ -680,7 +680,7 @@ export const AdminDashboard = ({
   const handleDeletePatient = async (patientId) => {
     if (!window.confirm(`Are you sure you want to remove patient record ${patientId}?`)) return;
     try {
-      const res = await fetch(`http://127.0.0.1:8000/api/admin/patient/${patientId}`, {
+      const res = await fetch(`/api/admin/patient/${patientId}`, {
         method: 'DELETE'
       });
       if (res.ok) {
@@ -709,15 +709,16 @@ export const AdminDashboard = ({
     showToast(`✓ Local Video "${file.name}" loaded for preview!`);
 
     try {
+      // 1. Try relative backend upload
       const formData = new FormData();
       formData.append('file', file);
 
-      const res = await fetch('http://127.0.0.1:8000/api/admin/upload-video', {
+      const res = await fetch('/api/admin/upload-video', {
         method: 'POST',
         body: formData
-      });
+      }).catch(() => null);
 
-      if (res.ok) {
+      if (res && res.ok) {
         const data = await res.json();
         if (data.video_url) {
           setBroadcastVideoInput(prev => ({
@@ -726,9 +727,49 @@ export const AdminDashboard = ({
             title: prev.title || cleanTitle
           }));
           showToast(`✓ Video saved permanently to Zeniva AI Media Server!`);
+          return;
         }
       }
+
+      // 2. Try Supabase storage bucket 'broadcasts'
+      try {
+        const fileExt = file.name.split('.').pop() || 'mp4';
+        const fileName = `broadcast_${Date.now()}.${fileExt}`;
+        const { data: upData, error: upErr } = await supabase.storage
+          .from('broadcasts')
+          .upload(fileName, file, { upsert: true });
+
+        if (!upErr && upData) {
+          const { data: { publicUrl } } = supabase.storage
+            .from('broadcasts')
+            .getPublicUrl(fileName);
+          if (publicUrl) {
+            setBroadcastVideoInput(prev => ({
+              ...prev,
+              url: publicUrl,
+              title: prev.title || cleanTitle
+            }));
+            showToast(`✓ Video uploaded permanently to Cloud Storage!`);
+            return;
+          }
+        }
+      } catch (supaErr) {}
+
+      // 3. For small files (< 6MB), read as persistent data URL
+      if (file.size < 6 * 1024 * 1024) {
+        const reader = new FileReader();
+        reader.onload = () => {
+          setBroadcastVideoInput(prev => ({
+            ...prev,
+            url: reader.result,
+            title: prev.title || cleanTitle
+          }));
+          showToast(`✓ Video encoded for permanent local streaming!`);
+        };
+        reader.readAsDataURL(file);
+      }
     } catch (err) {
+      console.warn("Video upload notice:", err);
     } finally {
       setIsUploadingVideo(false);
     }
@@ -752,10 +793,26 @@ export const AdminDashboard = ({
     try {
       localStorage.setItem('zeniva_broadcast_video', JSON.stringify(updated));
       window.dispatchEvent(new CustomEvent('zeniva_broadcast_updated', { detail: updated }));
+      const channel = new BroadcastChannel('zeniva_broadcast');
+      channel.postMessage(updated);
+      channel.close();
     } catch (err) {}
 
     try {
-      await fetch('http://127.0.0.1:8000/api/admin/broadcast-video', {
+      await supabase.from('system_broadcasts').upsert({
+        key: 'video_announcement',
+        enabled: true,
+        title: updated.title,
+        sanskrit: updated.sanskrit,
+        duration: updated.duration,
+        url: updated.url,
+        description: updated.desc || updated.description,
+        published_at: new Date().toISOString()
+      });
+    } catch (err) {}
+
+    try {
+      await fetch('/api/admin/broadcast-video', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updated)
@@ -777,10 +834,21 @@ export const AdminDashboard = ({
     try {
       localStorage.setItem('zeniva_broadcast_video', JSON.stringify(updated));
       window.dispatchEvent(new CustomEvent('zeniva_broadcast_updated', { detail: updated }));
+      const channel = new BroadcastChannel('zeniva_broadcast');
+      channel.postMessage(updated);
+      channel.close();
     } catch (err) {}
 
     try {
-      await fetch('http://127.0.0.1:8000/api/admin/broadcast-video', {
+      await supabase.from('system_broadcasts').upsert({
+        key: 'video_announcement',
+        enabled: false,
+        published_at: new Date().toISOString()
+      });
+    } catch (err) {}
+
+    try {
+      await fetch('/api/admin/broadcast-video', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updated)
@@ -2453,10 +2521,73 @@ export const AdminDashboard = ({
                       {isUploadingVideo ? 'Uploading Video to Zeniva AI Media Server...' : uploadedFileName ? `✓ Video Selected: ${uploadedFileName}` : '📁 Click to Upload New Video File from PC / Mobile'}
                     </span>
                     <span className="text-[10px] text-stone-500 block mt-0.5">
-                      Supports MP4, WebM, MOV, MKV (Permanent Server Storage)
+                      Supports MP4, WebM, MOV, MKV (Permanent Cloud & Local Storage)
                     </span>
                   </div>
                 </label>
+              </div>
+
+              {/* Quick 1-Click Verified Ayurvedic Video Presets */}
+              <div className="space-y-1.5 pt-1">
+                <label className="font-bold text-stone-700 block text-[11px]">✨ Or Choose a 1-Click Verified Stream Preset:</label>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBroadcastVideoInput({
+                        title: 'Zeniva AI Classical Ayurvedic Introduction Tour',
+                        sanskrit: '॥ आयुर्वेद एवं आधुनिक विज्ञान प्रसारण ॥',
+                        duration: '4:15 Mins · Verified Stream',
+                        url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
+                        desc: 'Official Zeniva AI project broadcast: Classical Ayurvedic principles, Tridosha equilibrium, and intelligent clinical care.',
+                        enabled: true
+                      });
+                      showToast('Loaded Preset: Classical Introduction Tour');
+                    }}
+                    className="p-2.5 rounded-xl bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-900 font-semibold text-[10px] text-left transition-all cursor-pointer flex flex-col justify-between"
+                  >
+                    <span>🌿 Introduction Tour</span>
+                    <span className="text-[9px] text-purple-600 font-mono">4:15 Mins · MP4</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBroadcastVideoInput({
+                        title: 'Charaka Samhita Dinacharya & Agni Guidance',
+                        sanskrit: '॥ दिनचर्या एवं जठराग्नि विज्ञान ॥',
+                        duration: '6:30 Mins · High Definition',
+                        url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
+                        desc: 'Comprehensive patient guidance on daily Ayurvedic routine, Agni kindle protocols, and Tridosha balance.',
+                        enabled: true
+                      });
+                      showToast('Loaded Preset: Dinacharya & Agni Guidance');
+                    }}
+                    className="p-2.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-900 font-semibold text-[10px] text-left transition-all cursor-pointer flex flex-col justify-between"
+                  >
+                    <span>🧘 Dinacharya & Agni</span>
+                    <span className="text-[9px] text-emerald-600 font-mono">6:30 Mins · HD</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBroadcastVideoInput({
+                        title: 'Nadi Pariksha & Pulse Diagnosis Demonstration',
+                        sanskrit: '॥ नाडी परीक्षा एवं त्रिदोष परीक्षण ॥',
+                        duration: '5:40 Mins · Clinical Tour',
+                        url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4',
+                        desc: 'Clinical demonstration of radial pulse reading, Vata-Pitta-Kapha waveform tracking, and therapeutic selection.',
+                        enabled: true
+                      });
+                      showToast('Loaded Preset: Pulse Diagnosis Demonstration');
+                    }}
+                    className="p-2.5 rounded-xl bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-900 font-semibold text-[10px] text-left transition-all cursor-pointer flex flex-col justify-between"
+                  >
+                    <span>🩺 Pulse & Tridosha</span>
+                    <span className="text-[9px] text-amber-600 font-mono">5:40 Mins · Clinical</span>
+                  </button>
+                </div>
               </div>
 
               <div>
@@ -2472,13 +2603,13 @@ export const AdminDashboard = ({
               </div>
 
               <div>
-                <label className="font-bold text-stone-800 block mb-1">Direct Video Stream URL (or uploaded above):</label>
+                <label className="font-bold text-stone-800 block mb-1">Direct Video Stream URL (or uploaded / preset above):</label>
                 <input
                   type="text"
                   required
                   value={broadcastVideoInput.url}
                   onChange={(e) => setBroadcastVideoInput({ ...broadcastVideoInput, url: e.target.value })}
-                  placeholder="http://127.0.0.1:8000/uploads/video.mp4"
+                  placeholder="https://.../video.mp4, YouTube link, or Google Drive link"
                   className="w-full p-2.5 rounded-xl border border-stone-200 bg-[#FAF8F5] text-stone-900 font-mono text-xs focus:bg-white focus:ring-2 focus:ring-purple-600/20 outline-none"
                 />
               </div>

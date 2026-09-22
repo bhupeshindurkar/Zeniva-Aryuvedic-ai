@@ -222,7 +222,7 @@ class AyurvedicRAGEngine:
             else:
                 messages.append({"role": "user", "content": user_prompt})
 
-            model_name = os.getenv("OPENROUTER_MODEL", "meta-llama/llama-3.3-70b-instruct")
+            model_name = os.getenv("OPENROUTER_MODEL", "meta-llama/llama-3.1-8b-instruct")
             payload = {
                 "model": model_name,
                 "messages": messages,
@@ -230,7 +230,7 @@ class AyurvedicRAGEngine:
                 "max_tokens": 650
             }
             try:
-                resp = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload, timeout=3.5)
+                resp = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload, timeout=15.0)
                 if resp.status_code == 200:
                     data = resp.json()
                     choices = data.get("choices", [])
@@ -238,10 +238,18 @@ class AyurvedicRAGEngine:
                         content = choices[0]["message"].get("content")
                         if content:
                             return content.strip()
-                else:
+                elif resp.status_code != 200:
                     print(f"[OpenRouter API Status {resp.status_code}]:", resp.text)
+                    # Try fallback to 70B if 8B failed
+                    fallback_payload = {**payload, "model": "meta-llama/llama-3.3-70b-instruct"}
+                    fb_resp = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=fallback_payload, timeout=15.0)
+                    if fb_resp.status_code == 200:
+                        fb_data = fb_resp.json()
+                        fb_choices = fb_data.get("choices", [])
+                        if fb_choices and "message" in fb_choices[0]:
+                            return fb_choices[0]["message"].get("content", "").strip()
             except Exception as e_m:
-                print(f"[OpenRouter Fast Timeout/Error]:", e_m)
+                print(f"[OpenRouter Timeout/Error]:", e_m)
         except Exception as e:
             print("[OpenRouter API Error]:", e)
         return None

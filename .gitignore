@@ -27,6 +27,9 @@ ENV/
 # Large database & media files (if needed)
 *.sqlite3
 *.db-journal
+backend/uploads/*.mp4
+backend/uploads/*.mov
+backend/uploads/*.webm
 
 # Logs
 *.log

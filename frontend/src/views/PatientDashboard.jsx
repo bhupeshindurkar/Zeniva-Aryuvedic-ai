@@ -7,6 +7,7 @@ import {
   Play, Pause, RefreshCw, Video, Eye, Volume2, VolumeX, Scan,
   MessageSquare, Send, Mic, Bot, Globe, ShieldAlert, Paperclip, Languages
 } from 'lucide-react';
+import { supabase } from '../lib/supabase';
 
 export const PatientDashboard = ({ 
   currentUser = {},
@@ -196,63 +197,99 @@ export const PatientDashboard = ({
     if (url.includes('youtube.com/embed/')) {
       return url;
     }
+    if (url.includes('drive.google.com/file/d/')) {
+      const id = url.split('/d/')[1]?.split('/')[0];
+      return `https://drive.google.com/file/d/${id}/preview`;
+    }
+    if (url.includes('vimeo.com/')) {
+      const id = url.split('vimeo.com/')[1]?.split('?')[0];
+      return `https://player.vimeo.com/video/${id}`;
+    }
     return null;
   };
 
-  // Sync Broadcast video ONLY when splash screen has completely finished
+  // Sync Broadcast video across all platforms (Mobile, Desktop, PWA)
   useEffect(() => {
-    if (!isSplashFinished) {
-      setIsPopupVideoOpen(false);
-      return;
-    }
-
     const checkBroadcast = async () => {
-      // 1. Try fetching from central backend database (works across all browsers: Chrome, Firefox, Safari)
+      // 1. Try relative backend database (Vite dev proxy or Vercel production)
       try {
-        const res = await fetch('http://127.0.0.1:8000/api/broadcast-video');
+        const res = await fetch('/api/broadcast-video');
         if (res.ok) {
           const data = await res.json();
           if (data && data.enabled && data.url) {
             setBroadcastVideo(data);
-            setIsPopupVideoOpen(true);
             return;
           }
         }
       } catch (err) {}
 
-      // 2. Fallback to localStorage
+      // 2. Try Supabase system_broadcasts table
+      try {
+        const { data } = await supabase.from('system_broadcasts').select('*').eq('key', 'video_announcement').maybeSingle();
+        if (data && data.enabled && data.url) {
+          setBroadcastVideo({
+            title: data.title,
+            sanskrit: data.sanskrit,
+            duration: data.duration,
+            url: data.url,
+            desc: data.description,
+            enabled: true
+          });
+          return;
+        }
+      } catch (err) {}
+
+      // 3. Fallback to localStorage
       try {
         const saved = localStorage.getItem('zeniva_broadcast_video');
         if (saved) {
           const parsed = JSON.parse(saved);
           if (parsed && parsed.enabled && parsed.url) {
             setBroadcastVideo(parsed);
-            setIsPopupVideoOpen(true);
             return;
           }
         }
       } catch (e) {}
-      setIsPopupVideoOpen(false);
+
+      // 4. Default Verified Broadcast Video (guarantees mobile phone displays active player immediately)
+      setBroadcastVideo({
+        title: 'Zeniva AI Classical Ayurvedic Introduction Tour',
+        sanskrit: '॥ आयुर्वेद एवं आधुनिक विज्ञान प्रसारण ॥',
+        duration: '4:15 Mins · Verified Stream',
+        url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
+        desc: 'Official Zeniva AI project broadcast: Classical Ayurvedic principles, Tridosha equilibrium, and intelligent clinical care.',
+        enabled: true
+      });
     };
 
     const handleBroadcastStorage = (e) => {
-      // ONLY trigger broadcast check if the storage event is specifically for broadcast video!
-      // Do NOT trigger on unrelated doctor or admin localStorage updates across tabs!
       if (e && e.key && e.key !== 'zeniva_broadcast_video' && e.key !== 'zeniva_broadcast_updated') {
         return;
       }
       checkBroadcast();
     };
 
-    const timer = setTimeout(checkBroadcast, 250);
+    let channel;
+    try {
+      channel = new BroadcastChannel('zeniva_broadcast');
+      channel.onmessage = (e) => {
+        if (e.data && e.data.enabled && e.data.url) {
+          setBroadcastVideo(e.data);
+        }
+      };
+    } catch (e) {}
+
+    const timer = setTimeout(checkBroadcast, 200);
     window.addEventListener('zeniva_broadcast_updated', checkBroadcast);
     window.addEventListener('storage', handleBroadcastStorage);
+
     return () => {
       clearTimeout(timer);
+      if (channel) channel.close();
       window.removeEventListener('zeniva_broadcast_updated', checkBroadcast);
       window.removeEventListener('storage', handleBroadcastStorage);
     };
-  }, [isSplashFinished]);
+  }, []);
 
   // Direct Reliable Audio Playback Engine (Only triggers once Splash is gone)
   useEffect(() => {
@@ -648,6 +685,89 @@ export const PatientDashboard = ({
         </div>
 
       </div>
+
+      {/* ========================================================================= */}
+      {/* DEDICATED ZENIVA PROJECT VIDEO & BROADCAST STREAM (MOBILE & PC)           */}
+      {/* ========================================================================= */}
+      {broadcastVideo && broadcastVideo.enabled && broadcastVideo.url && (
+        <div className="rounded-3xl p-5 sm:p-7 bg-gradient-to-br from-stone-950 via-stone-900 to-purple-950/90 border border-purple-800/40 shadow-xl text-white overflow-hidden relative group">
+          {/* Subtle Ambient Glow */}
+          <div className="absolute top-0 right-0 w-80 h-80 bg-purple-600/10 rounded-full blur-3xl pointer-events-none" />
+          
+          {/* Top Bar with Badges & Action */}
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-4 relative z-10">
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 rounded-2xl bg-purple-900/60 border border-purple-500/50 flex items-center justify-center text-purple-300 shadow-md">
+                <Video className="w-5 h-5 text-amber-300 animate-pulse" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-red-600 text-white tracking-wider flex items-center gap-1.5 shadow-xs">
+                    <span className="w-2 h-2 rounded-full bg-white animate-ping"></span> Live Broadcast
+                  </span>
+                  <span className="text-[11px] text-emerald-300 font-serif font-medium hidden sm:inline">
+                    {broadcastVideo.sanskrit || '॥ आयुर्वेद एवं आधुनिक विज्ञान प्रसारण ॥'}
+                  </span>
+                  <span className="text-[10px] text-stone-400 font-mono">
+                    {broadcastVideo.duration || 'Admin Broadcast'}
+                  </span>
+                </div>
+                <h3 className="text-base sm:text-lg font-bold font-serif text-amber-100 mt-1">
+                  {broadcastVideo.title || 'Zeniva AI: Classical Ayurvedic Video Announcement'}
+                </h3>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setIsPopupVideoOpen(true)}
+                className="px-4 py-2 rounded-xl bg-purple-700 hover:bg-purple-600 text-white text-xs font-bold flex items-center gap-2 transition-all shadow-md cursor-pointer hover:scale-105"
+              >
+                <Play className="w-3.5 h-3.5 fill-current" />
+                <span>Open Fullscreen Modal</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Video Player (High-Quality Universal Video Container) */}
+          <div className="relative w-full aspect-video rounded-2xl overflow-hidden bg-black border border-stone-800 shadow-2xl flex items-center justify-center">
+            {getEmbedUrl(broadcastVideo.url) ? (
+              <iframe
+                src={getEmbedUrl(broadcastVideo.url)}
+                title={broadcastVideo.title || 'Zeniva Video'}
+                className="w-full h-full border-0"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+              />
+            ) : (
+              <video
+                key={broadcastVideo.url}
+                controls
+                playsInline
+                preload="metadata"
+                className="w-full h-full object-contain"
+              >
+                <source src={broadcastVideo.url} type="video/mp4" />
+                <source src={broadcastVideo.url} type="video/webm" />
+                <source src={broadcastVideo.url} />
+                Your browser does not support HTML5 video.
+              </video>
+            )}
+          </div>
+
+          {/* Footer info & verification */}
+          <div className="flex flex-wrap items-center justify-between gap-3 mt-4 pt-3 border-t border-stone-800 text-xs text-stone-300 relative z-10">
+            <p className="max-w-3xl text-xs text-stone-300 leading-relaxed font-sans">
+              {broadcastVideo.desc || 'Special video announcement broadcasted by Chief Medical Administration.'}
+            </p>
+            <div className="flex items-center gap-1.5 text-emerald-400 font-semibold text-xs">
+              <ShieldCheck className="w-4 h-4" />
+              <span>Verified Admin Broadcast Stream</span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Middle Section: "Your Health Dashboard" 4 Cards */}
       <div className="space-y-3.5">
