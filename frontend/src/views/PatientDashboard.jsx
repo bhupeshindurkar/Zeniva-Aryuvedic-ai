@@ -180,7 +180,7 @@ export const PatientDashboard = ({
 
   // Dedicated Flash / Splash Screen Video State (Always triggers on every page refresh / entry)
   const [isPopupVideoOpen, setIsPopupVideoOpen] = useState(true);
-  const [isVideoMuted, setIsVideoMuted] = useState(true);
+  const [isVideoMuted, setIsVideoMuted] = useState(false);
   const [broadcastVideo, setBroadcastVideo] = useState({
     title: 'Zeniva AI Video Project: Classical Introduction',
     sanskrit: '॥ आयुर्वेद एवं आधुनिक विज्ञान परिचय ॥',
@@ -191,6 +191,33 @@ export const PatientDashboard = ({
   });
   const [videoError, setVideoError] = useState(false);
   const modalVideoRef = React.useRef(null);
+
+  // Automatic Voice / Audio Playback Handler
+  useEffect(() => {
+    if (isPopupVideoOpen && modalVideoRef.current) {
+      const vid = modalVideoRef.current;
+      vid.muted = false;
+      vid.volume = 1.0;
+      const playPromise = vid.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(() => {
+          // If browser strictly blocks unmuted autoplay without prior gesture:
+          vid.muted = true;
+          vid.play().catch(() => {});
+          const unmuteOnUserGesture = () => {
+            if (modalVideoRef.current) {
+              modalVideoRef.current.muted = false;
+              modalVideoRef.current.volume = 1.0;
+            }
+            window.removeEventListener('click', unmuteOnUserGesture);
+            window.removeEventListener('touchstart', unmuteOnUserGesture);
+          };
+          window.addEventListener('click', unmuteOnUserGesture, { once: true });
+          window.addEventListener('touchstart', unmuteOnUserGesture, { once: true });
+        });
+      }
+    }
+  }, [isPopupVideoOpen, broadcastVideo?.url]);
 
   const normalizeVideoUrl = (url) => {
     if (!url) return '/assets/project_video.mp4';
@@ -1264,41 +1291,21 @@ export const PatientDashboard = ({
                   allowFullScreen
                 />
               ) : !videoError ? (
-                <>
-                  <video
-                    ref={modalVideoRef}
-                    key={normalizeVideoUrl(broadcastVideo.url)}
-                    controls
-                    autoPlay
-                    playsInline
-                    webkit-playsinline="true"
-                    muted={isVideoMuted}
-                    preload="auto"
-                    onError={() => setVideoError(true)}
-                    className="w-full h-full object-contain"
-                  >
-                    <source src={normalizeVideoUrl(broadcastVideo.url)} type="video/mp4" />
-                    <source src={normalizeVideoUrl(broadcastVideo.url)} type="video/webm" />
-                    Your browser does not support HTML5 video.
-                  </video>
-
-                  {/* Sound Toggle Pill Overlay for Mobile Audio Unmute */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const nextMuted = !isVideoMuted;
-                      setIsVideoMuted(nextMuted);
-                      if (modalVideoRef.current) {
-                        modalVideoRef.current.muted = nextMuted;
-                        modalVideoRef.current.play().catch(() => {});
-                      }
-                    }}
-                    className="absolute top-3 right-3 z-20 px-3 py-1.5 rounded-full bg-black/80 hover:bg-black text-amber-300 border border-amber-500/50 text-[11px] font-bold flex items-center gap-1.5 shadow-lg backdrop-blur-md cursor-pointer transition-all hover:scale-105"
-                  >
-                    {isVideoMuted ? <VolumeX className="w-3.5 h-3.5 text-red-400" /> : <Volume2 className="w-3.5 h-3.5 text-emerald-400" />}
-                    <span>{isVideoMuted ? 'Tap for Sound 🔊' : 'Mute 🔇'}</span>
-                  </button>
-                </>
+                <video
+                  ref={modalVideoRef}
+                  key={normalizeVideoUrl(broadcastVideo.url)}
+                  controls
+                  autoPlay
+                  playsInline
+                  webkit-playsinline="true"
+                  preload="auto"
+                  onError={() => setVideoError(true)}
+                  className="w-full h-full object-contain"
+                >
+                  <source src={normalizeVideoUrl(broadcastVideo.url)} type="video/mp4" />
+                  <source src={normalizeVideoUrl(broadcastVideo.url)} type="video/webm" />
+                  Your browser does not support HTML5 video.
+                </video>
               ) : (
                 <div className="flex flex-col items-center justify-center p-6 text-center text-white space-y-3">
                   <div className="w-12 h-12 rounded-2xl bg-purple-900/60 border border-purple-500/40 text-purple-300 flex items-center justify-center">
