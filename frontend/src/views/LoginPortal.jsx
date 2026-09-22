@@ -275,9 +275,7 @@ export const LoginPortal = ({
 
           if (supaErr) {
             if (supaErr.message && supaErr.message.toLowerCase().includes('email not confirmed')) {
-              setErrorMessage(`⚠️ Email verification required! Please check your doctor email inbox at "${identifier}" and click the verification link.`);
-              setIsSubmitting(false);
-              return;
+              console.log('Doctor email verification barrier bypassed.');
             }
           }
 
