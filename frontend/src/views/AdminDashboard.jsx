@@ -233,18 +233,26 @@ export const AdminDashboard = ({
 
   // Patient Dashboard Video Broadcast State
   const defaultBroadcastVideo = {
-    enabled: false,
-    title: 'Zeniva AI Platform: Classical Vedic Science Meets Modern Clinical Intelligence',
+    enabled: true,
+    title: 'Zeniva AI Video Project: Classical Introduction',
     sanskrit: '॥ आयुर्वेद एवं आधुनिक विज्ञान परिचय ॥',
-    duration: '2:15 Mins',
-    url: 'https://assets.codepen.io/3364143/7btrrd.mp4',
-    desc: 'Welcome to Zeniva AI. Discover how authentic Charaka Samhita formulas and AI health assessments work together with certified doctors.'
+    duration: '0:10 sec · High Definition',
+    url: '/assets/project_video.mp4',
+    desc: 'Zeniva AI Classical Ayurvedic Introduction & Clinical Platform Overview.'
   };
 
   const [broadcastVideoConfig, setBroadcastVideoConfig] = useState(() => {
     try {
       const saved = localStorage.getItem('zeniva_broadcast_video');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed) {
+          if (parsed.url && (parsed.url.includes('127.0.0.1') || parsed.url.includes('localhost:8000') || parsed.url.includes('broadcast_771e9e1e'))) {
+            parsed.url = '/assets/project_video.mp4';
+          }
+          return parsed;
+        }
+      }
     } catch (e) {}
     return defaultBroadcastVideo;
   });
@@ -782,8 +790,13 @@ export const AdminDashboard = ({
       showToast('Please upload a video or enter a video URL first!');
       return;
     }
+    let cleanUrl = broadcastVideoInput.url;
+    if (cleanUrl.includes('127.0.0.1') || cleanUrl.includes('localhost:8000') || cleanUrl.includes('broadcast_771e9e1e')) {
+      cleanUrl = '/assets/project_video.mp4';
+    }
     const updated = {
       ...broadcastVideoInput,
+      url: cleanUrl,
       enabled: true,
       publishedAt: new Date().toISOString()
     };

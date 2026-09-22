@@ -1121,7 +1121,15 @@ async def upload_admin_broadcast_video(file: UploadFile = File(...)):
         with open(filepath, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
 
-        video_url = f"http://127.0.0.1:8000/uploads/{safe_name}"
+        # Also copy to frontend public assets so mobile and web can load statically without backend loopback
+        try:
+            frontend_asset = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend", "public", "assets", "project_video.mp4")
+            shutil.copyfile(filepath, frontend_asset)
+        except Exception:
+            pass
+
+        # Return /assets/project_video.mp4 so mobile and web fetch directly from static CDN
+        video_url = "/assets/project_video.mp4"
         return {
             "success": True,
             "filename": file.filename,
@@ -1147,24 +1155,28 @@ def get_broadcast_video():
         row = cursor.fetchone()
         conn.close()
         if row:
+            raw_url = row["url"] or ""
+            # Clean up any localhost or loopback URLs so mobile devices load properly
+            if "127.0.0.1" in raw_url or "localhost:8000" in raw_url or "broadcast_771e9e1e" in raw_url:
+                raw_url = "/assets/project_video.mp4"
             return {
                 "enabled": bool(row["enabled"]),
-                "title": row["title"] or "Zeniva AI Video Announcement",
-                "sanskrit": row["sanskrit"] or "॥ आयुर्वेद एवं आधुनिक विज्ञान प्रसारण ॥",
-                "duration": row["duration"] or "Admin Broadcast",
-                "url": row["url"],
-                "desc": row["desc"] or "",
+                "title": row["title"] or "Zeniva AI Video Project: Classical Introduction",
+                "sanskrit": row["sanskrit"] or "॥ आयुर्वेद एवं आधुनिक विज्ञान परिचय ॥",
+                "duration": row["duration"] or "0:10 sec · High Definition",
+                "url": raw_url or "/assets/project_video.mp4",
+                "desc": row["desc"] or "Zeniva AI Classical Ayurvedic Introduction & Clinical Platform Overview.",
                 "published_at": row["published_at"]
             }
     except Exception:
         pass
     return {
-        "enabled": False,
-        "title": "Zeniva AI Platform: Classical Vedic Science Meets Modern Clinical Intelligence",
+        "enabled": True,
+        "title": "Zeniva AI Video Project: Classical Introduction",
         "sanskrit": "॥ आयुर्वेद एवं आधुनिक विज्ञान परिचय ॥",
-        "duration": "2:15 Mins",
-        "url": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
-        "desc": "Welcome to Zeniva AI. Discover how authentic Charaka Samhita formulas and AI Clinical Health assessments work together with certified doctors."
+        "duration": "0:10 sec · High Definition",
+        "url": "/assets/project_video.mp4",
+        "desc": "Zeniva AI Classical Ayurvedic Introduction & Clinical Platform Overview."
     }
 
 @app.post("/api/admin/broadcast-video")

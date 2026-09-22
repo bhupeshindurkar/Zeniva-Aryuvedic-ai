@@ -178,11 +178,50 @@ export const PatientDashboard = ({
     return () => clearInterval(interval);
   }, [isVideoPlaying, ambientVideos.length]);
 
-  // Dedicated Video Tour Popup Modal State (Controlled by Admin Dashboard)
-  const [isPopupVideoOpen, setIsPopupVideoOpen] = useState(false);
-  const [broadcastVideo, setBroadcastVideo] = useState(null);
+  // Dedicated Flash / Splash Screen Video State (Controlled by Admin & Presented on Initial Dashboard Entry)
+  const [isPopupVideoOpen, setIsPopupVideoOpen] = useState(() => {
+    try {
+      return !sessionStorage.getItem('zeniva_flash_screen_seen');
+    } catch (e) {
+      return true;
+    }
+  });
+  const [isVideoMuted, setIsVideoMuted] = useState(true);
+  const [broadcastVideo, setBroadcastVideo] = useState({
+    title: 'Zeniva AI Video Project: Classical Introduction',
+    sanskrit: '॥ आयुर्वेद एवं आधुनिक विज्ञान परिचय ॥',
+    duration: '0:10 sec · High Definition',
+    url: '/assets/project_video.mp4',
+    desc: 'Zeniva AI Classical Ayurvedic Introduction & Clinical Platform Overview.',
+    enabled: true
+  });
   const [videoError, setVideoError] = useState(false);
   const modalVideoRef = React.useRef(null);
+
+  const normalizeVideoUrl = (url) => {
+    if (!url) return '/assets/project_video.mp4';
+    if (
+      url.includes('127.0.0.1') ||
+      url.includes('localhost:8000') ||
+      url.includes('broadcast_771e9e1e') ||
+      url.includes('broadcast_db5be5d0')
+    ) {
+      return '/assets/project_video.mp4';
+    }
+    return url;
+  };
+
+  const handleCloseFlashScreen = () => {
+    if (modalVideoRef.current) {
+      try {
+        modalVideoRef.current.pause();
+      } catch (e) {}
+    }
+    try {
+      sessionStorage.setItem('zeniva_flash_screen_seen', 'true');
+    } catch (e) {}
+    setIsPopupVideoOpen(false);
+  };
 
   const getEmbedUrl = (url) => {
     if (!url) return null;
@@ -217,7 +256,10 @@ export const PatientDashboard = ({
         if (res.ok) {
           const data = await res.json();
           if (data && data.enabled && data.url) {
-            setBroadcastVideo(data);
+            setBroadcastVideo({
+              ...data,
+              url: normalizeVideoUrl(data.url)
+            });
             return;
           }
         }
@@ -231,7 +273,7 @@ export const PatientDashboard = ({
             title: data.title,
             sanskrit: data.sanskrit,
             duration: data.duration,
-            url: data.url,
+            url: normalizeVideoUrl(data.url),
             desc: data.description,
             enabled: true
           });
@@ -245,7 +287,10 @@ export const PatientDashboard = ({
         if (saved) {
           const parsed = JSON.parse(saved);
           if (parsed && parsed.enabled && parsed.url) {
-            setBroadcastVideo(parsed);
+            setBroadcastVideo({
+              ...parsed,
+              url: normalizeVideoUrl(parsed.url)
+            });
             return;
           }
         }
@@ -253,11 +298,11 @@ export const PatientDashboard = ({
 
       // 4. Default Verified Broadcast Video (guarantees mobile phone displays active player immediately)
       setBroadcastVideo({
-        title: 'Zeniva AI Classical Ayurvedic Introduction Tour',
-        sanskrit: '॥ आयुर्वेद एवं आधुनिक विज्ञान प्रसारण ॥',
-        duration: '4:15 Mins · Verified Stream',
-        url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
-        desc: 'Official Zeniva AI project broadcast: Classical Ayurvedic principles, Tridosha equilibrium, and intelligent clinical care.',
+        title: 'Zeniva AI Video Project: Classical Introduction',
+        sanskrit: '॥ आयुर्वेद एवं आधुनिक विज्ञान परिचय ॥',
+        duration: '0:10 sec · High Definition',
+        url: '/assets/project_video.mp4',
+        desc: 'Zeniva AI Classical Ayurvedic Introduction & Clinical Platform Overview.',
         enabled: true
       });
     };
@@ -459,6 +504,16 @@ export const PatientDashboard = ({
                 >
                   <Scan className="w-3.5 h-3.5 text-amber-300 group-hover:rotate-90 transition-transform" />
                   <span>AI Skin Scan</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsPopupVideoOpen(true)}
+                  className="px-4 py-2.5 rounded-full bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white text-xs font-bold tracking-wide flex items-center gap-2 shadow-lg hover:shadow-xl transition-all group cursor-pointer shrink-0 border border-amber-300/40"
+                  title="Watch Zeniva AI Project Flash Screen Video"
+                >
+                  <Video className="w-3.5 h-3.5 text-amber-200 animate-pulse group-hover:scale-110 transition-transform" />
+                  <span>🎬 Video Project (0:10)</span>
                 </button>
 
                 <div 
@@ -685,89 +740,6 @@ export const PatientDashboard = ({
         </div>
 
       </div>
-
-      {/* ========================================================================= */}
-      {/* DEDICATED ZENIVA PROJECT VIDEO & BROADCAST STREAM (MOBILE & PC)           */}
-      {/* ========================================================================= */}
-      {broadcastVideo && broadcastVideo.enabled && broadcastVideo.url && (
-        <div className="rounded-3xl p-5 sm:p-7 bg-gradient-to-br from-stone-950 via-stone-900 to-purple-950/90 border border-purple-800/40 shadow-xl text-white overflow-hidden relative group">
-          {/* Subtle Ambient Glow */}
-          <div className="absolute top-0 right-0 w-80 h-80 bg-purple-600/10 rounded-full blur-3xl pointer-events-none" />
-          
-          {/* Top Bar with Badges & Action */}
-          <div className="flex flex-wrap items-center justify-between gap-3 mb-4 relative z-10">
-            <div className="flex items-center gap-3">
-              <div className="w-11 h-11 rounded-2xl bg-purple-900/60 border border-purple-500/50 flex items-center justify-center text-purple-300 shadow-md">
-                <Video className="w-5 h-5 text-amber-300 animate-pulse" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-red-600 text-white tracking-wider flex items-center gap-1.5 shadow-xs">
-                    <span className="w-2 h-2 rounded-full bg-white animate-ping"></span> Live Broadcast
-                  </span>
-                  <span className="text-[11px] text-emerald-300 font-serif font-medium hidden sm:inline">
-                    {broadcastVideo.sanskrit || '॥ आयुर्वेद एवं आधुनिक विज्ञान प्रसारण ॥'}
-                  </span>
-                  <span className="text-[10px] text-stone-400 font-mono">
-                    {broadcastVideo.duration || 'Admin Broadcast'}
-                  </span>
-                </div>
-                <h3 className="text-base sm:text-lg font-bold font-serif text-amber-100 mt-1">
-                  {broadcastVideo.title || 'Zeniva AI: Classical Ayurvedic Video Announcement'}
-                </h3>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setIsPopupVideoOpen(true)}
-                className="px-4 py-2 rounded-xl bg-purple-700 hover:bg-purple-600 text-white text-xs font-bold flex items-center gap-2 transition-all shadow-md cursor-pointer hover:scale-105"
-              >
-                <Play className="w-3.5 h-3.5 fill-current" />
-                <span>Open Fullscreen Modal</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Video Player (High-Quality Universal Video Container) */}
-          <div className="relative w-full aspect-video rounded-2xl overflow-hidden bg-black border border-stone-800 shadow-2xl flex items-center justify-center">
-            {getEmbedUrl(broadcastVideo.url) ? (
-              <iframe
-                src={getEmbedUrl(broadcastVideo.url)}
-                title={broadcastVideo.title || 'Zeniva Video'}
-                className="w-full h-full border-0"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
-              />
-            ) : (
-              <video
-                key={broadcastVideo.url}
-                controls
-                playsInline
-                preload="metadata"
-                className="w-full h-full object-contain"
-              >
-                <source src={broadcastVideo.url} type="video/mp4" />
-                <source src={broadcastVideo.url} type="video/webm" />
-                <source src={broadcastVideo.url} />
-                Your browser does not support HTML5 video.
-              </video>
-            )}
-          </div>
-
-          {/* Footer info & verification */}
-          <div className="flex flex-wrap items-center justify-between gap-3 mt-4 pt-3 border-t border-stone-800 text-xs text-stone-300 relative z-10">
-            <p className="max-w-3xl text-xs text-stone-300 leading-relaxed font-sans">
-              {broadcastVideo.desc || 'Special video announcement broadcasted by Chief Medical Administration.'}
-            </p>
-            <div className="flex items-center gap-1.5 text-emerald-400 font-semibold text-xs">
-              <ShieldCheck className="w-4 h-4" />
-              <span>Verified Admin Broadcast Stream</span>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Middle Section: "Your Health Dashboard" 4 Cards */}
       <div className="space-y-3.5">
@@ -1263,42 +1235,44 @@ export const PatientDashboard = ({
       </div>
 
       {/* ========================================================================= */}
-      {/* VIDEO TOUR POPUP MODAL (POPUP WINDOW ON HOME PAGE)                        */}
+      {/* FLASH SCREEN INTRO VIDEO MODAL (MOBILE & DESKTOP SPLASH PRESENTATION)      */}
       {/* ========================================================================= */}
       {isPopupVideoOpen && broadcastVideo && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/85 backdrop-blur-md animate-in fade-in">
-          <div className="bg-stone-950 rounded-3xl max-w-3xl w-full border border-stone-700 shadow-2xl overflow-hidden flex flex-col max-h-[95vh] text-white">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/90 backdrop-blur-xl animate-in fade-in duration-300">
+          <div className="bg-stone-950 rounded-3xl max-w-2xl w-full border border-amber-500/40 shadow-[0_0_60px_rgba(245,158,11,0.25)] overflow-hidden flex flex-col max-h-[96vh] text-white">
             
-            {/* Modal Top Header */}
-            <div className="p-4 sm:px-6 sm:py-4 bg-stone-900/90 border-b border-stone-800 flex items-center justify-between">
+            {/* Modal Top Header with Vedic Badges */}
+            <div className="px-4 py-3 sm:px-6 sm:py-3.5 bg-stone-900/95 border-b border-stone-800 flex items-center justify-between">
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-purple-900/60 border border-purple-500/40 text-purple-300 flex items-center justify-center">
-                  <Video className="w-4 h-4" />
+                <div className="w-8 h-8 rounded-xl bg-purple-900/70 border border-purple-500/50 text-amber-300 flex items-center justify-center shadow-md">
+                  <Video className="w-4 h-4 animate-pulse" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold font-serif text-amber-200 leading-tight">
-                    {broadcastVideo.title || 'Zeniva AI: Classical Ayurvedic Video Announcement'}
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase bg-red-600 text-white tracking-wider flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping"></span> Live Broadcast
+                    </span>
+                    <span className="text-[11px] text-amber-300 font-serif font-semibold">
+                      {broadcastVideo.sanskrit || '॥ आयुर्वेद एवं आधुनिक विज्ञान परिचय ॥'}
+                    </span>
+                  </div>
+                  <h3 className="text-xs sm:text-sm font-bold font-serif text-stone-100 mt-0.5 leading-tight">
+                    {broadcastVideo.title || 'Zeniva AI Video Project: Classical Introduction'}
                   </h3>
-                  <p className="text-[10px] text-stone-400 font-serif mt-0.5">
-                    {broadcastVideo.sanskrit || '॥ आयुर्वेद एवं आधुनिक विज्ञान प्रसारण ॥'} · <span className="text-emerald-400 font-mono font-semibold">{broadcastVideo.duration || 'Admin Broadcast'}</span>
-                  </p>
                 </div>
               </div>
 
               <button
                 type="button"
-                onClick={() => {
-                  if (modalVideoRef.current) modalVideoRef.current.pause();
-                  setIsPopupVideoOpen(false);
-                }}
-                className="w-8 h-8 rounded-full bg-stone-800 hover:bg-stone-700 text-stone-300 hover:text-white flex items-center justify-center cursor-pointer transition-all"
-                title="Close Video (Esc)"
+                onClick={handleCloseFlashScreen}
+                className="w-8 h-8 rounded-full bg-stone-800 hover:bg-stone-700 text-stone-300 hover:text-white flex items-center justify-center cursor-pointer transition-all shrink-0"
+                title="प्रवेश करा / Skip to Dashboard"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            {/* Video Player Box with Direct Autoplay & Universal Codec Fallback */}
+            {/* Video Player Box with Direct Autoplay, PlaysInline & Sound Controls for Mobile */}
             <div className="relative bg-black aspect-video w-full flex items-center justify-center overflow-hidden">
               {getEmbedUrl(broadcastVideo.url) ? (
                 <iframe
@@ -1309,85 +1283,106 @@ export const PatientDashboard = ({
                   allowFullScreen
                 />
               ) : !videoError ? (
-                <video
-                  ref={modalVideoRef}
-                  key={broadcastVideo.url}
-                  controls
-                  autoPlay
-                  playsInline
-                  preload="auto"
-                  onError={() => setVideoError(true)}
-                  className="w-full h-full object-contain"
-                >
-                  <source src={broadcastVideo.url} type="video/mp4" />
-                  <source src={broadcastVideo.url} type="video/webm" />
-                  <source src={broadcastVideo.url} type="video/ogg" />
-                  <source src={broadcastVideo.url} />
-                  Your browser does not support HTML5 video.
-                </video>
+                <>
+                  <video
+                    ref={modalVideoRef}
+                    key={normalizeVideoUrl(broadcastVideo.url)}
+                    controls
+                    autoPlay
+                    playsInline
+                    webkit-playsinline="true"
+                    muted={isVideoMuted}
+                    preload="auto"
+                    onError={() => setVideoError(true)}
+                    className="w-full h-full object-contain"
+                  >
+                    <source src={normalizeVideoUrl(broadcastVideo.url)} type="video/mp4" />
+                    <source src={normalizeVideoUrl(broadcastVideo.url)} type="video/webm" />
+                    Your browser does not support HTML5 video.
+                  </video>
+
+                  {/* Sound Toggle Pill Overlay for Mobile Audio Unmute */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const nextMuted = !isVideoMuted;
+                      setIsVideoMuted(nextMuted);
+                      if (modalVideoRef.current) {
+                        modalVideoRef.current.muted = nextMuted;
+                        modalVideoRef.current.play().catch(() => {});
+                      }
+                    }}
+                    className="absolute top-3 right-3 z-20 px-3 py-1.5 rounded-full bg-black/80 hover:bg-black text-amber-300 border border-amber-500/50 text-[11px] font-bold flex items-center gap-1.5 shadow-lg backdrop-blur-md cursor-pointer transition-all hover:scale-105"
+                  >
+                    {isVideoMuted ? <VolumeX className="w-3.5 h-3.5 text-red-400" /> : <Volume2 className="w-3.5 h-3.5 text-emerald-400" />}
+                    <span>{isVideoMuted ? 'Tap for Sound 🔊' : 'Mute 🔇'}</span>
+                  </button>
+                </>
               ) : (
                 <div className="flex flex-col items-center justify-center p-6 text-center text-white space-y-3">
                   <div className="w-12 h-12 rounded-2xl bg-purple-900/60 border border-purple-500/40 text-purple-300 flex items-center justify-center">
                     <Video className="w-6 h-6" />
                   </div>
                   <div className="space-y-1">
-                    <p className="text-xs font-bold text-amber-200">Video source is loading or requires supported format</p>
+                    <p className="text-xs font-bold text-amber-200">Video source is loading</p>
                     <p className="text-[10px] text-stone-400">Click below to play the verified classical introduction stream.</p>
                   </div>
                   <button
                     type="button"
                     onClick={() => {
                       setVideoError(false);
-                      const fallbackUrl = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4';
-                      setBroadcastVideo(prev => ({ ...prev, url: fallbackUrl }));
+                      setBroadcastVideo(prev => ({ ...prev, url: '/assets/project_video.mp4' }));
                     }}
                     className="px-4 py-2 rounded-xl bg-purple-700 hover:bg-purple-600 text-white font-bold text-xs cursor-pointer shadow-md transition-all flex items-center gap-1.5"
                   >
                     <Play className="w-3.5 h-3.5 fill-current" />
-                    <span>Play Verified Stream</span>
+                    <span>Play Intro Stream</span>
                   </button>
                 </div>
               )}
             </div>
 
-            {/* Modal Bottom Controls & Details */}
-            <div className="p-4 sm:p-6 bg-stone-900 space-y-4">
+            {/* Flash Screen Bottom Action Bar */}
+            <div className="p-3.5 sm:p-5 bg-stone-900/95 space-y-3">
               
-              {/* Description */}
-              <p className="text-xs text-stone-300 leading-relaxed font-sans">
-                {broadcastVideo.desc || 'Special video announcement broadcasted by Chief Medical Administration.'}
-              </p>
+              <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-stone-300">
+                <p className="text-xs text-stone-300 leading-relaxed font-sans max-w-md">
+                  {broadcastVideo.desc || 'Zeniva AI Classical Ayurvedic Introduction & Clinical Platform Overview.'}
+                </p>
+                <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded-full">
+                  {broadcastVideo.duration || '0:10 sec · High Definition'}
+                </span>
+              </div>
 
-              {/* CTA Buttons */}
-              <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-stone-800">
-                <div className="flex items-center gap-1.5 text-[11px] text-emerald-400 font-semibold">
-                  <ShieldCheck className="w-4 h-4" />
-                  <span>Admin Broadcast Verified</span>
-                </div>
+              {/* Action Buttons: Primary Enter Dashboard CTA */}
+              <div className="flex flex-wrap items-center justify-between gap-3 pt-2.5 border-t border-stone-800">
+                <button
+                  type="button"
+                  onClick={handleCloseFlashScreen}
+                  className="text-xs text-stone-400 hover:text-amber-300 transition-colors font-medium cursor-pointer"
+                >
+                  Skip Intro
+                </button>
 
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
                     onClick={() => {
-                      setIsPopupVideoOpen(false);
+                      handleCloseFlashScreen();
                       onSelectTab('dosha');
                     }}
-                    className="px-4 py-2 rounded-xl bg-[#1E5039] hover:bg-[#163E2C] text-white text-xs font-bold flex items-center gap-1.5 shadow-md cursor-pointer transition-all"
+                    className="px-3.5 py-2 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-semibold cursor-pointer transition-all hidden sm:flex items-center gap-1"
                   >
                     <span>Start Analysis</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
                   </button>
 
                   <button
                     type="button"
-                    onClick={() => {
-                      setIsPopupVideoOpen(false);
-                      onSelectTab('consultation');
-                    }}
-                    className="px-4 py-2 rounded-xl bg-purple-800 hover:bg-purple-900 text-white text-xs font-bold flex items-center gap-1.5 shadow-md cursor-pointer transition-all"
+                    onClick={handleCloseFlashScreen}
+                    className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-500 hover:to-teal-600 text-white font-bold text-xs sm:text-sm flex items-center gap-2 shadow-lg hover:shadow-xl transition-all cursor-pointer hover:scale-[1.02] border border-emerald-400/40"
                   >
-                    <Stethoscope className="w-3.5 h-3.5" />
-                    <span>Consult Doctor</span>
+                    <span>प्रवेश करा / Enter Dashboard</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
                   </button>
                 </div>
               </div>
