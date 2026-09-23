@@ -274,16 +274,19 @@ export const LoginPortal = ({
         const delRaw = localStorage.getItem('zeniva_deleted_doctor_ids');
         if (delRaw) {
           let delList = JSON.parse(delRaw);
-          const cleanP = phone ? String(phone).replace(/\D/g, '').slice(-10) : '';
-          delList = delList.filter(x => x !== phone && x !== cleanP && x !== email && x !== email.toLowerCase());
-          localStorage.setItem('zeniva_deleted_doctor_ids', JSON.stringify(delList));
+          if (Array.isArray(delList)) {
+            const cleanP = phone ? String(phone).replace(/\D/g, '').slice(-10) : '';
+            delList = delList.filter(x => x !== phone && x !== cleanP && x !== email && x !== email.toLowerCase());
+            localStorage.setItem('zeniva_deleted_doctor_ids', JSON.stringify(delList));
+          }
         }
 
         const listStr = localStorage.getItem('zeniva_registered_doctors_list');
         let dList = listStr ? JSON.parse(listStr) : [];
+        if (!Array.isArray(dList)) dList = [];
         // Purge dummy test records
-        dList = dList.filter(d => d.id !== 'ZEN-DOC-242834' && d.id !== 'ZEN-DOC-644980' && !((!d.phone || d.phone === '+91') && d.name?.toLowerCase().includes('bhupesh')));
-        dList = [newDoctor, ...dList.filter(d => d.id !== newDoctor.id && (!d.email || d.email !== newDoctor.email))];
+        dList = dList.filter(d => d && d.id !== 'ZEN-DOC-242834' && d.id !== 'ZEN-DOC-644980' && !((!d.phone || d.phone === '+91') && d.name?.toLowerCase().includes('bhupesh')));
+        dList = [newDoctor, ...dList.filter(d => d && d.id !== newDoctor.id && (!d.email || d.email !== newDoctor.email))];
         localStorage.setItem('zeniva_registered_doctors_list', JSON.stringify(dList));
       } catch (err) {}
 

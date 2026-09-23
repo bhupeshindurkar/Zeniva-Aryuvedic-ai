@@ -450,16 +450,18 @@ export default function App() {
             .eq('id', session.user.id)
             .single();
 
-          const isDoctorInDb = profile?.role === 'doctor';
-          const isPatientInDb = profile?.role === 'patient';
+          const metaRole = session.user.user_metadata?.role;
+          const isDoctorInMeta = metaRole === 'doctor';
+          const isDoctorInDb = profile?.role === 'doctor' || isDoctorInMeta;
+          const isPatientInDb = profile?.role === 'patient' || metaRole === 'patient';
           const isKamlesh = profile?.full_name?.toLowerCase().includes('kamlesh') || 
                             profile?.phone?.includes('9011942126') || 
                             session.user.email?.toLowerCase().includes('kamleshindurkar');
 
-          const isDoctorRoute = (typeof window !== 'undefined' ? window.location.hash : '').toLowerCase().startsWith('#doctor') || currentRole === 'doctor';
+          const isDoctorRoute = (typeof window !== 'undefined' ? window.location.hash : '').toLowerCase().startsWith('#doctor') || currentRole === 'doctor' || isDoctorInMeta;
 
-          // 1. If this Supabase session belongs to a Patient (e.g. Kamlesh Indurkar):
-          if (isPatientInDb || isKamlesh || (!isDoctorInDb && !profile?.qualification)) {
+          // 1. If this Supabase session belongs to a Patient:
+          if ((isPatientInDb || isKamlesh) && !isDoctorInMeta && !isDoctorInDb) {
             let localPat = {};
             try {
               const raw = localStorage.getItem('zeniva_patient_user');
@@ -507,8 +509,8 @@ export default function App() {
           }
 
           // 2. If this Supabase session belongs to a Doctor:
-          if (isDoctorInDb) {
-            const rawDocName = profile?.full_name || session.user.user_metadata?.full_name || 'Dr. Sohil Indurkar';
+          if (isDoctorInDb || isDoctorInMeta) {
+            const rawDocName = profile?.full_name || session.user.user_metadata?.full_name || 'Dr. Ayurvedic Vaidya';
             const formattedDocName = rawDocName.startsWith('Dr.') ? rawDocName : `Dr. ${rawDocName}`;
 
             const updatedDoctor = {
@@ -516,14 +518,14 @@ export default function App() {
               doctor_id: `ZEN-DOC-${session.user.id.slice(-6).toUpperCase()}`,
               name: formattedDocName,
               email: profile?.email || session.user.email,
-              phone: profile?.phone || '',
+              phone: profile?.phone || session.user.user_metadata?.phone || '',
               role: 'doctor',
-              qualification: profile?.qualification || 'BAMS, MD (Ayurveda)',
-              specialization: profile?.specialization || 'Kayachikitsa & Panchakarma',
+              qualification: profile?.qualification || session.user.user_metadata?.qualification || 'BAMS, MD (Ayurveda)',
+              specialization: profile?.specialization || session.user.user_metadata?.specialization || 'Kayachikitsa & Panchakarma',
               organization: profile?.organization || 'Zeniva Ayurvedic Clinical Center',
               city: profile?.city || 'Nagpur, Maharashtra',
               avatar: profile?.avatar_url || 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=400',
-              status: profile?.status || 'verified',
+              status: profile?.status || 'pending_verification',
               isLoggedIn: true,
               isRegistered: true,
               auth_provider: 'supabase'
@@ -531,7 +533,7 @@ export default function App() {
 
             localStorage.setItem('zeniva_doctor_user', JSON.stringify(updatedDoctor));
             localStorage.setItem('zeniva_registered_doctor', JSON.stringify(updatedDoctor));
-            if (isDoctorRoute) {
+            if (isDoctorRoute && updatedDoctor.status === 'verified') {
               setCurrentUser(updatedDoctor);
               localStorage.setItem('zeniva_current_user', JSON.stringify(updatedDoctor));
             }
@@ -770,12 +772,13 @@ export default function App() {
 
   // 1. Doctor Registration Form View (No splash screen)
   if (authView === 'doctor_registration') {
+    const safeAuth = doctorTempAuth || {};
     return (
       <DoctorRegistrationView
-        verifiedPhone={doctorTempAuth.phone || doctorTempAuth.email || ''}
-        initialName={doctorTempAuth.name || ''}
-        initialQualification={doctorTempAuth.qualification || ''}
-        initialSpecialization={doctorTempAuth.specialization || ''}
+        verifiedPhone={safeAuth.phone || safeAuth.email || ''}
+        initialName={safeAuth.name || ''}
+        initialQualification={safeAuth.qualification || ''}
+        initialSpecialization={safeAuth.specialization || ''}
         onRegistrationSubmitted={handleDoctorRegistrationSubmitted}
         onCancel={() => setAuthView('login')}
       />
@@ -784,6 +787,7 @@ export default function App() {
 
   // 2. Doctor Verification Status View (Countdown & Secure Access - Uses its own clean verified badge / flash)
   if (authView === 'doctor_status') {
+    const safeAuth = doctorTempAuth || {};
     const activeDoc = registeredDoctorProfile || (() => {
       try {
         const saved = localStorage.getItem('zeniva_registered_doctor') || localStorage.getItem('zeniva_doctor_user');
@@ -792,10 +796,10 @@ export default function App() {
       return null;
     })() || {
       id: `ZEN-DOC-${Math.floor(100000 + Math.random() * 900000)}`,
-      name: doctorTempAuth.name || 'Ayurvedic Vaidya',
-      phone: doctorTempAuth.phone || doctorTempAuth.email || '',
-      qualification: doctorTempAuth.qualification || 'BAMS, MD (Ayurveda)',
-      specialization: doctorTempAuth.specialization || 'Kayachikitsa & Panchakarma',
+      name: safeAuth.name || 'Ayurvedic Vaidya',
+      phone: safeAuth.phone || safeAuth.email || '',
+      qualification: safeAuth.qualification || 'BAMS, MD (Ayurveda)',
+      specialization: safeAuth.specialization || 'Kayachikitsa & Panchakarma',
       organization: 'Zeniva Ayurvedic Clinical Center',
       council_reg_number: 'AYU-MAH-8921',
       council_name: 'Maharashtra Council of Indian Medicine (MCIM)',

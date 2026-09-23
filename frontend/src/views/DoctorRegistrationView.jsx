@@ -129,7 +129,10 @@ export const DoctorRegistrationView = ({
     setIsSubmitting(true);
 
     try {
-      const response = await fetch('http://127.0.0.1:8000/api/doctor/register', {
+      const registerUrl = (typeof window !== 'undefined' && window.location.hostname !== 'localhost')
+        ? '/api/doctor/register'
+        : 'http://127.0.0.1:8000/api/doctor/register';
+      const response = await fetch(registerUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

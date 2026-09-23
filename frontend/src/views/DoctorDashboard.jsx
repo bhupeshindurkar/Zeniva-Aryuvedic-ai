@@ -16,7 +16,7 @@ import { supabase } from '../lib/supabase';
 
 export const DoctorDashboard = ({
   activeTab = 'home',
-  currentUser = {},
+  currentUser: rawCurrentUser = {},
   onSelectTab = () => {},
   onOpenMobileMenu = () => {},
   onAddPrescription,
@@ -26,6 +26,8 @@ export const DoctorDashboard = ({
   onOpenLogin,
   onLogout
 }) => {
+  const currentUser = rawCurrentUser || {};
+
   // Toast Alert Notification
   const [toastMessage, setToastMessage] = useState('');
   const showToast = (msg) => {
@@ -98,7 +100,10 @@ export const DoctorDashboard = ({
         localStorage.setItem('zeniva_current_user', JSON.stringify(updatedUser));
         localStorage.setItem('zeniva_doctor_user', JSON.stringify(updatedUser));
         localStorage.setItem('zeniva_registered_doctor', JSON.stringify(updatedUser));
-        await fetch('http://127.0.0.1:8000/api/user/profile', {
+        const profileUrl = (typeof window !== 'undefined' && window.location.hostname !== 'localhost')
+          ? '/api/user/profile'
+          : 'http://127.0.0.1:8000/api/user/profile';
+        await fetch(profileUrl, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

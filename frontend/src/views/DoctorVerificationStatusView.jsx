@@ -8,12 +8,14 @@ import {
 import { ZenivaLogo, MeditatingYogi } from '../components/ZenivaIcons';
 
 export const DoctorVerificationStatusView = ({
-  doctorProfile = {},
+  doctorProfile: rawDoctorProfile = {},
   onOpenDoctorDashboard = () => {},
   onReuploadDocuments = () => {},
   onAdminAuthenticated = () => {},
   onLogout = () => {}
 }) => {
+  const doctorProfile = rawDoctorProfile || {};
+
   // 2-Hour (7200 Seconds) Countdown Timer State
   const [timeLeft, setTimeLeft] = useState(7200);
   const [isTimedOut, setIsTimedOut] = useState(false);
@@ -33,7 +35,9 @@ export const DoctorVerificationStatusView = ({
   const [isAdminLoading, setIsAdminLoading] = useState(false);
 
   // Strict doctor phone without hardcoded fallback to pre-verified doctor
-  const phone = doctorProfile.phone || '';
+  const rawPhone = doctorProfile.phone || '';
+  const cleanDisplayPhone = rawPhone ? String(rawPhone).replace(/^\+91\s*/, '') : '';
+  const phone = cleanDisplayPhone;
 
   // 1. Live Countdown Timer
   useEffect(() => {
@@ -119,18 +123,20 @@ export const DoctorVerificationStatusView = ({
         const listRaw = localStorage.getItem('zeniva_registered_doctors_list');
         if (listRaw) {
           const list = JSON.parse(listRaw);
-          const matched = list.find(d => (targetId && (d.id === targetId || d.doctor_id === targetId)) || (cleanTargetPhone && d.phone && String(d.phone).replace(/\D/g, '').slice(-10) === cleanTargetPhone));
-          if (matched) {
-            if (matched.status === 'verified') {
-              const merged = { ...doctorProfile, ...matched, status: 'verified' };
-              setCurrentStatus('verified');
-              setVerifiedDocData(merged);
-              setShowWelcomeFlash(true);
-              return;
-            } else if (matched.status === 'rejected') {
-              setCurrentStatus('rejected');
-              setRejectionReason(matched.rejection_reason || 'Medical Council registration credentials could not be verified.');
-              return;
+          if (Array.isArray(list)) {
+            const matched = list.find(d => d && ((targetId && (d.id === targetId || d.doctor_id === targetId)) || (cleanTargetPhone && d.phone && String(d.phone).replace(/\D/g, '').slice(-10) === cleanTargetPhone)));
+            if (matched) {
+              if (matched.status === 'verified') {
+                const merged = { ...doctorProfile, ...matched, status: 'verified' };
+                setCurrentStatus('verified');
+                setVerifiedDocData(merged);
+                setShowWelcomeFlash(true);
+                return;
+              } else if (matched.status === 'rejected') {
+                setCurrentStatus('rejected');
+                setRejectionReason(matched.rejection_reason || 'Medical Council registration credentials could not be verified.');
+                return;
+              }
             }
           }
         }
@@ -139,7 +145,10 @@ export const DoctorVerificationStatusView = ({
       // 2. Check Backend API ONLY if this doctor has a phone number
       if (cleanTargetPhone) {
         try {
-          const res = await fetch(`http://127.0.0.1:8000/api/doctor/profile/${cleanTargetPhone}`);
+          const profileApiUrl = (typeof window !== 'undefined' && window.location.hostname !== 'localhost')
+            ? `/api/doctor/profile/${cleanTargetPhone}`
+            : `http://127.0.0.1:8000/api/doctor/profile/${cleanTargetPhone}`;
+          const res = await fetch(profileApiUrl);
           if (res.ok) {
             const resJson = await res.json();
             const docData = resJson.doctor || resJson;
@@ -193,14 +202,14 @@ export const DoctorVerificationStatusView = ({
     // Initial check
     checkStatusSync();
 
-    const checkInterval = setInterval(checkStatusSync, 2000);
+    const checkInterval = setInterval(checkStatusSync, 2500);
 
     return () => {
       clearInterval(checkInterval);
       window.removeEventListener('zeniva_doctor_status_changed', handleStatusEvent);
       window.removeEventListener('storage', handleStatusEvent);
     };
-  }, [phone, currentStatus, showWelcomeFlash, doctorProfile]);
+  }, [phone, currentStatus, showWelcomeFlash, doctorProfile.id, doctorProfile.doctor_id]);
 
   // Handle Admin Secure Login (Password: bhupesh@123 or PIN: 2027)
   const handleAdminLoginSubmit = async (e) => {
@@ -217,7 +226,10 @@ export const DoctorVerificationStatusView = ({
     const isMasterAuth = trimmedPass === 'bhupesh@123' || trimmedPass === '2027';
 
     try {
-      const res = await fetch('http://127.0.0.1:8000/api/admin/login', {
+      const adminApiUrl = (typeof window !== 'undefined' && window.location.hostname !== 'localhost')
+        ? '/api/admin/login'
+        : 'http://127.0.0.1:8000/api/admin/login';
+      const res = await fetch(adminApiUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -511,7 +523,7 @@ export const DoctorVerificationStatusView = ({
                   <div className="min-w-0">
                     <p className="font-bold text-stone-900 text-[11px] truncate">1. Medical Degree Certificate</p>
                     <p className="text-[10px] text-stone-500 truncate">
-                      {doctorProfile.documents?.degree_cert?.name || 'BAMS_MD_Degree_Certificate.pdf'}
+                      {doctorProfile.documents?.degree_cert?.name || (typeof doctorProfile.documents?.degree_cert === 'string' ? doctorProfile.documents.degree_cert : 'BAMS_MD_Degree_Certificate.pdf')}
                     </p>
                   </div>
                 </div>
@@ -529,7 +541,7 @@ export const DoctorVerificationStatusView = ({
                   <div className="min-w-0">
                     <p className="font-bold text-stone-900 text-[11px] truncate">2. Council Registration / ID</p>
                     <p className="text-[10px] text-stone-500 truncate">
-                      {doctorProfile.documents?.council_cert?.name || 'MCIM_Council_License.pdf'}
+                      {doctorProfile.documents?.council_cert?.name || (typeof doctorProfile.documents?.council_cert === 'string' ? doctorProfile.documents.council_cert : 'MCIM_Council_License.pdf')}
                     </p>
                   </div>
                 </div>
