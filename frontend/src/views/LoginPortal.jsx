@@ -16,11 +16,15 @@ const apiPost = async (path, body) => {
   let lastErr = null;
   for (const url of endpoints) {
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2500);
       const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
+        body: JSON.stringify(body),
+        signal: controller.signal
       });
+      clearTimeout(timeoutId);
       const text = await res.text();
       let data = {};
       try {
@@ -29,9 +33,13 @@ const apiPost = async (path, body) => {
         data = { detail: text || `HTTP ${res.status}` };
       }
       if (!res.ok) {
+        // 405 (Method Not Allowed) or 404 on relative paths indicate frontend static host without active backend API route
+        if (res.status === 405 || res.status === 404 || res.status >= 500) {
+          throw new Error(`Server connection unavailable (${res.status})`);
+        }
         const errorMsg = data.detail || data.message || `Request error (${res.status})`;
-        // If it's a 4xx client/auth error (e.g., 401 Incorrect password, 404 User not found), throw immediately
-        if (res.status >= 400 && res.status < 500) {
+        // If it's a 401 (Incorrect password) or 400 validation error from backend
+        if (res.status === 401 || (res.status === 400 && data.detail)) {
           throw new Error(errorMsg);
         }
         throw new Error(errorMsg);
@@ -39,7 +47,8 @@ const apiPost = async (path, body) => {
       return data;
     } catch (err) {
       lastErr = err;
-      if (err.message && !err.message.includes('502') && !err.message.includes('Failed to fetch') && !err.message.includes('NetworkError')) {
+      // If it's an explicit auth or credential error from a responding API, preserve and rethrow
+      if (err.message && (err.message.includes('password') || err.message.includes('Incorrect') || err.message.includes('No registered doctor account'))) {
         throw err;
       }
     }
@@ -304,16 +313,16 @@ export const LoginPortal = ({
     }
   };
 
-  // 2. Handle Doctor Sign In with SQLite Backend & Supabase Auth
+  // 2. Handle Doctor Sign In with SQLite Backend, Supabase Auth & Local Registry
   const handleSignIn = async (e) => {
     e?.preventDefault();
     const identifier = signinIdentifier.trim();
     if (!identifier) {
-      setErrorMessage('Please enter your Doctor Full Name or Email.');
+      setErrorMessage('Please enter your Doctor Full Name, Email, or 10-digit Mobile Number.');
       return;
     }
     if (!signinPassword) {
-      setErrorMessage('Please enter your password.');
+      setErrorMessage('Please enter your doctor password.');
       return;
     }
 
@@ -322,11 +331,12 @@ export const LoginPortal = ({
     setSuccessMessage('Verifying credentials & loading Doctor Dashboard...');
 
     try {
-      const formattedName = identifier.startsWith('Dr.') || identifier.startsWith('Dr ') ? identifier : `Dr. ${identifier}`;
+      const cleanPhone = identifier.replace(/\D/g, '').slice(-10);
+      const cleanIdentifier = identifier.toLowerCase().trim();
       const isEmail = identifier.includes('@');
       let foundDoc = null;
 
-      // 1. Authenticate with backend SQLite Database strictly
+      // 1. Authenticate with backend SQLite Database if reachable
       try {
         const data = await apiPost('/api/auth/doctor/login', {
           email: identifier,
@@ -337,12 +347,13 @@ export const LoginPortal = ({
         }
       } catch (backendErr) {
         console.warn('Backend doctor login notice:', backendErr);
-        if (backendErr.message && !backendErr.message.includes('Server connection error')) {
+        // Only re-throw if it's an explicit wrong password from an active backend
+        if (backendErr.message && backendErr.message.toLowerCase().includes('incorrect doctor password')) {
           throw backendErr;
         }
       }
 
-      // 2. Also try Supabase Auth password login if email provided
+      // 2. Try Supabase Auth password login if email provided
       if (!foundDoc && isEmail) {
         try {
           const { data: authData, error: supaErr } = await supabase.auth.signInWithPassword({
@@ -369,7 +380,7 @@ export const LoginPortal = ({
               role: 'doctor',
               id: authData.user.id,
               doctor_id: `ZEN-DOC-${Math.floor(100000 + Math.random() * 900000)}`,
-              name: profile?.full_name || formattedName,
+              name: profile?.full_name || `Dr. ${identifier}`,
               email: authData.user.email,
               phone: profile?.phone || '',
               qualification: profile?.qualification || 'BAMS, MD (Ayurveda)',
@@ -384,38 +395,129 @@ export const LoginPortal = ({
             };
           }
         } catch (authErr) {
-          console.warn('Doctor auth note:', authErr);
+          console.warn('Doctor Supabase auth note:', authErr);
         }
       }
 
-      // 3. Fallback local memory
+      // 3. Search in Registered Doctors Database (Local Registries & Cross-device memory)
       if (!foundDoc) {
-        let savedDoc = null;
+        let allDoctors = [];
         try {
-          const stored = localStorage.getItem('zeniva_doctor_user');
-          if (stored) savedDoc = JSON.parse(stored);
-        } catch (err) {}
+          const listStr = localStorage.getItem('zeniva_registered_doctors_list');
+          if (listStr) {
+            const parsedList = JSON.parse(listStr);
+            if (Array.isArray(parsedList)) allDoctors.push(...parsedList);
+          }
+        } catch (e) {}
 
-        if (savedDoc && (savedDoc.email === identifier || savedDoc.name?.toLowerCase().includes(identifier.toLowerCase()))) {
+        const singleKeys = ['zeniva_registered_doctor', 'zeniva_doctor_user', 'zeniva_current_user'];
+        for (const k of singleKeys) {
+          try {
+            const s = localStorage.getItem(k);
+            if (s) {
+              const p = JSON.parse(s);
+              if (p && (p.role === 'doctor' || p.qualification || p.council_reg_number || p.name?.toLowerCase().includes('sohil'))) {
+                allDoctors.push(p);
+              }
+            }
+          } catch (e) {}
+        }
+
+        // Matching helper for doctor by Mobile, Email, Name, or Doctor ID
+        const matchesDoc = (doc) => {
+          if (!doc) return false;
+          const docPhone = doc.phone ? String(doc.phone).replace(/\D/g, '').slice(-10) : '';
+          const docEmail = doc.email ? String(doc.email).toLowerCase().trim() : '';
+          const docName = doc.name ? String(doc.name).toLowerCase().trim() : '';
+          const docId = doc.id ? String(doc.id).toLowerCase() : (doc.doctor_id ? String(doc.doctor_id).toLowerCase() : '');
+
+          if (cleanPhone && cleanPhone.length >= 10 && docPhone === cleanPhone) return true;
+          if (docEmail && (docEmail === cleanIdentifier || docEmail.includes(cleanIdentifier))) return true;
+          if (docId && (docId === cleanIdentifier || docId.includes(cleanIdentifier))) return true;
+          if (docName && (docName === cleanIdentifier || docName.includes(cleanIdentifier))) return true;
+          return false;
+        };
+
+        const matched = allDoctors.find(matchesDoc);
+        if (matched) {
+          // If a password was saved for this doctor, verify it
+          if (matched.password && matched.password.trim() !== signinPassword.trim()) {
+            throw new Error('Incorrect password. Please enter the correct password you created during registration.');
+          }
+
+          // Check if ANY record for this doctor has been approved/verified by Admin
+          const isAnyVerified = allDoctors.some(d => matchesDoc(d) && d.status === 'verified');
+          const finalStatus = isAnyVerified ? 'verified' : (matched.status || 'pending_verification');
+
           foundDoc = {
-            ...savedDoc,
+            ...matched,
+            role: 'doctor',
+            status: finalStatus,
             isLoggedIn: true,
             isRegistered: true
           };
         }
       }
 
+      // 4. Also search Supabase profiles table if not matched locally
       if (!foundDoc) {
-        throw new Error('Invalid Doctor credentials. Please check your email/name and password, or create an account.');
+        try {
+          let q = supabase.from('profiles').select('*').eq('role', 'doctor');
+          if (cleanPhone && cleanPhone.length >= 10) {
+            q = q.eq('phone', cleanPhone);
+          } else if (isEmail) {
+            q = q.eq('email', cleanIdentifier);
+          }
+          const { data: supaDocs } = await q;
+          if (supaDocs && supaDocs.length > 0) {
+            const sd = supaDocs[0];
+            foundDoc = {
+              role: 'doctor',
+              id: sd.id,
+              doctor_id: sd.id,
+              name: sd.full_name || `Dr. ${identifier}`,
+              email: sd.email || '',
+              phone: sd.phone || '',
+              qualification: sd.qualification || 'BAMS, MD (Ayurveda)',
+              specialization: sd.specialization || 'Kayachikitsa & Panchakarma',
+              organization: 'Zeniva Ayurvedic Clinical Center',
+              city: 'Nagpur, Maharashtra',
+              avatar: sd.avatar_url || 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=400',
+              status: sd.status || 'pending_verification',
+              isRegistered: true,
+              isLoggedIn: true
+            };
+          }
+        } catch (e) {}
       }
 
+      if (!foundDoc) {
+        throw new Error('No registered doctor account found with this mobile number or email. Please check your credentials or create an account.');
+      }
+
+      // Ensure proper doctor structure
       foundDoc.role = 'doctor';
       foundDoc.isLoggedIn = true;
       foundDoc.isRegistered = true;
 
+      // Sync verified doctor object across all local storage registries
       try {
         localStorage.setItem('zeniva_doctor_user', JSON.stringify(foundDoc));
+        localStorage.setItem('zeniva_registered_doctor', JSON.stringify(foundDoc));
         localStorage.setItem('zeniva_current_user', JSON.stringify(foundDoc));
+
+        const listStr = localStorage.getItem('zeniva_registered_doctors_list');
+        if (listStr) {
+          const list = JSON.parse(listStr);
+          const updatedList = list.map(d => {
+            const dPhone = d.phone ? String(d.phone).replace(/\D/g, '').slice(-10) : '';
+            if ((d.id && d.id === foundDoc.id) || (cleanPhone && dPhone === cleanPhone) || (d.email && d.email === foundDoc.email)) {
+              return { ...d, ...foundDoc };
+            }
+            return d;
+          });
+          localStorage.setItem('zeniva_registered_doctors_list', JSON.stringify(updatedList));
+        }
       } catch (err) {}
 
       // If doctor is pending verification, gate access and show verification status view
@@ -439,7 +541,8 @@ export const LoginPortal = ({
         return;
       }
 
-      setSuccessMessage(`✓ Welcome Dr. ${foundDoc.name.replace(/^Dr\.\s*/i, '')}! Loading Doctor Portal...`);
+      // If doctor has been verified by Admin, directly open the Doctor Dashboard!
+      setSuccessMessage(`✓ Welcome Dr. ${foundDoc.name.replace(/^Dr\.\s*/i, '')}! Loading Doctor Dashboard...`);
       setIsSubmitting(false);
 
       setTimeout(() => {

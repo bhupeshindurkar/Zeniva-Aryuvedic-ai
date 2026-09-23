@@ -24,11 +24,15 @@ const apiPost = async (path, body) => {
   let lastErr = null;
   for (const url of endpoints) {
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2500);
       const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
+        body: JSON.stringify(body),
+        signal: controller.signal
       });
+      clearTimeout(timeoutId);
       const text = await res.text();
       let data = {};
       try {
@@ -37,8 +41,11 @@ const apiPost = async (path, body) => {
         data = { detail: text || `HTTP ${res.status}` };
       }
       if (!res.ok) {
+        if (res.status === 405 || res.status === 404 || res.status >= 500) {
+          throw new Error(`Server connection unavailable (${res.status})`);
+        }
         const errorMsg = data.detail || data.message || `Request error (${res.status})`;
-        if (res.status >= 400 && res.status < 500) {
+        if (res.status === 401 || (res.status === 400 && data.detail)) {
           throw new Error(errorMsg);
         }
         throw new Error(errorMsg);
@@ -46,7 +53,7 @@ const apiPost = async (path, body) => {
       return data;
     } catch (err) {
       lastErr = err;
-      if (err.message && !err.message.includes('502') && !err.message.includes('Failed to fetch') && !err.message.includes('NetworkError')) {
+      if (err.message && (err.message.includes('password') || err.message.includes('Incorrect') || err.message.includes('not found') || err.message.includes('Please enter'))) {
         throw err;
       }
     }

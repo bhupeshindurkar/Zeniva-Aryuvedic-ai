@@ -696,9 +696,19 @@ export const AdminDashboard = ({
     const isApprove = action === 'APPROVE' || action === 'APPROVED' || action === 'VERIFIED';
     const newStatus = isApprove ? 'verified' : 'rejected';
 
+    const targetCleanPhone = String(doctorId).replace(/\D/g, '').slice(-10);
+
+    const isMatch = (d) => {
+      if (!d) return false;
+      if (d.id === doctorId || d.doctor_id === doctorId) return true;
+      if (d.phone && (d.phone === doctorId || String(d.phone).replace(/\D/g, '').slice(-10) === targetCleanPhone)) return true;
+      if (d.email && String(d.email).toLowerCase() === String(doctorId).toLowerCase()) return true;
+      return false;
+    };
+
     // 1. Immediately update React state so UI updates instantaneously!
     setDoctorsList(prev => prev.map(d => {
-      if (d.id === doctorId || d.doctor_id === doctorId || (d.phone && d.phone === doctorId)) {
+      if (isMatch(d)) {
         return { ...d, status: newStatus, rejection_reason: reason };
       }
       return d;
@@ -709,7 +719,7 @@ export const AdminDashboard = ({
       const regDocStr = localStorage.getItem('zeniva_registered_doctor');
       if (regDocStr) {
         const regDoc = JSON.parse(regDocStr);
-        if (regDoc.id === doctorId || regDoc.doctor_id === doctorId || regDoc.phone === doctorId) {
+        if (isMatch(regDoc)) {
           const updatedDoc = {
             ...regDoc,
             status: newStatus,
@@ -725,7 +735,7 @@ export const AdminDashboard = ({
       if (listStr) {
         const dList = JSON.parse(listStr);
         const updatedList = dList.map(d => {
-          if (d.id === doctorId || d.doctor_id === doctorId || d.phone === doctorId) {
+          if (isMatch(d)) {
             return { ...d, status: newStatus, rejection_reason: reason };
           }
           return d;
@@ -739,7 +749,22 @@ export const AdminDashboard = ({
       localStorage.setItem('zeniva_doctor_status_trigger', `${doctorId}_${newStatus}_${Date.now()}`);
     } catch (e) {}
 
-    // 3. Also sync to backend API
+    // 3. Sync to Supabase profiles cloud table
+    try {
+      let q = supabase.from('profiles').update({ 
+        status: newStatus,
+        updated_at: new Date().toISOString()
+      });
+      if (targetCleanPhone && targetCleanPhone.length >= 10) {
+        await q.or(`id.eq.${doctorId},phone.eq.${targetCleanPhone}`);
+      } else {
+        await q.eq('id', doctorId);
+      }
+    } catch (supaErr) {
+      console.warn('Supabase doctor verify sync notice:', supaErr);
+    }
+
+    // 4. Also sync to backend API if available
     try {
       await fetch('/api/admin/doctor/verify', {
         method: 'POST',
