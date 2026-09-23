@@ -1727,6 +1727,7 @@ class WhatsAppSessionRequest(BaseModel):
     patient_name: Optional[str] = None
     phone: Optional[str] = None
     email: Optional[str] = None
+    doctor_name: Optional[str] = "Dr. Meera Joshi (Senior Ayurvedic Physician)"
     prakriti: Optional[str] = None
     dosha_imbalance: Optional[str] = None
     primary_concern: Optional[str] = None
@@ -1749,6 +1750,7 @@ def create_whatsapp_session(req: WhatsAppSessionRequest):
 
         pat_name = req.patient_name or "Zeniva Patient"
         pat_phone = req.phone or "Not provided"
+        doc_name = req.doctor_name or "Dr. Meera Joshi (Senior Ayurvedic Physician)"
         prakriti = req.prakriti or "Ayurvedic Constitution (Vata-Pitta)"
         concern = req.primary_concern or req.recent_query or "Ayurvedic Clinical Consultation & Inquiry"
         
@@ -1762,14 +1764,16 @@ def create_whatsapp_session(req: WhatsAppSessionRequest):
             f"🌿 *Zeniva Ayurvedic AI - Patient Consultation Dispatch*\n"
             f"━━━━━━━━━━━━━━━━━━━━━\n"
             f"📋 *Ref ID:* `{session_ref}`\n"
-            f"👤 *Patient:* {pat_name}\n"
+            f"👤 *Patient / Inquirer:* {pat_name}\n"
             f"📱 *Phone:* {pat_phone}\n"
+            f"🩺 *Consulting Doctor:* {doc_name}\n"
             f"⚖️ *Prakriti / Dosha:* {prakriti}\n"
             f"🩺 *Chief Concern:* {concern}\n"
             f"💡 *Zeniva AI Assessment:* {summary}\n"
+            f"👥 *Community Group:* Zeniva Ayurvedic AI Care\n"
             f"⏰ *Dispatched:* {timestamp_str}\n"
             f"━━━━━━━━━━━━━━━━━━━━━\n"
-            f"Namaste Dr. Sohil Indurkar & Zeniva AI Care Team, I would like to consult with an Ayurvedic Doctor regarding this assessment."
+            f"Namaste {doc_name} & Zeniva Clinical Care Team, I would like to consult with you regarding this Ayurvedic assessment."
         )
 
         # Store session in database for audit and doctor continuity

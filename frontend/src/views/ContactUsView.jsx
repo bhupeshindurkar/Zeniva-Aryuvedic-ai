@@ -34,6 +34,18 @@ export const ContactUsView = ({
   const officialDoctorPhone = '8766903403';
   const officialGroupUrl = 'https://chat.whatsapp.com/G4YxR1VfL5mC7oD48ZenAi';
 
+  // Certified Consultation Directory Doctors (from #overview/consultation)
+  const consultationDoctors = [
+    { id: 'doc_meera', name: 'Dr. Meera Joshi', specialty: 'Senior Ayurvedic Physician (Pune)' },
+    { id: 'doc_arjun', name: 'Dr. Arjun Patil', specialty: 'Nadi Pariksha & Joint Care (Mumbai)' },
+    { id: 'doc_neha', name: 'Dr. Neha Kulkarni', specialty: 'Dravyaguna & Women’s Health (Thane)' },
+    { id: 'doc_rajeshwar', name: 'Dr. Rajeshwar Sharma', specialty: 'Senior Vaidya & Metabolic Care (Delhi)' },
+    { id: 'doc_priya', name: 'Dr. Priya Nair', specialty: 'Mind-Body & Rasayana Expert (Pune)' },
+    { id: 'doc_anand', name: 'Dr. Anand Deshpande', specialty: 'Spine & Joint Specialist (Nagpur)' },
+  ];
+
+  const [selectedDoctor, setSelectedDoctor] = useState('Dr. Meera Joshi (Senior Ayurvedic Physician)');
+
   // Strict check if currently logged-in user is an authenticated patient
   const isLoggedInPatient = Boolean(
     currentUser && 
@@ -130,10 +142,13 @@ export const ContactUsView = ({
         }
       } catch (e) {}
 
+      const targetDoctor = overrideData?.doctor || selectedDoctor || 'Dr. Meera Joshi (Senior Ayurvedic Physician)';
+
       const payload = {
         patient_id: isLoggedInPatient ? (currentUser.id || '') : `GUEST-${Math.floor(100000 + Math.random() * 900000)}`,
         patient_name: patientName,
         phone: patientPhone,
+        doctor_name: targetDoctor,
         email: isLoggedInPatient ? (currentUser.email || '') : '',
         prakriti: prakriti,
         dosha_imbalance: 'Vata-Pitta Balance',
@@ -173,12 +188,13 @@ export const ContactUsView = ({
 📋 *Ref ID:* \`${sessionRef}\`
 👤 *Patient / Inquirer:* ${patientName}
 📱 *Phone:* ${patientPhone || 'Direct WhatsApp'}
+🩺 *Consulting Doctor:* ${targetDoctor}
 ⚖️ *Prakriti / Dosha:* ${prakriti}
 🩺 *Chief Concern:* ${chiefConcern}
 💡 *Zeniva AI Assessment:* ${summaryText}
 👥 *Community Group:* Zeniva Ayurvedic AI Care
 ━━━━━━━━━━━━━━━━━━━━━
-Namaste Dr. Sohil Indurkar & Zeniva AI Care Team, I would like to consult with an Ayurvedic Doctor regarding this assessment.`;
+Namaste ${targetDoctor} & Zeniva Clinical Care Team, I would like to consult with you regarding this Ayurvedic assessment.`;
 
         targetWhatsAppUrl = `https://api.whatsapp.com/send?phone=91${officialDoctorPhone}&text=${encodeURIComponent(msg)}`;
       }
@@ -330,6 +346,24 @@ Namaste Dr. Sohil Indurkar & Zeniva AI Care Team, I would like to consult with a
 
               <div className="space-y-2.5 pt-1 text-xs">
                 <div>
+                  <label className="block font-bold text-stone-700 mb-1 flex items-center justify-between">
+                    <span>Consulting Doctor (तज्ज्ञ डॉक्टर निवडा)</span>
+                    <span className="text-[10px] text-emerald-700 font-semibold">Consultation Directory</span>
+                  </label>
+                  <select
+                    value={selectedDoctor}
+                    onChange={(e) => setSelectedDoctor(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-white border border-stone-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-xs font-medium cursor-pointer"
+                  >
+                    {consultationDoctors.map((doc) => (
+                      <option key={doc.id} value={`${doc.name} (${doc.specialty})`}>
+                        🩺 {doc.name} — {doc.specialty}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
                   <label className="block font-bold text-stone-700 mb-1">
                     Your Name (तुमचे नाव)
                   </label>
@@ -357,7 +391,7 @@ Namaste Dr. Sohil Indurkar & Zeniva AI Care Team, I would like to consult with a
               </div>
 
               <button
-                onClick={() => handleStartWhatsAppChat('doctor', { name: guestName, phone: guestPhone, query: guestQuery })}
+                onClick={() => handleStartWhatsAppChat('doctor', { name: guestName, phone: guestPhone, query: guestQuery, doctor: selectedDoctor })}
                 disabled={isConnectingWhatsApp}
                 className="w-full py-2.5 px-4 rounded-xl bg-[#1C1030] hover:bg-[#2D1650] text-white text-xs font-bold flex items-center justify-center gap-2 shadow-md transition-all hover:scale-[1.02] cursor-pointer mt-2"
               >
