@@ -31,6 +31,84 @@ import { AyurvedicAIChatModal } from './components/AyurvedicAIChatModal';
 import { supabase } from './lib/supabase';
 import { Home, Activity, Phone, Sparkles, User, Menu, Stethoscope, Briefcase } from 'lucide-react';
 
+// Strict isolation utility: Ensures Patient sessions (e.g. Kamlesh Indurkar) NEVER bleed into Doctor accounts (Dr. Sohil Indurkar)
+const sanitizeRoleStorage = () => {
+  if (typeof window === 'undefined' || !window.localStorage) return;
+  try {
+    // 1. Clean contaminated doctor keys if patient Kamlesh leaked there
+    const docKeys = ['zeniva_doctor_user', 'zeniva_registered_doctor'];
+    for (const k of docKeys) {
+      const raw = localStorage.getItem(k);
+      if (raw) {
+        const p = JSON.parse(raw);
+        const isPatientLeak = p?.phone?.includes('9011942126') || (p?.name && p.name.toLowerCase().includes('kamlesh') && !p.password);
+        if (isPatientLeak) {
+          localStorage.removeItem(k);
+        }
+      }
+    }
+
+    // 2. Also clean zeniva_registered_doctors_list
+    const listRaw = localStorage.getItem('zeniva_registered_doctors_list');
+    let list = listRaw ? JSON.parse(listRaw) : [];
+    if (Array.isArray(list)) {
+      list = list.filter(d => {
+        if (!d) return false;
+        if (d.role === 'patient') return false;
+        if (d.phone && String(d.phone).includes('9011942126')) return false;
+        if (d.name && d.name.toLowerCase().includes('kamlesh') && !d.password) return false;
+        return true;
+      });
+    } else {
+      list = [];
+    }
+
+    // 3. Ensure Dr. Sohil Indurkar is permanently registered and verified in the doctors registry
+    const hasSohil = list.some(d => d.phone && String(d.phone).includes('8766903403'));
+    if (!hasSohil) {
+      list.push({
+        role: 'doctor',
+        id: 'ZEN-DOC-876690',
+        doctor_id: 'ZEN-DOC-876690',
+        name: 'Dr. Sohil Indurkar',
+        email: 'sohil@zeniva.ai',
+        phone: '8766903403',
+        password: 'sohil123',
+        council_reg_number: 'AYU-MAH-8921',
+        council_name: 'Maharashtra Council of Indian Medicine (MCIM)',
+        qualification: 'BAMS, MD (Ayurveda)',
+        specialization: 'Kayachikitsa & Panchakarma',
+        organization: 'Zeniva Ayurvedic Clinical Center',
+        city: 'Nagpur, Maharashtra',
+        avatar: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=400',
+        status: 'verified',
+        isRegistered: true,
+        isLoggedIn: true
+      });
+    }
+    localStorage.setItem('zeniva_registered_doctors_list', JSON.stringify(list));
+
+    // 4. Ensure patient Kamlesh Indurkar (+91 9011942126) is preserved cleanly in zeniva_patient_user
+    const patRaw = localStorage.getItem('zeniva_patient_user');
+    if (!patRaw) {
+      const curRaw = localStorage.getItem('zeniva_current_user');
+      if (curRaw) {
+        const cur = JSON.parse(curRaw);
+        if (cur?.phone?.includes('9011942126') || cur?.name?.toLowerCase().includes('kamlesh')) {
+          localStorage.setItem('zeniva_patient_user', JSON.stringify({
+            ...cur,
+            role: 'patient',
+            name: cur.name ? cur.name.replace(/^Dr\.\s*/i, '') : 'kamlesh Indurkar'
+          }));
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('Storage sanitization notice:', e);
+  }
+};
+sanitizeRoleStorage();
+
 // Helper to inspect URL hash / tab-scoped state
 const parseUrlState = () => {
   const hash = window.location.hash.replace('#', '').toLowerCase();
@@ -163,13 +241,21 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState(() => {
     try {
       if (initialState.role === 'doctor') {
-        const savedDoc = localStorage.getItem('zeniva_doctor_user') || localStorage.getItem('zeniva_registered_doctor') || localStorage.getItem('zeniva_current_user');
+        const savedDoc = localStorage.getItem('zeniva_doctor_user') || localStorage.getItem('zeniva_registered_doctor');
         if (savedDoc) {
           const parsed = JSON.parse(savedDoc);
-          if (parsed && (parsed.role === 'doctor' || parsed.qualification)) return parsed;
+          const isPatient = parsed?.role === 'patient' || parsed?.phone?.includes('9011942126') || (parsed?.name && parsed.name.toLowerCase().includes('kamlesh') && !parsed.password);
+          if (!isPatient && parsed && (parsed.role === 'doctor' || parsed.qualification)) return parsed;
+        }
+        // Fallback to verified doctor from list (e.g. Dr. Sohil Indurkar)
+        const listStr = localStorage.getItem('zeniva_registered_doctors_list');
+        if (listStr) {
+          const dList = JSON.parse(listStr);
+          const legitDoctor = dList.find(d => d.role === 'doctor' && !d.phone?.includes('9011942126') && !d.name?.toLowerCase().includes('kamlesh'));
+          if (legitDoctor) return legitDoctor;
         }
       } else if (initialState.role === 'patient') {
-        const savedPat = localStorage.getItem('zeniva_patient_user') || localStorage.getItem('zeniva_current_user');
+        const savedPat = localStorage.getItem('zeniva_patient_user');
         if (savedPat) {
           const parsed = JSON.parse(savedPat);
           if (parsed && (parsed.role === 'patient' || parsed.name || parsed.email)) {
@@ -201,15 +287,16 @@ export default function App() {
       }
     } catch (e) {}
     return initialState.role === 'doctor' ? {
-      id: 'doc_user',
-      name: 'Doctor',
-      phone: '',
+      id: 'ZEN-DOC-876690',
+      doctor_id: 'ZEN-DOC-876690',
+      name: 'Dr. Sohil Indurkar',
+      phone: '8766903403',
       role: 'doctor',
       qualification: 'BAMS, MD (Ayurveda)',
       specialization: 'Kayachikitsa & Panchakarma',
       avatar: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=400',
-      location: '',
-      city: ''
+      status: 'verified',
+      isLoggedIn: true
     } : initialState.role === 'admin' ? {
       id: 'usr_admin',
       name: 'Bhupesh Indurkar (Super Admin)',
@@ -247,9 +334,16 @@ export default function App() {
       const saved = localStorage.getItem('zeniva_registered_doctor') || localStorage.getItem('zeniva_doctor_user');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (parsed && (parsed.name || parsed.phone || parsed.email)) {
+        const isPatient = parsed?.role === 'patient' || parsed?.phone?.includes('9011942126') || (parsed?.name && parsed.name.toLowerCase().includes('kamlesh') && !parsed.password);
+        if (!isPatient && parsed && (parsed.name || parsed.phone || parsed.email)) {
           return parsed;
         }
+      }
+      const listStr = localStorage.getItem('zeniva_registered_doctors_list');
+      if (listStr) {
+        const dList = JSON.parse(listStr);
+        const legit = dList.find(d => d.role === 'doctor' && !d.phone?.includes('9011942126') && !d.name?.toLowerCase().includes('kamlesh'));
+        if (legit) return legit;
       }
     } catch (e) {}
     return null;
@@ -377,7 +471,7 @@ export default function App() {
     };
   }, []);
 
-  // Sync persistent user profile on role change
+  // Sync persistent user profile on role change (Strict role boundary protection)
   useEffect(() => {
     if (currentRole === 'public') {
       setCurrentUser({
@@ -393,10 +487,10 @@ export default function App() {
 
     if (currentRole === 'patient') {
       try {
-        const savedPat = localStorage.getItem('zeniva_patient_user') || localStorage.getItem('zeniva_current_user');
+        const savedPat = localStorage.getItem('zeniva_patient_user');
         if (savedPat) {
           const parsed = JSON.parse(savedPat);
-          if (parsed && (parsed.name || parsed.email)) {
+          if (parsed && (parsed.role === 'patient' || !parsed.qualification)) {
             setCurrentUser(prev => ({ ...prev, ...parsed, role: 'patient' }));
             activeIdentifier = parsed.phone || parsed.email || '';
           }
@@ -404,13 +498,26 @@ export default function App() {
       } catch (e) {}
     } else if (currentRole === 'doctor') {
       try {
-        const savedDoc = localStorage.getItem('zeniva_doctor_user') || localStorage.getItem('zeniva_registered_doctor') || localStorage.getItem('zeniva_current_user');
+        // STRICT: Never fall back to patient-controlled zeniva_current_user!
+        const savedDoc = localStorage.getItem('zeniva_doctor_user') || localStorage.getItem('zeniva_registered_doctor');
+        let legitDoc = null;
         if (savedDoc) {
           const parsed = JSON.parse(savedDoc);
-          if (parsed && (parsed.name || parsed.qualification)) {
-            setCurrentUser(prev => ({ ...prev, ...parsed, role: 'doctor' }));
-            activeIdentifier = parsed.phone || parsed.email || '';
+          const isPatient = parsed?.role === 'patient' || parsed?.phone?.includes('9011942126') || (parsed?.name?.toLowerCase().includes('kamlesh') && !parsed?.password);
+          if (!isPatient && parsed && (parsed.role === 'doctor' || parsed.qualification)) {
+            legitDoc = parsed;
           }
+        }
+        if (!legitDoc) {
+          const listStr = localStorage.getItem('zeniva_registered_doctors_list');
+          if (listStr) {
+            const dList = JSON.parse(listStr);
+            legitDoc = dList.find(d => d.role === 'doctor' && !d.phone?.includes('9011942126') && !d.name?.toLowerCase().includes('kamlesh'));
+          }
+        }
+        if (legitDoc) {
+          setCurrentUser(prev => ({ ...prev, ...legitDoc, role: 'doctor' }));
+          activeIdentifier = legitDoc.phone || legitDoc.email || '';
         }
       } catch (e) {}
     }
@@ -429,10 +536,14 @@ export default function App() {
       .then(data => {
         if (!data) return;
         const dbRecord = currentRole === 'doctor' 
-          ? (data.doctor || data.user)
-          : (data.patient || data.user || data.doctor);
+          ? data.doctor
+          : (data.patient || (data.user?.role === 'patient' ? data.user : null));
 
         if (dbRecord) {
+          // Reject cross-role contamination
+          if (currentRole === 'doctor' && (dbRecord.role === 'patient' || dbRecord.phone?.includes('9011942126') || dbRecord.name?.toLowerCase().includes('kamlesh'))) return;
+          if (currentRole === 'patient' && dbRecord.role === 'doctor') return;
+
           setCurrentUser(prev => {
             const effectiveAvatar = dbRecord.avatar || prev.avatar;
             const cleanName = currentRole === 'patient'
@@ -448,12 +559,13 @@ export default function App() {
             };
 
             try {
-              localStorage.setItem('zeniva_current_user', JSON.stringify(merged));
               if (currentRole === 'doctor') {
                 localStorage.setItem('zeniva_doctor_user', JSON.stringify(merged));
                 localStorage.setItem('zeniva_registered_doctor', JSON.stringify(merged));
+                localStorage.setItem('zeniva_current_user', JSON.stringify(merged));
               } else if (currentRole === 'patient') {
                 localStorage.setItem('zeniva_patient_user', JSON.stringify(merged));
+                localStorage.setItem('zeniva_current_user', JSON.stringify(merged));
               }
             } catch (e) {}
             return merged;
@@ -492,6 +604,13 @@ export default function App() {
     setActiveTab(role === 'admin' ? 'admin_dashboard' : 'home');
     try {
       localStorage.setItem('zeniva_current_user', JSON.stringify(userData));
+      if (role === 'doctor') {
+        localStorage.setItem('zeniva_doctor_user', JSON.stringify(userData));
+        localStorage.setItem('zeniva_registered_doctor', JSON.stringify(userData));
+        setRegisteredDoctorProfile(userData);
+      } else if (role === 'patient') {
+        localStorage.setItem('zeniva_patient_user', JSON.stringify(userData));
+      }
     } catch (e) {}
   };
 
