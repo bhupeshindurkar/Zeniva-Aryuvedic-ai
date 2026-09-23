@@ -601,7 +601,7 @@ export const DoctorDashboard = ({
                             >
                               Fix & Re-upload Now
                             </button>
-                            <span className="text-[10px] text-stone-500 font-mono">📱 Fast2SMS Sent</span>
+                            <span className="text-[10px] text-stone-500 font-mono">📱 Instant Alert Sent</span>
                           </div>
                         </div>
                       </div>
@@ -735,7 +735,7 @@ export const DoctorDashboard = ({
                 <span className="px-2.5 py-0.5 rounded-full bg-red-600 text-white text-[10px] font-bold uppercase tracking-wider">
                   Admin Action: Rejected
                 </span>
-                <span className="text-[11px] text-stone-500 font-mono">📱 Fast2SMS Sent</span>
+                <span className="text-[11px] text-stone-500 font-mono">📱 Instant Alert Sent</span>
               </div>
               <h3 className="text-sm font-bold text-stone-900 mt-1">
                 Your Doctor Qualification / Credentials Were Not Approved by Super Admin
@@ -767,7 +767,7 @@ export const DoctorDashboard = ({
                 💬
               </span>
               <div>
-                <p className="text-[11px] font-bold text-stone-200">MESSAGES • Fast2SMS</p>
+                <p className="text-[11px] font-bold text-stone-200">MESSAGES • WhatsApp & SMS</p>
                 <p className="text-[9px] text-stone-400">To: +91 {currentUser.phone || '8766903403'}</p>
               </div>
             </div>
@@ -844,7 +844,7 @@ export const DoctorDashboard = ({
             <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200 text-[11px] text-amber-900 flex items-start gap-2 text-left">
               <span className="text-base shrink-0">📱</span>
               <div>
-                <span className="font-bold">Fast2SMS Notification Dispatched:</span>
+                <span className="font-bold">Instant Notification Dispatched:</span>
                 <p className="text-stone-600 mt-0.5">
                   An instant SMS alert with resolution link has been delivered to your mobile: <strong className="font-mono text-stone-900">+91 {currentUser.phone || '8766903403'}</strong>.
                 </p>
@@ -2588,8 +2588,8 @@ export const DoctorDashboard = ({
           <div className="space-y-4 text-xs max-w-xl">
             <div className="flex items-center justify-between p-4 rounded-2xl bg-stone-50 border border-stone-200">
               <div>
-                <p className="font-bold text-stone-900">SMS Patient Reminders</p>
-                <p className="text-stone-500 text-[11px]">Send automated Fast2SMS reminder before appointment slot.</p>
+                <p className="font-bold text-stone-900">WhatsApp & SMS Patient Reminders</p>
+                <p className="text-stone-500 text-[11px]">Send automated appointment reminder before scheduled consultation slot.</p>
               </div>
               <input type="checkbox" defaultChecked className="w-4 h-4 accent-purple-700" />
             </div>

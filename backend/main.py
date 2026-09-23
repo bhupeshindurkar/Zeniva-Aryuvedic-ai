@@ -1086,7 +1086,59 @@ def get_all_patients():
 def delete_patient(patient_id: str):
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("DELETE FROM users WHERE id = ?", (patient_id,))
+    cursor.execute("DELETE FROM users WHERE id = ? OR phone = ?", (patient_id, patient_id))
+    conn.commit()
+    conn.close()
+    return {"success": True, "message": f"Patient {patient_id} removed."}
+
+class UpdatePatientRequest(BaseModel):
+    id: str
+    name: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    age: Optional[Union[str, int]] = None
+    gender: Optional[str] = None
+    prakriti: Optional[str] = None
+    vikriti: Optional[str] = None
+    blood_group: Optional[str] = None
+    diet: Optional[str] = None
+    agribalam: Optional[str] = None
+    city: Optional[str] = None
+    status: Optional[str] = None
+
+@app.post("/api/admin/patient/update")
+def update_patient(req: UpdatePatientRequest):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    age_str = str(req.age) if req.age is not None else None
+    cursor.execute("""
+        UPDATE users SET 
+            name = COALESCE(?, name),
+            phone = COALESCE(?, phone),
+            email = COALESCE(?, email),
+            age = COALESCE(?, age),
+            gender = COALESCE(?, gender),
+            prakriti = COALESCE(?, prakriti),
+            vikriti = COALESCE(?, vikriti),
+            blood_group = COALESCE(?, blood_group),
+            diet = COALESCE(?, diet),
+            agribalam = COALESCE(?, agribalam),
+            city = COALESCE(?, city),
+            status = COALESCE(?, status)
+        WHERE id = ? OR phone = ?
+    """, (req.name, req.phone, req.email, age_str, req.gender, req.prakriti, req.vikriti, req.blood_group, req.diet, req.agribalam, req.city, req.status, req.id, req.phone))
+    conn.commit()
+    conn.close()
+    return {"success": True, "message": f"Patient {req.id} updated."}
+
+@app.post("/api/admin/patient/delete")
+def delete_patient_post(data: dict):
+    patient_id = data.get("patient_id") or data.get("id")
+    if not patient_id:
+        return {"error": "patient_id required"}
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM users WHERE id = ? OR phone = ?", (str(patient_id), str(patient_id)))
     conn.commit()
     conn.close()
     return {"success": True, "message": f"Patient {patient_id} removed."}

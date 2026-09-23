@@ -6,7 +6,7 @@ import {
   Building, ChevronRight, User, AlertCircle, Info, ThumbsUp
 } from 'lucide-react';
 
-export const ConsultationView = ({ onSelectTab = () => {} }) => {
+export const ConsultationView = ({ onSelectTab = () => {}, currentUser = {} }) => {
   const [activeFilter, setActiveFilter] = useState('all');
   const [selectedCity, setSelectedCity] = useState('all');
   const [consultationMode, setConsultationMode] = useState('all');
@@ -187,6 +187,59 @@ export const ConsultationView = ({ onSelectTab = () => {} }) => {
 
   const handleConfirmBooking = (e) => {
     e.preventDefault();
+    let patName = currentUser?.name;
+    let patPhone = currentUser?.phone;
+    let patPrakriti = currentUser?.prakriti;
+    try {
+      if (!patName) {
+        const raw = localStorage.getItem('zeniva_patient_user');
+        if (raw) {
+          const p = JSON.parse(raw);
+          patName = p.name || 'Patient';
+          patPhone = p.phone || '9876543210';
+          patPrakriti = p.prakriti || patPrakriti;
+        }
+      }
+    } catch (err) {}
+
+    const newApt = {
+      id: `APT-${Math.floor(100000 + Math.random() * 900000)}`,
+      time: `${selectedDate}, ${selectedTimeSlot}`,
+      date: selectedDate,
+      timeSlot: selectedTimeSlot,
+      patient: patName || 'Zeniva Patient',
+      phone: patPhone || '9876543210',
+      doctor: bookingDoctor.name,
+      doctor_id: bookingDoctor.id,
+      type: 'In-Clinic Consultation',
+      condition: chiefComplaint || patPrakriti || 'Ayurvedic Wellness Protocol',
+      status: 'upcoming',
+      created_at: new Date().toISOString()
+    };
+
+    try {
+      const existing = localStorage.getItem('zeniva_all_appointments');
+      const list = existing ? JSON.parse(existing) : [];
+      list.unshift(newApt);
+      localStorage.setItem('zeniva_all_appointments', JSON.stringify(list));
+      window.dispatchEvent(new CustomEvent('zeniva_new_appointment', { detail: newApt }));
+    } catch (err) {}
+
+    try {
+      const notifsRaw = localStorage.getItem('zeniva_admin_notifications');
+      const notifs = notifsRaw ? JSON.parse(notifsRaw) : [];
+      notifs.unshift({
+        id: `NOTIF-${Date.now()}`,
+        title: 'New Clinical Appointment Booked',
+        desc: `Patient ${newApt.patient} booked ${bookingDoctor.name} (${newApt.time}).`,
+        time: 'Just now',
+        type: 'consultation',
+        read: false
+      });
+      localStorage.setItem('zeniva_admin_notifications', JSON.stringify(notifs));
+      window.dispatchEvent(new CustomEvent('zeniva_new_notification'));
+    } catch (err) {}
+
     setBookingSuccess(`🎉 Clinical Appointment Confirmed with ${bookingDoctor.name} for ${selectedDate} at ${selectedTimeSlot}!`);
     setTimeout(() => {
       setBookingSuccess('');

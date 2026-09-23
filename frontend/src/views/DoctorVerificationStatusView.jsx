@@ -385,9 +385,9 @@ export const DoctorVerificationStatusView = ({
               <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200 text-[11px] text-amber-900 flex items-start gap-2">
                 <span className="text-base shrink-0">📱</span>
                 <div>
-                  <span className="font-bold">Fast2SMS Notification Dispatched:</span>
+                  <span className="font-bold">Instant Alert Dispatched:</span>
                   <p className="text-stone-600 mt-0.5">
-                    An SMS alert with resolution instructions has been sent to your registered mobile: <strong className="font-mono text-stone-900">+91 {phone}</strong>.
+                    An alert notification with resolution instructions has been sent to your registered mobile: <strong className="font-mono text-stone-900">+91 {phone}</strong>.
                   </p>
                 </div>
               </div>

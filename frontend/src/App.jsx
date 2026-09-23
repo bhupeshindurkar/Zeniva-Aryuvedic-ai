@@ -547,6 +547,58 @@ export default function App() {
     };
   }, [currentRole]);
 
+  // Real-time synchronization when Admin updates or deletes patient profile
+  useEffect(() => {
+    const handleProfileUpdate = (e) => {
+      const updated = e?.detail;
+      if (!updated) return;
+      if (currentRole === 'patient') {
+        setCurrentUser(prev => {
+          const match = (prev.id && prev.id === updated.id) ||
+                        (prev.phone && updated.phone && String(prev.phone).replace(/\D/g, '').slice(-10) === String(updated.phone).replace(/\D/g, '').slice(-10)) ||
+                        (prev.email && updated.email && String(prev.email).toLowerCase() === String(updated.email).toLowerCase());
+          if (match) {
+            const merged = { ...prev, ...updated, role: 'patient' };
+            try {
+              localStorage.setItem('zeniva_patient_user', JSON.stringify(merged));
+              localStorage.setItem('zeniva_current_user', JSON.stringify(merged));
+            } catch (err) {}
+            return merged;
+          }
+          return prev;
+        });
+      }
+    };
+
+    const handlePatientDeleted = (e) => {
+      const deletedId = e?.detail?.id;
+      if (!deletedId) return;
+      if (currentRole === 'patient') {
+        setCurrentUser(prev => {
+          if (prev.id === deletedId || prev.phone === deletedId) {
+            localStorage.removeItem('zeniva_patient_user');
+            localStorage.removeItem('zeniva_current_user');
+            return {
+              id: 'guest_visitor',
+              name: 'Guest Visitor',
+              role: 'public',
+              isLoggedIn: false
+            };
+          }
+          return prev;
+        });
+      }
+    };
+
+    window.addEventListener('zeniva_patient_profile_updated', handleProfileUpdate);
+    window.addEventListener('zeniva_patient_deleted', handlePatientDeleted);
+
+    return () => {
+      window.removeEventListener('zeniva_patient_profile_updated', handleProfileUpdate);
+      window.removeEventListener('zeniva_patient_deleted', handlePatientDeleted);
+    };
+  }, [currentRole]);
+
   // Sync persistent user profile on role change (Strict role boundary protection)
   useEffect(() => {
     if (currentRole === 'public') {
@@ -904,6 +956,7 @@ export default function App() {
               />
             ) : activeTab === 'consultation' ? (
               <ConsultationView
+                currentUser={currentUser}
                 onSelectTab={(tabId) => setActiveTab(tabId)}
               />
             ) : activeTab === 'library' ? (
@@ -1039,6 +1092,7 @@ export default function App() {
 
               {activeTab === 'consultation' && (
                 <ConsultationView
+                  currentUser={currentUser}
                   onSelectTab={(tabId) => {
                     setActiveTab(tabId);
                   }}

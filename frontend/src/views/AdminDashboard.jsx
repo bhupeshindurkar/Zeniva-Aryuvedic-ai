@@ -231,11 +231,18 @@ export const AdminDashboard = ({
   const [patientSearch, setPatientSearch] = useState('');
   const [doctorFilterStatus, setDoctorFilterStatus] = useState('all'); // 'all' | 'pending' | 'verified' | 'rejected'
   
-  // Selected Modals
+  // Selected Modals & Editing States
   const [inspectingDoctor, setInspectingDoctor] = useState(null);
   const [inspectingPatient, setInspectingPatient] = useState(null);
   const [isRejecting, setIsRejecting] = useState(false);
   const [rejectionInput, setRejectionInput] = useState('Medical Council registration credentials & degree certificates could not be verified against the state MCIM registry. Please upload clear official certificates.');
+
+  // Patient & Doctor Real Editing Modals State
+  const [editingPatient, setEditingPatient] = useState(null);
+  const [isEditPatientModalOpen, setIsEditPatientModalOpen] = useState(false);
+  const [editingDoctor, setEditingDoctor] = useState(null);
+  const [isEditDoctorModalOpen, setIsEditDoctorModalOpen] = useState(false);
+  const [inspectingConsultation, setInspectingConsultation] = useState(null);
 
   // Patient Dashboard Video Broadcast State
   const defaultBroadcastVideo = {
@@ -482,6 +489,8 @@ export const AdminDashboard = ({
     // 2. Fetch Patients from Supabase + LocalStorage + SQLite
     try {
       let combinedPatients = [];
+      const delPatRaw = localStorage.getItem('zeniva_deleted_patient_ids');
+      const deletedPatIds = delPatRaw ? JSON.parse(delPatRaw) : [];
 
       // A. Query Supabase profiles table for patients
       try {
@@ -491,65 +500,112 @@ export const AdminDashboard = ({
           .neq('role', 'doctor');
 
         if (sbPatients && sbPatients.length > 0) {
-          const mapped = sbPatients.map(p => ({
-            id: p.id,
-            name: p.full_name || 'Zeniva Patient',
-            phone: p.phone || '9876543210',
-            email: p.email || '',
-            age: p.age || '28',
-            gender: p.gender || 'Not specified',
-            prakriti: p.prakriti || '🌙 Stress & Sleep Wellness Profile',
-            vikriti: p.vikriti || 'Work-Stress Overthinking',
-            blood_group: p.blood_group || 'B+',
-            diet: p.diet || 'Ayurvedic Wholesome Diet',
-            agribalam: p.agribalam || 'Balanced (Samagni)',
-            location: p.location || p.city || 'Nagpur, Maharashtra',
-            city: p.city || 'Nagpur',
-            status: p.status || 'active',
-            avatar: p.avatar_url || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150',
-            created_at: p.created_at || new Date().toISOString()
-          }));
+          const mapped = sbPatients
+            .filter(p => {
+              if (!p) return false;
+              if (deletedPatIds.includes(p.id)) return false;
+              const clPhone = p.phone ? String(p.phone).replace(/\D/g, '').slice(-10) : '';
+              if (clPhone && deletedPatIds.includes(clPhone)) return false;
+              return true;
+            })
+            .map(p => ({
+              id: p.id,
+              name: p.full_name || 'Zeniva Patient',
+              phone: p.phone || '9876543210',
+              email: p.email || '',
+              age: p.age || '28',
+              gender: p.gender || 'Not specified',
+              prakriti: p.prakriti || '🌙 Stress & Sleep Wellness Profile',
+              vikriti: p.vikriti || 'Work-Stress Overthinking',
+              blood_group: p.blood_group || 'B+',
+              diet: p.diet || 'Ayurvedic Wholesome Diet',
+              agribalam: p.agribalam || 'Balanced (Samagni)',
+              location: p.location || p.city || 'Nagpur, Maharashtra',
+              city: p.city || 'Nagpur',
+              status: p.status || 'active',
+              avatar: p.avatar_url || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150',
+              created_at: p.created_at || new Date().toISOString()
+            }));
           combinedPatients.push(...mapped);
         }
       } catch (sbErr) {
         console.warn("Supabase patients query note:", sbErr);
       }
 
-      // B. Check LocalStorage logged in patient
+      // B. Check LocalStorage registered patients registry
       try {
-        const localPatStr = localStorage.getItem('zeniva_patient_user');
-        if (localPatStr) {
-          const localPat = JSON.parse(localPatStr);
-          if (localPat && localPat.name) {
-            combinedPatients.unshift({
-              id: localPat.id || 'pat_local_active',
-              name: localPat.name,
-              phone: localPat.phone || '9876543210',
-              email: localPat.email || '',
-              age: localPat.age || '29',
-              gender: localPat.gender || 'Patient',
-              prakriti: localPat.prakriti || localPat.dosha || '🌙 Stress & Sleep Wellness Profile',
-              vikriti: 'Work-Stress Overthinking & Skin Redness',
-              blood_group: localPat.blood_group || 'B+',
-              diet: 'Cooling Coconut & Ghee Infused Foods',
-              agribalam: 'Balanced Digestion (Samagni)',
-              location: localPat.city || localPat.location || 'Nagpur, Maharashtra',
-              city: localPat.city || 'Nagpur',
-              status: 'active',
-              avatar: localPat.avatar || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150',
-              created_at: new Date().toISOString()
+        const regListStr = localStorage.getItem('zeniva_all_patients_registry');
+        if (regListStr) {
+          const regList = JSON.parse(regListStr);
+          if (Array.isArray(regList)) {
+            regList.forEach(p => {
+              if (p && p.name) {
+                const clPhone = p.phone ? String(p.phone).replace(/\D/g, '').slice(-10) : '';
+                if (!deletedPatIds.includes(p.id) && (!clPhone || !deletedPatIds.includes(clPhone))) {
+                  combinedPatients.unshift({
+                    id: p.id || `pat_${Date.now()}`,
+                    name: p.name,
+                    phone: p.phone || '9876543210',
+                    email: p.email || '',
+                    age: p.age || '29',
+                    gender: p.gender || 'Patient',
+                    prakriti: p.prakriti || p.dosha || '🌙 Stress & Sleep Wellness Profile',
+                    vikriti: p.vikriti || 'Work-Stress Overthinking',
+                    blood_group: p.blood_group || 'B+',
+                    diet: p.diet || 'Ayurvedic Wholesome Diet',
+                    agribalam: p.agribalam || 'Balanced Digestion (Samagni)',
+                    location: p.city || p.location || 'Nagpur, Maharashtra',
+                    city: p.city || 'Nagpur',
+                    status: p.status || 'active',
+                    avatar: p.avatar || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150',
+                    created_at: p.created_at || new Date().toISOString()
+                  });
+                }
+              }
             });
           }
         }
       } catch (e) {}
 
-      // C. Query SQLite Backend
+      // C. Check LocalStorage currently logged in patient
+      try {
+        const localPatStr = localStorage.getItem('zeniva_patient_user');
+        if (localPatStr) {
+          const localPat = JSON.parse(localPatStr);
+          if (localPat && localPat.name) {
+            const clPhone = localPat.phone ? String(localPat.phone).replace(/\D/g, '').slice(-10) : '';
+            if (!deletedPatIds.includes(localPat.id) && (!clPhone || !deletedPatIds.includes(clPhone))) {
+              combinedPatients.unshift({
+                id: localPat.id || 'pat_local_active',
+                name: localPat.name,
+                phone: localPat.phone || '9876543210',
+                email: localPat.email || '',
+                age: localPat.age || '29',
+                gender: localPat.gender || 'Patient',
+                prakriti: localPat.prakriti || localPat.dosha || '🌙 Stress & Sleep Wellness Profile',
+                vikriti: localPat.vikriti || 'Work-Stress Overthinking',
+                blood_group: localPat.blood_group || 'B+',
+                diet: localPat.diet || 'Cooling Coconut & Ghee Infused Foods',
+                agribalam: localPat.agribalam || 'Balanced Digestion (Samagni)',
+                location: localPat.city || localPat.location || 'Nagpur, Maharashtra',
+                city: localPat.city || 'Nagpur',
+                status: localPat.status || 'active',
+                avatar: localPat.avatar || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150',
+                created_at: new Date().toISOString()
+              });
+            }
+          }
+        }
+      } catch (e) {}
+
+      // D. Query SQLite Backend
       try {
         const res = await fetch('/api/admin/patients').catch(() => null);
         if (res && res.ok) {
           const data = await res.json();
           if (data.patients && data.patients.length > 0) {
-            combinedPatients.push(...data.patients);
+            const filtered = data.patients.filter(p => !deletedPatIds.includes(p.id) && (!p.phone || !deletedPatIds.includes(String(p.phone).replace(/\D/g, '').slice(-10))));
+            combinedPatients.push(...filtered);
           }
         }
       } catch (err) {}
@@ -561,7 +617,10 @@ export const AdminDashboard = ({
           const unique = [];
           
           [...combinedPatients, ...prev].forEach(p => {
-            const key = p.phone || p.id || p.name;
+            if (!p) return;
+            const clPhone = p.phone ? String(p.phone).replace(/\D/g, '').slice(-10) : '';
+            if (deletedPatIds.includes(p.id) || (clPhone && deletedPatIds.includes(clPhone))) return;
+            const key = clPhone || p.id || (p.name && p.name.trim().toLowerCase());
             if (key && !seen.has(key)) {
               seen.add(key);
               unique.push(p);
@@ -574,16 +633,117 @@ export const AdminDashboard = ({
       console.warn("Patient list sync notice:", err);
     }
 
-    // 3. Fetch Appointments
+    // 3. Fetch Real Appointments
     try {
+      let combinedApts = [];
+      const localAptsStr = localStorage.getItem('zeniva_all_appointments');
+      if (localAptsStr) {
+        const localApts = JSON.parse(localAptsStr);
+        if (Array.isArray(localApts)) {
+          combinedApts.push(...localApts);
+        }
+      }
+
+      try {
+        const { data: sbApts } = await supabase.from('appointments').select('*');
+        if (sbApts && sbApts.length > 0) {
+          sbApts.forEach(sa => {
+            combinedApts.push({
+              id: sa.id || `APT-${sa.appointment_id || Math.floor(100000 + Math.random() * 900000)}`,
+              time: sa.time || `${sa.date || 'Today'}, ${sa.slot || '10:00 AM'}`,
+              patient: sa.patient_name || sa.patient || 'Patient',
+              phone: sa.phone || '',
+              doctor: sa.doctor_name || sa.doctor || 'Dr. Meera Joshi',
+              type: sa.type || 'In-Clinic Consultation',
+              condition: sa.condition || sa.prakriti || 'Ayurvedic Wellness',
+              status: sa.status || 'upcoming'
+            });
+          });
+        }
+      } catch (err) {}
+
       const res = await fetch('/api/appointments').catch(() => null);
       if (res && res.ok) {
         const data = await res.json();
         if (data.appointments && data.appointments.length > 0) {
-          setAppointmentsList(data.appointments);
+          combinedApts.push(...data.appointments);
         }
       }
+
+      if (combinedApts.length > 0) {
+        setAppointmentsList(prev => {
+          const seen = new Set();
+          const list = [];
+          [...combinedApts, ...prev].forEach(a => {
+            if (a.id && !seen.has(a.id)) {
+              seen.add(a.id);
+              list.push(a);
+            }
+          });
+          return list;
+        });
+      }
     } catch (err) {}
+
+    // 3.1 Fetch Real Patient AI Chat Consultations
+    try {
+      let combinedConsultations = [];
+      const chatSessionsStr = localStorage.getItem('zeniva_patient_ai_chat_sessions');
+      if (chatSessionsStr) {
+        const chats = JSON.parse(chatSessionsStr);
+        if (Array.isArray(chats)) {
+          chats.forEach(ch => {
+            combinedConsultations.push({
+              id: ch.id || `CON-${ch.patient_id}`,
+              patient: ch.patient_name || 'Patient',
+              doctor: 'Zeniva AI Diagnostic Core & Panel',
+              duration: ch.time || 'Live Triage',
+              status: ch.status === 'completed' ? 'completed' : 'active',
+              link: '#',
+              summary: ch.primary_concern || ch.last_query || 'Clinical AI Triage',
+              messages: ch.messages || [],
+              last_reply: ch.last_reply,
+              rawChat: ch
+            });
+          });
+        }
+      }
+
+      if (combinedConsultations.length > 0) {
+        setConsultationsList(prev => {
+          const seen = new Set();
+          const list = [];
+          [...combinedConsultations, ...prev].forEach(c => {
+            if (c.id && !seen.has(c.id)) {
+              seen.add(c.id);
+              list.push(c);
+            }
+          });
+          return list;
+        });
+      }
+    } catch (err) {}
+
+    // 3.2 Fetch Notifications
+    try {
+      const savedNotifs = localStorage.getItem('zeniva_admin_notifications');
+      if (savedNotifs) {
+        const parsed = JSON.parse(savedNotifs);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setNotificationsList(prev => {
+            const seen = new Set();
+            const list = [];
+            [...parsed, ...prev].forEach(n => {
+              if (n.id && !seen.has(n.id)) {
+                seen.add(n.id);
+                list.push(n);
+              }
+            });
+            return list;
+          });
+        }
+      }
+    } catch (e) {}
 
     // 4. Fetch Broadcast Video
     try {
@@ -637,6 +797,78 @@ export const AdminDashboard = ({
     } catch (e) {}
 
     fetchAllRealData();
+
+    // Event listeners for real-time reactivity
+    const handlePatientReg = (e) => {
+      fetchAllRealData();
+      if (e?.detail) {
+        const p = e.detail;
+        const newNotif = {
+          id: `NOTIF-${Date.now()}`,
+          title: 'New Patient Registered',
+          desc: `${p.name || 'Patient'} (+91 ${p.phone || ''}) entered the Zeniva Patient Portal.`,
+          time: 'Just now',
+          type: 'patient',
+          read: false
+        };
+        setNotificationsList(prev => [newNotif, ...prev]);
+        try {
+          const raw = localStorage.getItem('zeniva_admin_notifications');
+          const list = raw ? JSON.parse(raw) : [];
+          list.unshift(newNotif);
+          localStorage.setItem('zeniva_admin_notifications', JSON.stringify(list));
+        } catch (err) {}
+      }
+    };
+
+    const handlePatientProfileUpdate = () => {
+      fetchAllRealData();
+    };
+
+    const handleAppointmentNew = (e) => {
+      if (e?.detail) {
+        const apt = e.detail;
+        setAppointmentsList(prev => [apt, ...prev.filter(x => x.id !== apt.id)]);
+        const newNotif = {
+          id: `NOTIF-${Date.now()}`,
+          title: 'New Appointment Booked',
+          desc: `Patient ${apt.patient} booked ${apt.doctor} (${apt.time}).`,
+          time: 'Just now',
+          type: 'consultation',
+          read: false
+        };
+        setNotificationsList(prev => [newNotif, ...prev]);
+        try {
+          const raw = localStorage.getItem('zeniva_admin_notifications');
+          const list = raw ? JSON.parse(raw) : [];
+          list.unshift(newNotif);
+          localStorage.setItem('zeniva_admin_notifications', JSON.stringify(list));
+        } catch (err) {}
+      }
+    };
+
+    const handleNewNotification = () => {
+      try {
+        const raw = localStorage.getItem('zeniva_admin_notifications');
+        if (raw) setNotificationsList(JSON.parse(raw));
+      } catch (err) {}
+    };
+
+    window.addEventListener('zeniva_patient_registered', handlePatientReg);
+    window.addEventListener('zeniva_patient_profile_updated', handlePatientProfileUpdate);
+    window.addEventListener('zeniva_new_appointment', handleAppointmentNew);
+    window.addEventListener('zeniva_new_notification', handleNewNotification);
+    window.addEventListener('zeniva_patient_ai_chat_updated', fetchAllRealData);
+    window.addEventListener('zeniva_doctor_status_changed', fetchAllRealData);
+
+    return () => {
+      window.removeEventListener('zeniva_patient_registered', handlePatientReg);
+      window.removeEventListener('zeniva_patient_profile_updated', handlePatientProfileUpdate);
+      window.removeEventListener('zeniva_new_appointment', handleAppointmentNew);
+      window.removeEventListener('zeniva_new_notification', handleNewNotification);
+      window.removeEventListener('zeniva_patient_ai_chat_updated', fetchAllRealData);
+      window.removeEventListener('zeniva_doctor_status_changed', fetchAllRealData);
+    };
   }, []);
 
   // Forensic Security Audit Logs State (SHA-256 Ledger)
@@ -803,7 +1035,6 @@ export const AdminDashboard = ({
     const docPhone = typeof doctorTarget === 'object' ? doctorTarget.phone : '';
     const docEmail = typeof doctorTarget === 'object' ? (doctorTarget.email || '') : '';
     const cleanPhone = docPhone ? String(docPhone).replace(/\D/g, '').slice(-10) : '';
-    const cleanEmail = docEmail ? docEmail.trim().toLowerCase() : '';
     const docName = typeof doctorTarget === 'object' ? doctorTarget.name : (docId || docPhone || 'doctor');
 
     if (!window.confirm(`Are you sure you want to permanently delete doctor record for ${docName}?`)) return;
@@ -814,16 +1045,13 @@ export const AdminDashboard = ({
       return !matchId;
     }));
 
-    // Close inspect modal if open on this doctor
-    setIsDoctorInspectModalOpen(false);
     setInspectingDoctor(null);
 
-    // 2. Add to blacklisted deleted doctor IDs strictly by ID (never blocking phone number)
+    // 2. Add to blacklisted deleted doctor IDs
     try {
       const delRaw = localStorage.getItem('zeniva_deleted_doctor_ids');
       let delList = delRaw ? JSON.parse(delRaw) : [];
       if (docId && !delList.includes(docId)) delList.push(docId);
-      // Remove any previously stored phone numbers from deletedIds
       delList = delList.filter(x => x && typeof x === 'string' && x.startsWith('ZEN-DOC-'));
       localStorage.setItem('zeniva_deleted_doctor_ids', JSON.stringify(delList));
     } catch (e) {}
@@ -840,7 +1068,6 @@ export const AdminDashboard = ({
         localStorage.setItem('zeniva_registered_doctors_list', JSON.stringify(filtered));
       }
 
-      // Remove from zeniva_registered_doctor and zeniva_doctor_user if matching
       const regDocStr = localStorage.getItem('zeniva_registered_doctor');
       if (regDocStr) {
         const regDoc = JSON.parse(regDocStr);
@@ -860,12 +1087,12 @@ export const AdminDashboard = ({
       console.warn('Supabase doctor delete notice:', sbErr);
     }
 
-    // 5. Delete from backend SQLite database via both DELETE and POST endpoints
+    // 5. Delete from backend SQLite database
     try {
       await fetch(`/api/admin/doctor/${encodeURIComponent(docId)}`, { method: 'DELETE' });
     } catch (err) {
       try {
-        await fetch('http://127.0.0.1:8000/api/admin/doctor/delete', {
+        await fetch('/api/admin/doctor/delete', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ doctor_id: docId })
@@ -873,32 +1100,368 @@ export const AdminDashboard = ({
       } catch (err2) {}
     }
 
-    // 6. Close inspect modal if open for this doctor
-    if (inspectingDoctor && (inspectingDoctor.id === docId || inspectingDoctor.doctor_id === docId)) {
-      setInspectingDoctor(null);
-    }
-
-    // 7. Dispatch events
     window.dispatchEvent(new CustomEvent('zeniva_doctor_status_changed', {
       detail: { doctorId: docId, status: 'deleted' }
     }));
 
-    showToast(`✓ Doctor record ${docId || 'entry'} permanently removed.`);
+    showToast(`✓ Doctor record for ${docName} permanently removed.`);
     fetchAllRealData();
   };
 
-  // Delete Patient Action
-  const handleDeletePatient = async (patientId) => {
-    if (!window.confirm(`Are you sure you want to remove patient record ${patientId}?`)) return;
-    try {
-      const res = await fetch(`/api/admin/patient/${patientId}`, {
-        method: 'DELETE'
-      });
-      if (res.ok) {
-        showToast(`Patient ${patientId} removed.`);
-        fetchAllRealData();
+  // Open Edit Doctor Modal
+  const handleOpenEditDoctor = (doc) => {
+    setEditingDoctor({
+      id: doc.id || doc.doctor_id || '',
+      doctor_id: doc.doctor_id || doc.id || '',
+      name: doc.name || '',
+      phone: doc.phone || '',
+      email: doc.email || '',
+      specialization: doc.specialization || 'Kayachikitsa & Panchakarma',
+      qualification: doc.qualification || 'BAMS, MD (Ayurveda)',
+      clinic: doc.clinic || doc.hospital || 'Zeniva Ayurvedic Clinic',
+      city: doc.city || 'Nagpur, Maharashtra',
+      experience: doc.experience || '10+ Years Clinical Practice',
+      status: doc.status || 'verified',
+      avatar: doc.avatar || ''
+    });
+    setIsEditDoctorModalOpen(true);
+  };
+
+  // Save Doctor Edits
+  const handleSaveDoctorEdit = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (!editingDoctor || !editingDoctor.id) return;
+
+    const updated = { ...editingDoctor };
+
+    // 1. Update React state
+    setDoctorsList(prev => prev.map(d => {
+      if (d.id === updated.id || d.doctor_id === updated.id) {
+        return { ...d, ...updated };
       }
+      return d;
+    }));
+
+    if (inspectingDoctor && (inspectingDoctor.id === updated.id || inspectingDoctor.doctor_id === updated.id)) {
+      setInspectingDoctor({ ...inspectingDoctor, ...updated });
+    }
+
+    // 2. Update Supabase
+    try {
+      await supabase.from('profiles').update({
+        full_name: updated.name,
+        phone: updated.phone,
+        email: updated.email,
+        specialization: updated.specialization,
+        qualification: updated.qualification,
+        status: updated.status,
+        updated_at: new Date().toISOString()
+      }).eq('id', updated.id);
     } catch (err) {}
+
+    // 3. Update localStorage
+    try {
+      const listStr = localStorage.getItem('zeniva_registered_doctors_list');
+      if (listStr) {
+        const dList = JSON.parse(listStr);
+        const updatedList = dList.map(d => (d.id === updated.id || d.doctor_id === updated.id) ? { ...d, ...updated } : d);
+        localStorage.setItem('zeniva_registered_doctors_list', JSON.stringify(updatedList));
+      }
+
+      const regDocStr = localStorage.getItem('zeniva_registered_doctor');
+      if (regDocStr) {
+        const rd = JSON.parse(regDocStr);
+        if (rd.id === updated.id || rd.doctor_id === updated.id) {
+          const merged = { ...rd, ...updated };
+          localStorage.setItem('zeniva_registered_doctor', JSON.stringify(merged));
+          localStorage.setItem('zeniva_doctor_user', JSON.stringify(merged));
+        }
+      }
+    } catch (e) {}
+
+    window.dispatchEvent(new CustomEvent('zeniva_doctor_status_changed', {
+      detail: { doctorId: updated.id, status: updated.status }
+    }));
+
+    setIsEditDoctorModalOpen(false);
+    setEditingDoctor(null);
+    showToast(`✓ Doctor "${updated.name}" updated successfully!`);
+  };
+
+  // Open Edit Patient Modal
+  const handleOpenEditPatient = (pat) => {
+    setEditingPatient({
+      id: pat.id || '',
+      name: pat.name || '',
+      phone: pat.phone || '',
+      email: pat.email || '',
+      age: pat.age || '28',
+      gender: pat.gender || 'Male',
+      prakriti: pat.prakriti || '🌙 Stress & Sleep Wellness Profile',
+      vikriti: pat.vikriti || '',
+      blood_group: pat.blood_group || 'B+',
+      diet: pat.diet || 'Ayurvedic Wholesome Diet',
+      agribalam: pat.agribalam || 'Balanced (Samagni)',
+      city: pat.city || pat.location || 'Nagpur, Maharashtra',
+      location: pat.city || pat.location || 'Nagpur, Maharashtra',
+      status: pat.status || 'active',
+      avatar: pat.avatar || ''
+    });
+    setIsEditPatientModalOpen(true);
+  };
+
+  // Save Patient Edits (State + Supabase + LocalStorage + Event Dispatch)
+  const handleSavePatientEdit = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (!editingPatient || !editingPatient.id) return;
+
+    const updated = { ...editingPatient };
+
+    // 1. Immediately update React state
+    setPatientsList(prev => prev.map(p => {
+      if (p.id === updated.id || (p.phone && updated.phone && String(p.phone).replace(/\D/g, '').slice(-10) === String(updated.phone).replace(/\D/g, '').slice(-10))) {
+        return { ...p, ...updated };
+      }
+      return p;
+    }));
+
+    // Update inspecting patient if open
+    if (inspectingPatient && inspectingPatient.id === updated.id) {
+      setInspectingPatient({ ...inspectingPatient, ...updated });
+    }
+
+    // 2. Update Supabase profiles table
+    try {
+      await supabase.from('profiles').update({
+        full_name: updated.name,
+        phone: updated.phone,
+        email: updated.email,
+        age: updated.age,
+        gender: updated.gender,
+        prakriti: updated.prakriti,
+        vikriti: updated.vikriti,
+        blood_group: updated.blood_group,
+        diet: updated.diet,
+        agribalam: updated.agribalam,
+        city: updated.city,
+        location: updated.city,
+        status: updated.status,
+        updated_at: new Date().toISOString()
+      }).eq('id', updated.id);
+    } catch (err) {
+      console.warn("Supabase update patient notice:", err);
+    }
+
+    // 3. Update localStorage zeniva_all_patients_registry
+    try {
+      const regStr = localStorage.getItem('zeniva_all_patients_registry');
+      let regList = regStr ? JSON.parse(regStr) : [];
+      if (Array.isArray(regList)) {
+        const idx = regList.findIndex(p => p.id === updated.id || (p.phone && updated.phone && String(p.phone).replace(/\D/g, '').slice(-10) === String(updated.phone).replace(/\D/g, '').slice(-10)));
+        if (idx >= 0) {
+          regList[idx] = { ...regList[idx], ...updated };
+        } else {
+          regList.unshift(updated);
+        }
+        localStorage.setItem('zeniva_all_patients_registry', JSON.stringify(regList));
+      }
+    } catch (e) {}
+
+    // 4. Update zeniva_patient_user and zeniva_current_user if this matches the active patient
+    try {
+      const localPatStr = localStorage.getItem('zeniva_patient_user');
+      if (localPatStr) {
+        const localPat = JSON.parse(localPatStr);
+        const match = localPat.id === updated.id || 
+                      (localPat.phone && updated.phone && String(localPat.phone).replace(/\D/g, '').slice(-10) === String(updated.phone).replace(/\D/g, '').slice(-10)) ||
+                      (localPat.email && updated.email && localPat.email.toLowerCase() === updated.email.toLowerCase());
+        if (match) {
+          const merged = { ...localPat, ...updated, role: 'patient', dosha: updated.prakriti };
+          localStorage.setItem('zeniva_patient_user', JSON.stringify(merged));
+          localStorage.setItem('zeniva_current_user', JSON.stringify(merged));
+        }
+      }
+    } catch (e) {}
+
+    // 5. Dispatch event so active patient view and other tabs react instantaneously
+    window.dispatchEvent(new CustomEvent('zeniva_patient_profile_updated', { detail: updated }));
+    localStorage.setItem('zeniva_patient_update_trigger', `${updated.id}_${Date.now()}`);
+
+    // 6. Update backend SQLite if running
+    try {
+      await fetch('/api/admin/patient/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updated)
+      });
+    } catch (e) {}
+
+    setIsEditPatientModalOpen(false);
+    setEditingPatient(null);
+    showToast(`✓ Patient "${updated.name}" updated successfully! Patient portal reflects changes immediately.`);
+
+    logSecurityEvent({
+      event: `Patient Profile Updated by Super Admin (${updated.name})`,
+      category: 'Patient Medical Dossier',
+      actor: 'Super Admin',
+      user: updated.id,
+      ip: 'Admin Console',
+      token: 'pat_update_event',
+      severity: 'Success',
+      status: 'Updated',
+      details: `Updated name to "${updated.name}", Prakriti to "${updated.prakriti}", city to "${updated.city}".`
+    });
+  };
+
+  // Delete Patient Action (Supabase + SQLite + LocalStorage + State Purge)
+  const handleDeletePatient = async (target) => {
+    const patId = typeof target === 'object' ? target.id : target;
+    const patName = typeof target === 'object' ? target.name : patId;
+    const patPhone = typeof target === 'object' ? target.phone : '';
+    const cleanPhone = patPhone ? String(patPhone).replace(/\D/g, '').slice(-10) : '';
+
+    if (!window.confirm(`Are you sure you want to permanently delete patient record for "${patName}"?`)) return;
+
+    // 1. Instantly remove from React state
+    setPatientsList(prev => prev.filter(p => {
+      if (p.id === patId) return false;
+      if (cleanPhone && p.phone && String(p.phone).replace(/\D/g, '').slice(-10) === cleanPhone) return false;
+      return true;
+    }));
+
+    // Close inspect modal if open on this patient
+    if (inspectingPatient && (inspectingPatient.id === patId || inspectingPatient.phone === patPhone)) {
+      setInspectingPatient(null);
+    }
+
+    // 2. Add to blacklisted deleted patient IDs
+    try {
+      const delRaw = localStorage.getItem('zeniva_deleted_patient_ids');
+      let delList = delRaw ? JSON.parse(delRaw) : [];
+      if (patId && !delList.includes(patId)) delList.push(patId);
+      if (cleanPhone && !delList.includes(cleanPhone)) delList.push(cleanPhone);
+      localStorage.setItem('zeniva_deleted_patient_ids', JSON.stringify(delList));
+    } catch (e) {}
+
+    // 3. Remove from zeniva_all_patients_registry in localStorage
+    try {
+      const regStr = localStorage.getItem('zeniva_all_patients_registry');
+      if (regStr) {
+        const list = JSON.parse(regStr);
+        if (Array.isArray(list)) {
+          const filtered = list.filter(p => p.id !== patId && (!cleanPhone || String(p.phone).replace(/\D/g, '').slice(-10) !== cleanPhone));
+          localStorage.setItem('zeniva_all_patients_registry', JSON.stringify(filtered));
+        }
+      }
+    } catch (e) {}
+
+    // 4. If matching logged in patient, clear from localStorage
+    try {
+      const patUserStr = localStorage.getItem('zeniva_patient_user');
+      if (patUserStr) {
+        const patUser = JSON.parse(patUserStr);
+        if (patUser.id === patId || (cleanPhone && String(patUser.phone).replace(/\D/g, '').slice(-10) === cleanPhone)) {
+          localStorage.removeItem('zeniva_patient_user');
+          localStorage.removeItem('zeniva_current_user');
+        }
+      }
+    } catch (e) {}
+
+    // 5. Delete from Supabase profiles
+    try {
+      if (supabase && patId) {
+        await supabase.from('profiles').delete().eq('id', patId);
+      }
+    } catch (err) {
+      console.warn("Supabase patient delete warning:", err);
+    }
+
+    // 6. Delete from backend SQLite
+    try {
+      await fetch(`/api/admin/patient/${encodeURIComponent(patId)}`, { method: 'DELETE' });
+    } catch (err) {
+      try {
+        await fetch('/api/admin/patient/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ patient_id: patId })
+        });
+      } catch (err2) {}
+    }
+
+    // 7. Dispatch event for instant UI update
+    window.dispatchEvent(new CustomEvent('zeniva_patient_deleted', { detail: { id: patId, phone: patPhone } }));
+
+    showToast(`✓ Patient record for ${patName} permanently removed.`);
+    logSecurityEvent({
+      event: `Patient Record Deleted (${patName})`,
+      category: 'Patient Ledger Governance',
+      actor: 'Super Admin',
+      user: patId,
+      ip: 'Admin Console',
+      token: 'pat_delete_event',
+      severity: 'Warning',
+      status: 'Deleted',
+      details: `Patient ID: ${patId}, Name: ${patName} deleted.`
+    });
+  };
+
+  // Real Appointments Status Management
+  const handleUpdateAppointmentStatus = (aptId, newStatus) => {
+    setAppointmentsList(prev => prev.map(a => a.id === aptId ? { ...a, status: newStatus } : a));
+    try {
+      const localAptsStr = localStorage.getItem('zeniva_all_appointments');
+      if (localAptsStr) {
+        const list = JSON.parse(localAptsStr);
+        const updated = list.map(a => a.id === aptId ? { ...a, status: newStatus } : a);
+        localStorage.setItem('zeniva_all_appointments', JSON.stringify(updated));
+      }
+    } catch (e) {}
+    showToast(`✓ Appointment ${aptId} status updated to ${newStatus}.`);
+  };
+
+  // Delete Appointment Record
+  const handleDeleteAppointment = (aptId) => {
+    if (!window.confirm(`Are you sure you want to remove appointment record ${aptId}?`)) return;
+    setAppointmentsList(prev => prev.filter(a => a.id !== aptId));
+    try {
+      const localAptsStr = localStorage.getItem('zeniva_all_appointments');
+      if (localAptsStr) {
+        const list = JSON.parse(localAptsStr);
+        const updated = list.filter(a => a.id !== aptId);
+        localStorage.setItem('zeniva_all_appointments', JSON.stringify(updated));
+      }
+    } catch (e) {}
+    showToast(`✓ Appointment ${aptId} removed.`);
+  };
+
+  // Real Consultations Status Management
+  const handleUpdateConsultationStatus = (conId, newStatus) => {
+    setConsultationsList(prev => prev.map(c => c.id === conId ? { ...c, status: newStatus } : c));
+    try {
+      const saved = localStorage.getItem('zeniva_patient_ai_chat_sessions');
+      if (saved) {
+        const list = JSON.parse(saved);
+        const updated = list.map(c => (c.id === conId || `CON-${c.patient_id}` === conId) ? { ...c, status: newStatus } : c);
+        localStorage.setItem('zeniva_patient_ai_chat_sessions', JSON.stringify(updated));
+      }
+    } catch (e) {}
+    showToast(`✓ Consultation ${conId} updated to ${newStatus}.`);
+  };
+
+  // Delete Consultation Session
+  const handleDeleteConsultation = (conId) => {
+    if (!window.confirm(`Are you sure you want to remove consultation record ${conId}?`)) return;
+    setConsultationsList(prev => prev.filter(c => c.id !== conId));
+    try {
+      const saved = localStorage.getItem('zeniva_patient_ai_chat_sessions');
+      if (saved) {
+        const list = JSON.parse(saved);
+        const updated = list.filter(c => c.id !== conId && `CON-${c.patient_id}` !== conId);
+        localStorage.setItem('zeniva_patient_ai_chat_sessions', JSON.stringify(updated));
+      }
+    } catch (e) {}
+    showToast(`✓ Consultation ${conId} deleted.`);
   };
 
   // Video File Upload Handler
@@ -1901,6 +2464,15 @@ export const AdminDashboard = ({
 
                           <button
                             type="button"
+                            onClick={() => handleOpenEditDoctor(doc)}
+                            className="p-1.5 rounded-lg text-amber-700 hover:bg-amber-100 transition-colors cursor-pointer"
+                            title="Edit Doctor Profile"
+                          >
+                            <Edit className="w-3.5 h-3.5" />
+                          </button>
+
+                          <button
+                            type="button"
                             onClick={() => {
                               setInspectingDoctor(doc);
                               setIsRejecting(false);
@@ -2095,6 +2667,14 @@ export const AdminDashboard = ({
                         <div className="flex items-center justify-end gap-1">
                           <button
                             type="button"
+                            onClick={() => handleOpenEditPatient(pat)}
+                            className="p-1.5 rounded-lg text-amber-700 hover:bg-amber-100 transition-colors cursor-pointer"
+                            title="Edit Patient Details"
+                          >
+                            <Edit className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
                             onClick={() => setInspectingPatient(pat)}
                             className="p-1.5 rounded-lg text-purple-700 hover:bg-purple-100 transition-colors cursor-pointer"
                             title="View Medical Dossier"
@@ -2103,7 +2683,7 @@ export const AdminDashboard = ({
                           </button>
                           <button
                             type="button"
-                            onClick={() => handleDeletePatient(pat.id)}
+                            onClick={() => handleDeletePatient(pat)}
                             className="p-1.5 rounded-lg text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
                             title="Remove Patient"
                           >
@@ -2459,7 +3039,7 @@ export const AdminDashboard = ({
                   <th className="pb-3">Attending Doctor</th>
                   <th className="pb-3">Consultation Type</th>
                   <th className="pb-3">Clinical Condition</th>
-                  <th className="pb-3 text-right">Status</th>
+                  <th className="pb-3 text-right">Status & Management</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-stone-100 text-xs">
@@ -2479,11 +3059,51 @@ export const AdminDashboard = ({
                       <td className="py-3.5 text-stone-600">{apt.type}</td>
                       <td className="py-3.5 text-stone-600">{apt.condition}</td>
                       <td className="py-3.5 text-right">
-                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                          apt.status === 'upcoming' ? 'bg-amber-100 text-amber-900' : apt.status === 'completed' ? 'bg-emerald-100 text-emerald-900' : 'bg-red-100 text-red-900'
-                        }`}>
-                          {apt.status === 'upcoming' ? 'Upcoming' : apt.status === 'completed' ? '✓ Completed' : '✕ Cancelled'}
-                        </span>
+                        <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                            apt.status === 'upcoming' ? 'bg-amber-100 text-amber-900' : apt.status === 'completed' ? 'bg-emerald-100 text-emerald-900' : 'bg-red-100 text-red-900'
+                          }`}>
+                            {apt.status === 'upcoming' ? 'Upcoming' : apt.status === 'completed' ? '✓ Completed' : '✕ Cancelled'}
+                          </span>
+                          {apt.status === 'upcoming' && (
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateAppointmentStatus(apt.id, 'completed')}
+                              className="px-2 py-0.5 rounded-lg bg-emerald-100 hover:bg-emerald-200 text-emerald-800 text-[10px] font-bold cursor-pointer transition-colors"
+                              title="Mark as Completed"
+                            >
+                              ✓ Done
+                            </button>
+                          )}
+                          {apt.status === 'upcoming' && (
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateAppointmentStatus(apt.id, 'canceled')}
+                              className="px-2 py-0.5 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-600 text-[10px] font-bold cursor-pointer transition-colors"
+                              title="Cancel slot"
+                            >
+                              Cancel
+                            </button>
+                          )}
+                          {apt.status === 'canceled' && (
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateAppointmentStatus(apt.id, 'upcoming')}
+                              className="px-2 py-0.5 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-800 text-[10px] font-bold cursor-pointer transition-colors"
+                              title="Reactivate slot"
+                            >
+                              Reopen
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteAppointment(apt.id)}
+                            className="p-1 rounded-lg text-red-600 hover:bg-red-50 cursor-pointer transition-colors"
+                            title="Delete Appointment"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -2537,17 +3157,37 @@ export const AdminDashboard = ({
                     {con.summary && <p className="text-[11px] text-emerald-800 font-semibold">{con.summary}</p>}
                   </div>
 
-                  <div className="pt-2 border-t border-stone-200 flex items-center justify-between">
-                    <span className="text-[10px] font-mono text-stone-400">Encrypted AES-256 WebRTC</span>
-                    <a
-                      href={con.link}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="px-3 py-1.5 rounded-xl bg-purple-700 hover:bg-purple-800 text-white font-bold text-xs flex items-center gap-1 cursor-pointer transition-colors"
-                    >
-                      <Laptop className="w-3.5 h-3.5" />
-                      <span>{con.status === 'active' ? 'Monitor Session' : 'View Room'}</span>
-                    </a>
+                  <div className="pt-2 border-t border-stone-200 flex items-center justify-between gap-2 flex-wrap">
+                    <span className="text-[10px] font-mono text-stone-400">AES-256 WebRTC & AI Care</span>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setInspectingConsultation(con)}
+                        className="px-2.5 py-1 rounded-xl bg-purple-100 hover:bg-purple-200 text-purple-900 font-bold text-[11px] cursor-pointer transition-colors flex items-center gap-1"
+                        title="View Full Consultation Triage Transcript"
+                      >
+                        <Eye className="w-3 h-3" />
+                        <span>View Triage</span>
+                      </button>
+                      {con.status !== 'completed' && (
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateConsultationStatus(con.id, 'completed')}
+                          className="px-2.5 py-1 rounded-xl bg-emerald-100 hover:bg-emerald-200 text-emerald-900 font-bold text-[11px] cursor-pointer transition-colors"
+                          title="Mark Completed"
+                        >
+                          ✓ Done
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteConsultation(con.id)}
+                        className="p-1 rounded-lg text-red-600 hover:bg-red-50 cursor-pointer transition-colors"
+                        title="Delete Session"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -2878,7 +3518,7 @@ export const AdminDashboard = ({
       )}
 
       {/* ========================================================================= */}
-      {/* 14. ADMIN SETTINGS & SMS GATEWAY                                          */}
+      {/* 14. ADMIN SETTINGS & CLOUD GATEWAY                                        */}
       {/* ========================================================================= */}
       {(activeTab === 'admin_settings') && (
         <div className="bg-white rounded-3xl p-6 sm:p-8 border border-[#EBE3D5] shadow-xs space-y-6 animate-in fade-in">
@@ -2887,30 +3527,28 @@ export const AdminDashboard = ({
               <div className="flex items-center gap-2">
                 <Settings className="w-5 h-5 text-purple-700" />
                 <h2 className="text-lg font-serif font-bold text-stone-900">
-                  Zeniva AI System Administration & API Gateways (सिस्टम विन्यास पटल)
+                  Zeniva AI System Administration & Cloud Gateways (सिस्टम विन्यास पटल)
                 </h2>
               </div>
               <p className="text-xs text-stone-500 mt-0.5">
-                Manage Fast2SMS gateway credentials, database snapshots, and clinic operational modes.
+                Manage Zeniva AI WhatsApp clinical communications, database snapshots, and clinic operational modes.
               </p>
             </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs">
             <div className="p-5 rounded-2xl bg-[#FAF8F5] border border-stone-200 space-y-3">
-              <h3 className="font-bold text-stone-900 text-sm">📱 Fast2SMS Notification Gateway</h3>
-              <p className="text-stone-600">Routes real-time SMS alerts and status updates to registered doctors and patients.</p>
-              <div className="space-y-2">
-                <label className="block text-[10px] font-bold text-stone-500 uppercase">Fast2SMS Authorization Token</label>
-                <input
-                  type="password"
-                  value="••••••••••••••••••••••••••••••••"
-                  readOnly
-                  className="w-full p-2.5 rounded-xl border border-stone-200 bg-white font-mono text-stone-700"
-                />
+              <h3 className="font-bold text-stone-900 text-sm flex items-center gap-2">
+                <span>💬 Zeniva AI WhatsApp & Cloud Communications</span>
+              </h3>
+              <p className="text-stone-600">Encrypted instant dispatch of Ayurvedic health assessments, clinical referrals, and patient triage to official doctor WhatsApp groups.</p>
+              <div className="space-y-1.5 font-mono text-[11px] text-stone-700">
+                <p>Status: <strong className="text-emerald-700">🟢 Live & Operational</strong></p>
+                <p>Gateway: <strong>WhatsApp Cloud API & Direct Dispatch</strong></p>
+                <p>Dispatch Channel: <strong>Zeniva Care Council Hub</strong></p>
               </div>
               <span className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-900 text-[10px] font-bold inline-block">
-                🟢 Live & Operational
+                ✓ Automated Clinical Routing Active
               </span>
             </div>
 
@@ -3453,6 +4091,19 @@ export const AdminDashboard = ({
                       </button>
                     </div>
                   )}
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const d = inspectingDoctor;
+                      setInspectingDoctor(null);
+                      handleOpenEditDoctor(d);
+                    }}
+                    className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs cursor-pointer shadow-md flex items-center gap-1.5 transition-colors"
+                  >
+                    <Edit className="w-3.5 h-3.5" />
+                    <span>Edit Profile</span>
+                  </button>
                 </div>
               </div>
 
@@ -3527,11 +4178,23 @@ export const AdminDashboard = ({
                 <p className="font-semibold text-stone-900 text-xs">{inspectingPatient.vikriti || 'Mild joint fatigue and gastric sensitivity'}</p>
               </div>
 
-              <div className="pt-2 flex items-center justify-end gap-3">
+              <div className="pt-2 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const pat = inspectingPatient;
+                    setInspectingPatient(null);
+                    handleOpenEditPatient(pat);
+                  }}
+                  className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs cursor-pointer shadow-md flex items-center gap-1.5 transition-colors"
+                >
+                  <Edit className="w-3.5 h-3.5" />
+                  <span>Edit Patient Details</span>
+                </button>
                 <button
                   type="button"
                   onClick={() => setInspectingPatient(null)}
-                  className="px-4 py-2 rounded-xl bg-purple-700 hover:bg-purple-800 text-white font-bold text-xs cursor-pointer shadow-md"
+                  className="px-4 py-2 rounded-xl bg-purple-700 hover:bg-purple-800 text-white font-bold text-xs cursor-pointer shadow-md transition-colors"
                 >
                   Done
                 </button>
@@ -3722,6 +4385,443 @@ export const AdminDashboard = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 21. EDIT PATIENT DETAILS MODAL (Real-time sync to Supabase & Patient Portal) */}
+      {/* ========================================================================= */}
+      {isEditPatientModalOpen && editingPatient && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/65 backdrop-blur-xs animate-in fade-in select-none">
+          <div className="bg-white rounded-3xl max-w-2xl w-full border border-stone-200 shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+            <div className="bg-stone-900 text-white px-6 py-4 flex items-center justify-between shrink-0 border-b border-stone-800">
+              <div className="flex items-center gap-2.5">
+                <Edit className="w-5 h-5 text-amber-400" />
+                <span className="font-bold text-sm tracking-wide">
+                  Edit Patient Dossier: {editingPatient.name}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsEditPatientModalOpen(false);
+                  setEditingPatient(null);
+                }}
+                className="text-stone-400 hover:text-white p-1 rounded-lg hover:bg-stone-800 cursor-pointer transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSavePatientEdit} className="p-6 sm:p-8 overflow-y-auto space-y-4 text-xs font-sans">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-stone-600 uppercase">Patient Full Name</label>
+                  <input
+                    type="text"
+                    required
+                    value={editingPatient.name}
+                    onChange={(e) => setEditingPatient({ ...editingPatient, name: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-stone-200 text-stone-900 font-semibold"
+                    placeholder="e.g. Kamlesh Indurkar"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-stone-600 uppercase">Mobile Phone Number (+91)</label>
+                  <input
+                    type="tel"
+                    required
+                    value={editingPatient.phone}
+                    onChange={(e) => setEditingPatient({ ...editingPatient, phone: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-stone-200 text-stone-900 font-mono"
+                    placeholder="9011942126"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-stone-600 uppercase">Email Address</label>
+                  <input
+                    type="email"
+                    value={editingPatient.email}
+                    onChange={(e) => setEditingPatient({ ...editingPatient, email: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-stone-200 text-stone-900"
+                    placeholder="patient@example.com"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-stone-600 uppercase">City / Location</label>
+                  <input
+                    type="text"
+                    value={editingPatient.city}
+                    onChange={(e) => setEditingPatient({ ...editingPatient, city: e.target.value, location: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-stone-200 text-stone-900"
+                    placeholder="Nagpur, Maharashtra"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-stone-600 uppercase">Age</label>
+                  <input
+                    type="number"
+                    value={editingPatient.age}
+                    onChange={(e) => setEditingPatient({ ...editingPatient, age: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-stone-200 text-stone-900"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-stone-600 uppercase">Gender</label>
+                  <select
+                    value={editingPatient.gender}
+                    onChange={(e) => setEditingPatient({ ...editingPatient, gender: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-stone-200 text-stone-900 bg-white"
+                  >
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-stone-600 uppercase">Blood Group</label>
+                  <select
+                    value={editingPatient.blood_group}
+                    onChange={(e) => setEditingPatient({ ...editingPatient, blood_group: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-stone-200 text-stone-900 bg-white font-mono"
+                  >
+                    <option value="A+">A+</option>
+                    <option value="A-">A-</option>
+                    <option value="B+">B+</option>
+                    <option value="B-">B-</option>
+                    <option value="O+">O+</option>
+                    <option value="O-">O-</option>
+                    <option value="AB+">AB+</option>
+                    <option value="AB-">AB-</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-stone-600 uppercase">Account Status</label>
+                  <select
+                    value={editingPatient.status}
+                    onChange={(e) => setEditingPatient({ ...editingPatient, status: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-stone-200 text-stone-900 bg-white font-bold"
+                  >
+                    <option value="active">🟢 Active Patient</option>
+                    <option value="pending_verification">⏳ Pending Verification</option>
+                    <option value="suspended">🔴 Suspended / Restricted</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-stone-600 uppercase">Prakriti / Ayurvedic Wellness Profile</label>
+                <select
+                  value={editingPatient.prakriti}
+                  onChange={(e) => setEditingPatient({ ...editingPatient, prakriti: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl border border-stone-200 text-stone-900 bg-white font-medium"
+                >
+                  <option value="🌙 Stress & Sleep Wellness Profile">🌙 Stress & Sleep Wellness Profile (Vata-Pitta)</option>
+                  <option value="🔥 Digestion, Acidity & Gut Health Profile">🔥 Digestion, Acidity & Gut Health Profile (Pitta-Samana)</option>
+                  <option value="⚡ Joint Mobility & Stamina Care Profile">⚡ Joint Mobility & Stamina Care Profile (Vata-Shleshaka)</option>
+                  <option value="🍃 Immunity & Metabolic Vitality Profile">🍃 Immunity & Metabolic Vitality Profile (Kapha-Agni)</option>
+                  <option value="🍃 Respiratory Defense & Cold Relief Profile">🍃 Respiratory Defense & Cold Relief Profile (Kapha-Prana)</option>
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-stone-600 uppercase">Chief Health Concern / Vikriti Finding</label>
+                <textarea
+                  rows={2}
+                  value={editingPatient.vikriti}
+                  onChange={(e) => setEditingPatient({ ...editingPatient, vikriti: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl border border-stone-200 text-stone-900"
+                  placeholder="e.g. Mild joint fatigue, work-stress overthinking, acid reflux..."
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-stone-600 uppercase">Dietary Plan</label>
+                  <input
+                    type="text"
+                    value={editingPatient.diet}
+                    onChange={(e) => setEditingPatient({ ...editingPatient, diet: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-stone-200 text-stone-900"
+                    placeholder="e.g. Warm wholesome vegan grains & ghee"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-stone-600 uppercase">Agni (Digestive Fire)</label>
+                  <input
+                    type="text"
+                    value={editingPatient.agribalam}
+                    onChange={(e) => setEditingPatient({ ...editingPatient, agribalam: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-stone-200 text-stone-900"
+                    placeholder="e.g. Balanced Digestion (Samagni)"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-stone-200 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsEditPatientModalOpen(false);
+                    setEditingPatient(null);
+                  }}
+                  className="px-4 py-2 rounded-xl border border-stone-200 text-stone-700 font-bold hover:bg-stone-50 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl bg-purple-700 hover:bg-purple-800 text-white font-bold cursor-pointer shadow-md flex items-center gap-1.5 transition-all"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>Save & Sync Patient</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 22. EDIT DOCTOR DETAILS MODAL                                             */}
+      {/* ========================================================================= */}
+      {isEditDoctorModalOpen && editingDoctor && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/65 backdrop-blur-xs animate-in fade-in select-none">
+          <div className="bg-white rounded-3xl max-w-xl w-full border border-stone-200 shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+            <div className="bg-stone-900 text-white px-6 py-4 flex items-center justify-between shrink-0 border-b border-stone-800">
+              <div className="flex items-center gap-2.5">
+                <Stethoscope className="w-5 h-5 text-amber-400" />
+                <span className="font-bold text-sm tracking-wide">
+                  Edit Doctor Profile: {editingDoctor.name}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsEditDoctorModalOpen(false);
+                  setEditingDoctor(null);
+                }}
+                className="text-stone-400 hover:text-white p-1 rounded-lg hover:bg-stone-800 cursor-pointer transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveDoctorEdit} className="p-6 sm:p-8 overflow-y-auto space-y-4 text-xs font-sans">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-stone-600 uppercase">Doctor Name</label>
+                  <input
+                    type="text"
+                    required
+                    value={editingDoctor.name}
+                    onChange={(e) => setEditingDoctor({ ...editingDoctor, name: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-stone-200 text-stone-900 font-semibold"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-stone-600 uppercase">Mobile Phone</label>
+                  <input
+                    type="tel"
+                    required
+                    value={editingDoctor.phone}
+                    onChange={(e) => setEditingDoctor({ ...editingDoctor, phone: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-stone-200 text-stone-900 font-mono"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-stone-600 uppercase">Email Address</label>
+                  <input
+                    type="email"
+                    value={editingDoctor.email}
+                    onChange={(e) => setEditingDoctor({ ...editingDoctor, email: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-stone-200 text-stone-900"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-stone-600 uppercase">City / Location</label>
+                  <input
+                    type="text"
+                    value={editingDoctor.city}
+                    onChange={(e) => setEditingDoctor({ ...editingDoctor, city: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-stone-200 text-stone-900"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-stone-600 uppercase">Specialization</label>
+                  <input
+                    type="text"
+                    value={editingDoctor.specialization}
+                    onChange={(e) => setEditingDoctor({ ...editingDoctor, specialization: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-stone-200 text-stone-900"
+                    placeholder="e.g. Kayachikitsa & Panchakarma"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-stone-600 uppercase">Qualifications</label>
+                  <input
+                    type="text"
+                    value={editingDoctor.qualification}
+                    onChange={(e) => setEditingDoctor({ ...editingDoctor, qualification: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-stone-200 text-stone-900"
+                    placeholder="e.g. BAMS, MD (Ayurveda)"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-stone-600 uppercase">Clinic / Hospital</label>
+                  <input
+                    type="text"
+                    value={editingDoctor.clinic}
+                    onChange={(e) => setEditingDoctor({ ...editingDoctor, clinic: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-stone-200 text-stone-900"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-stone-600 uppercase">Council Verification Status</label>
+                  <select
+                    value={editingDoctor.status}
+                    onChange={(e) => setEditingDoctor({ ...editingDoctor, status: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-stone-200 text-stone-900 bg-white font-bold"
+                  >
+                    <option value="verified">🟢 Verified & Approved</option>
+                    <option value="pending_verification">⏳ Pending Verification</option>
+                    <option value="rejected">🔴 Rejected</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-stone-200 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsEditDoctorModalOpen(false);
+                    setEditingDoctor(null);
+                  }}
+                  className="px-4 py-2 rounded-xl border border-stone-200 text-stone-700 font-bold hover:bg-stone-50 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl bg-purple-700 hover:bg-purple-800 text-white font-bold cursor-pointer shadow-md flex items-center gap-1.5"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>Save Doctor Changes</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 23. INSPECT CONSULTATION / AI TRIAGE MODAL                                */}
+      {/* ========================================================================= */}
+      {inspectingConsultation && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/65 backdrop-blur-xs animate-in fade-in select-none">
+          <div className="bg-white rounded-3xl max-w-2xl w-full border border-stone-200 shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+            <div className="bg-stone-900 text-white px-6 py-4 flex items-center justify-between shrink-0 border-b border-stone-800">
+              <div className="flex items-center gap-2.5">
+                <MessageSquare className="w-5 h-5 text-amber-400" />
+                <span className="font-bold text-sm tracking-wide">
+                  Consultation Session: {inspectingConsultation.patient}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setInspectingConsultation(null)}
+                className="text-stone-400 hover:text-white p-1 rounded-lg hover:bg-stone-800 cursor-pointer transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 sm:p-8 overflow-y-auto space-y-4 text-xs font-sans">
+              <div className="flex items-center justify-between p-4 rounded-2xl bg-[#FAF8F5] border border-stone-200">
+                <div>
+                  <h3 className="font-bold text-stone-900 text-sm">{inspectingConsultation.patient}</h3>
+                  <p className="text-stone-500 font-mono text-[11px]">{inspectingConsultation.id} · {inspectingConsultation.duration}</p>
+                </div>
+                <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                  inspectingConsultation.status === 'active' ? 'bg-red-100 text-red-900' : 'bg-emerald-100 text-emerald-900'
+                }`}>
+                  {inspectingConsultation.status === 'active' ? '🔴 Live Session' : '✓ Completed'}
+                </span>
+              </div>
+
+              {inspectingConsultation.summary && (
+                <div className="p-4 rounded-2xl bg-purple-50/60 border border-purple-200 space-y-1">
+                  <span className="text-[10px] uppercase font-bold text-purple-900">Clinical Query / Primary Concern</span>
+                  <p className="font-semibold text-stone-900">{inspectingConsultation.summary}</p>
+                </div>
+              )}
+
+              {inspectingConsultation.last_reply && (
+                <div className="p-4 rounded-2xl bg-emerald-50/60 border border-emerald-200 space-y-1">
+                  <span className="text-[10px] uppercase font-bold text-emerald-900">Zeniva AI Classical Assessment & Guidance</span>
+                  <p className="text-stone-800 whitespace-pre-wrap">{inspectingConsultation.last_reply}</p>
+                </div>
+              )}
+
+              {inspectingConsultation.messages && inspectingConsultation.messages.length > 0 && (
+                <div className="space-y-2">
+                  <span className="text-[10px] uppercase font-bold text-stone-500 block">Conversation Transcript</span>
+                  <div className="space-y-2 max-h-60 overflow-y-auto p-3 rounded-2xl bg-stone-50 border border-stone-200 font-sans">
+                    {inspectingConsultation.messages.map((m, idx) => (
+                      <div key={idx} className={`p-2.5 rounded-xl text-xs ${
+                        m.sender === 'user' ? 'bg-white border border-stone-200 ml-6 text-stone-900' : 'bg-purple-100/70 border border-purple-200 mr-6 text-purple-950 font-medium'
+                      }`}>
+                        <div className="flex items-center justify-between text-[10px] text-stone-400 mb-1">
+                          <strong className={m.sender === 'user' ? 'text-stone-700' : 'text-purple-900'}>
+                            {m.sender === 'user' ? (inspectingConsultation.patient || 'Patient') : 'Zeniva AI Assistant'}
+                          </strong>
+                          <span>{m.timestamp || ''}</span>
+                        </div>
+                        <p>{m.text}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="pt-2 flex items-center justify-end gap-2">
+                {inspectingConsultation.status !== 'completed' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleUpdateConsultationStatus(inspectingConsultation.id, 'completed');
+                      setInspectingConsultation({ ...inspectingConsultation, status: 'completed' });
+                    }}
+                    className="px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs cursor-pointer shadow-md"
+                  >
+                    Mark as Completed
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setInspectingConsultation(null)}
+                  className="px-4 py-2 rounded-xl bg-purple-700 hover:bg-purple-800 text-white font-bold text-xs cursor-pointer shadow-md"
+                >
+                  Done
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

@@ -233,6 +233,19 @@ export const PatientAuthModal = ({
       localStorage.setItem('zeniva_current_user', JSON.stringify(authenticatedPatient));
       localStorage.setItem('zeniva_session_expiry', thirtyDaysExpiry.toString());
       localStorage.setItem('zeniva_remember_me', 'true');
+
+      // Sync into Admin & Doctor all-patients registry
+      const regStr = localStorage.getItem('zeniva_all_patients_registry');
+      let regList = regStr ? JSON.parse(regStr) : [];
+      if (!Array.isArray(regList)) regList = [];
+      const pIdx = regList.findIndex(p => (p.id && p.id === authenticatedPatient.id) || (p.phone && authenticatedPatient.phone && p.phone === authenticatedPatient.phone) || (p.email && authenticatedPatient.email && p.email.toLowerCase() === authenticatedPatient.email.toLowerCase()));
+      if (pIdx >= 0) {
+        regList[pIdx] = { ...regList[pIdx], ...authenticatedPatient };
+      } else {
+        regList.unshift(authenticatedPatient);
+      }
+      localStorage.setItem('zeniva_all_patients_registry', JSON.stringify(regList));
+      window.dispatchEvent(new CustomEvent('zeniva_patient_registered', { detail: authenticatedPatient }));
     } catch (e) {}
 
     setSuccessMessage(`✓ Welcome back, ${authenticatedPatient.name}! Opening Patient Portal...`);
@@ -386,6 +399,19 @@ export const PatientAuthModal = ({
       localStorage.setItem('zeniva_patient_user', JSON.stringify(newPatient));
       localStorage.setItem('zeniva_session_expiry', thirtyDaysExpiry.toString());
       localStorage.setItem('zeniva_remember_me', 'true');
+
+      // Sync into Admin & Doctor all-patients registry
+      const regStr = localStorage.getItem('zeniva_all_patients_registry');
+      let regList = regStr ? JSON.parse(regStr) : [];
+      if (!Array.isArray(regList)) regList = [];
+      const pIdx = regList.findIndex(p => (p.id && p.id === newPatient.id) || (p.phone && newPatient.phone && p.phone === newPatient.phone) || (p.email && newPatient.email && p.email.toLowerCase() === newPatient.email.toLowerCase()));
+      if (pIdx >= 0) {
+        regList[pIdx] = { ...regList[pIdx], ...newPatient };
+      } else {
+        regList.unshift(newPatient);
+      }
+      localStorage.setItem('zeniva_all_patients_registry', JSON.stringify(regList));
+      window.dispatchEvent(new CustomEvent('zeniva_patient_registered', { detail: newPatient }));
     } catch (e) {}
 
     setIsSubmitting(false);
