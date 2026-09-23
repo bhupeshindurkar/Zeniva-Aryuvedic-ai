@@ -1797,6 +1797,9 @@ def create_whatsapp_session(req: WhatsAppSessionRequest):
         except Exception as dbe:
             print("[WhatsApp Session DB Save Notice]:", dbe)
 
+        # Official Zeniva WhatsApp Group link
+        wa_group_url = os.getenv("ZENIVA_WHATSAPP_GROUP_LINK", "https://chat.whatsapp.com/G4YxR1VfL5mC7oD48ZenAi")
+
         encoded_text = urllib.parse.quote(wa_text)
         whatsapp_url = f"https://api.whatsapp.com/send?phone={official_wa_number}&text={encoded_text}"
 
@@ -1805,6 +1808,7 @@ def create_whatsapp_session(req: WhatsAppSessionRequest):
             "session_id": session_ref,
             "whatsapp_number": official_wa_number,
             "whatsapp_display": wa_display,
+            "whatsapp_group_url": wa_group_url,
             "whatsapp_url": whatsapp_url,
             "formatted_text": wa_text
         }
@@ -1813,7 +1817,8 @@ def create_whatsapp_session(req: WhatsAppSessionRequest):
         return {
             "success": False,
             "error": str(e),
-            "whatsapp_url": "https://api.whatsapp.com/send?phone=918766903403"
+            "whatsapp_url": "https://api.whatsapp.com/send?phone=918766903403",
+            "whatsapp_group_url": "https://chat.whatsapp.com/G4YxR1VfL5mC7oD48ZenAi"
         }
 
 if __name__ == "__main__":

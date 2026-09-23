@@ -917,6 +917,7 @@ export default function App() {
               />
             ) : activeTab === 'contact' ? (
               <ContactUsView
+                currentUser={currentUser}
                 onSelectTab={(tabId) => setActiveTab(tabId)}
                 onOpenAIChat={(prompt) => {
                   setChatInitialPrompt(prompt || '');
@@ -1090,6 +1091,7 @@ export default function App() {
 
               {activeTab === 'contact' && (
                 <ContactUsView
+                  currentUser={currentUser}
                   onSelectTab={(tabId) => setActiveTab(tabId)}
                   onOpenAIChat={(prompt) => {
                     setChatInitialPrompt(prompt || '');

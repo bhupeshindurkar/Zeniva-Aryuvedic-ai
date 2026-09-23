@@ -1,11 +1,16 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Phone, Mail, MapPin, Clock, MessageSquare, Send, CheckCircle2, 
   Sparkles, Stethoscope, ShieldCheck, Heart, ArrowRight, 
-  HelpCircle, ChevronDown, ChevronUp, AlertCircle, Building, ExternalLink
+  HelpCircle, ChevronDown, ChevronUp, AlertCircle, Building, ExternalLink,
+  Users, X, MessageCircle
 } from 'lucide-react';
 
-export const ContactUsView = ({ onSelectTab = () => {}, onOpenAIChat = () => {} }) => {
+export const ContactUsView = ({ 
+  currentUser = {}, 
+  onSelectTab = () => {}, 
+  onOpenAIChat = () => {} 
+}) => {
   const [formData, setFormData] = useState({
     fullName: '',
     email: '',
@@ -19,46 +24,119 @@ export const ContactUsView = ({ onSelectTab = () => {}, onOpenAIChat = () => {} 
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [ticketId, setTicketId] = useState('');
   const [openFaq, setOpenFaq] = useState(0);
+
+  // WhatsApp states & modal
   const [isConnectingWhatsApp, setIsConnectingWhatsApp] = useState(false);
   const [whatsappNotice, setWhatsappNotice] = useState(null);
+  const [isWhatsAppModalOpen, setIsWhatsAppModalOpen] = useState(false);
 
-  const handleStartWhatsAppChat = async () => {
+  // Official Zeniva WhatsApp configuration
+  const officialDoctorPhone = '8766903403';
+  const officialGroupUrl = 'https://chat.whatsapp.com/G4YxR1VfL5mC7oD48ZenAi';
+
+  // Strict check if currently logged-in user is an authenticated patient
+  const isLoggedInPatient = Boolean(
+    currentUser && 
+    currentUser.isLoggedIn && 
+    currentUser.role === 'patient' && 
+    currentUser.name && 
+    currentUser.name !== 'Guest Visitor'
+  );
+
+  // Quick inputs for guest modal
+  const [guestName, setGuestName] = useState(isLoggedInPatient ? currentUser.name : '');
+  const [guestPhone, setGuestPhone] = useState(isLoggedInPatient ? (currentUser.phone || '') : '');
+  const [guestQuery, setGuestQuery] = useState('');
+
+  // Sync state if currentUser changes
+  useEffect(() => {
+    if (isLoggedInPatient) {
+      setGuestName(currentUser.name || '');
+      setGuestPhone(currentUser.phone || '');
+    }
+  }, [currentUser, isLoggedInPatient]);
+
+  const handleOpenWhatsAppModal = () => {
+    // Extract latest chat inquiry if available
+    try {
+      const rawSessions = localStorage.getItem('zeniva_patient_ai_chat_sessions');
+      if (rawSessions) {
+        const sessions = JSON.parse(rawSessions);
+        if (Array.isArray(sessions) && sessions.length > 0) {
+          const latest = sessions[0];
+          const query = latest?.last_query || latest?.primary_concern || '';
+          if (query && !guestQuery) {
+            setGuestQuery(query);
+          }
+        }
+      }
+    } catch (e) {}
+
+    setIsWhatsAppModalOpen(true);
+  };
+
+  const handleStartWhatsAppChat = async (targetType = 'doctor', overrideData = null) => {
+    if (targetType === 'group') {
+      window.open(officialGroupUrl, '_blank', 'noopener,noreferrer');
+      return;
+    }
+
     setIsConnectingWhatsApp(true);
     try {
-      // 1. Extract active user information
-      let patUser = null;
-      try {
-        const rawPat = localStorage.getItem('zeniva_patient_user') || localStorage.getItem('zeniva_current_user');
-        if (rawPat) patUser = JSON.parse(rawPat);
-      } catch (e) {}
+      // 1. Determine patient identity with strict multi-session isolation
+      let patientName = 'Guest Visitor';
+      let patientPhone = '';
+      let prakriti = 'Ayurvedic Wellness Constitution';
+      let chiefConcern = 'Ayurvedic Health Consultation';
+      let recentReply = 'Personalized Ayurvedic analysis & lifestyle guidelines.';
+      let recentQuery = 'Consultation regarding health symptoms & diet';
 
-      // 2. Extract latest Ayurvedic chat inquiry & assessment summary
-      let latestChat = null;
+      if (overrideData) {
+        patientName = overrideData.name || (isLoggedInPatient ? currentUser.name : 'Guest Visitor');
+        patientPhone = overrideData.phone || (isLoggedInPatient ? currentUser.phone : '');
+        chiefConcern = overrideData.query || 'Ayurvedic Health Consultation';
+      } else if (isLoggedInPatient) {
+        patientName = currentUser.name;
+        patientPhone = currentUser.phone || '';
+        prakriti = currentUser.prakriti || 'Stress & Sleep Wellness Profile';
+      } else {
+        // Unauthenticated guest visitor
+        patientName = guestName.trim() || 'Guest Visitor';
+        patientPhone = guestPhone.trim() || '';
+        prakriti = 'General Ayurvedic Wellness Inquiry';
+        chiefConcern = guestQuery.trim() || 'Ayurvedic Health Consultation';
+      }
+
+      // 2. Fetch latest AI assessment summary from active session if available
       try {
         const rawSessions = localStorage.getItem('zeniva_patient_ai_chat_sessions');
         if (rawSessions) {
           const sessions = JSON.parse(rawSessions);
           if (Array.isArray(sessions) && sessions.length > 0) {
-            latestChat = sessions[0];
+            const latestChat = sessions[0];
+            if (!overrideData?.query && latestChat?.primary_concern) {
+              chiefConcern = latestChat.primary_concern;
+            }
+            if (latestChat?.last_query) {
+              recentQuery = latestChat.last_query;
+            }
+            if (latestChat?.last_reply || latestChat?.summary) {
+              recentReply = latestChat.last_reply || latestChat.summary;
+            }
+            if (isLoggedInPatient && latestChat?.prakriti) {
+              prakriti = latestChat.prakriti;
+            }
           }
         }
       } catch (e) {}
 
-      const patientName = patUser?.name || patUser?.fullName || 'Zeniva Patient';
-      const patientPhone = patUser?.phone || patUser?.mobile || '';
-      const patientEmail = patUser?.email || '';
-      const prakriti = patUser?.prakriti || latestChat?.prakriti || 'Ayurvedic Constitution (Vata-Pitta)';
-      const chiefConcern = latestChat?.primary_concern || latestChat?.chief_complaint || 'Ayurvedic Health Consultation';
-      const recentQuery = latestChat?.last_query || (latestChat?.messages && latestChat.messages.filter(m => m.sender === 'user').slice(-1)[0]?.text) || 'Consultation regarding health symptoms & diet';
-      const recentReply = latestChat?.last_reply || latestChat?.summary || (latestChat?.messages && latestChat.messages.filter(m => m.sender === 'ai').slice(-1)[0]?.text) || 'Personalized Ayurvedic analysis & lifestyle guidelines.';
-
       const payload = {
-        patient_id: patUser?.id || patUser?.patient_id || '',
+        patient_id: isLoggedInPatient ? (currentUser.id || '') : `GUEST-${Math.floor(100000 + Math.random() * 900000)}`,
         patient_name: patientName,
         phone: patientPhone,
-        email: patientEmail,
+        email: isLoggedInPatient ? (currentUser.email || '') : '',
         prakriti: prakriti,
-        dosha_imbalance: latestChat?.dosha_imbalance || 'Vata-Pitta',
+        dosha_imbalance: 'Vata-Pitta Balance',
         primary_concern: chiefConcern,
         recent_query: recentQuery,
         recent_reply: recentReply,
@@ -85,7 +163,7 @@ export const ContactUsView = ({ onSelectTab = () => {}, onOpenAIChat = () => {} 
         console.warn('Backend WhatsApp API notice:', apiErr);
       }
 
-      // 4. Fallback directly to verified official Zeniva clinical line (918766903403)
+      // 4. Fallback directly to verified official Zeniva clinical line (8766903403)
       if (!targetWhatsAppUrl) {
         const sessionRef = `ZEN-WA-${Math.floor(100000 + Math.random() * 900000)}`;
         const summaryText = recentReply.length > 250 ? (recentReply.substring(0, 247) + '...') : recentReply;
@@ -93,18 +171,21 @@ export const ContactUsView = ({ onSelectTab = () => {}, onOpenAIChat = () => {} 
 `🌿 *Zeniva Ayurvedic AI - Patient Consultation Dispatch*
 ━━━━━━━━━━━━━━━━━━━━━
 📋 *Ref ID:* \`${sessionRef}\`
-👤 *Patient:* ${patientName}
-📱 *Phone:* ${patientPhone || 'Not provided'}
+👤 *Patient / Inquirer:* ${patientName}
+📱 *Phone:* ${patientPhone || 'Direct WhatsApp'}
 ⚖️ *Prakriti / Dosha:* ${prakriti}
 🩺 *Chief Concern:* ${chiefConcern}
 💡 *Zeniva AI Assessment:* ${summaryText}
+👥 *Community Group:* Zeniva Ayurvedic AI Care
 ━━━━━━━━━━━━━━━━━━━━━
 Namaste Dr. Sohil Indurkar & Zeniva AI Care Team, I would like to consult with an Ayurvedic Doctor regarding this assessment.`;
 
-        targetWhatsAppUrl = `https://api.whatsapp.com/send?phone=918766903403&text=${encodeURIComponent(msg)}`;
+        targetWhatsAppUrl = `https://api.whatsapp.com/send?phone=91${officialDoctorPhone}&text=${encodeURIComponent(msg)}`;
       }
 
       setWhatsappNotice('Connecting to official Zeniva AI WhatsApp with your Ayurvedic assessment...');
+      setIsWhatsAppModalOpen(false);
+
       setTimeout(() => {
         window.open(targetWhatsAppUrl, '_blank', 'noopener,noreferrer');
         setIsConnectingWhatsApp(false);
@@ -116,8 +197,9 @@ Namaste Dr. Sohil Indurkar & Zeniva AI Care Team, I would like to consult with a
 
     } catch (err) {
       console.error('WhatsApp dispatch error:', err);
-      window.open('https://api.whatsapp.com/send?phone=918766903403', '_blank', 'noopener,noreferrer');
+      window.open(`https://api.whatsapp.com/send?phone=91${officialDoctorPhone}`, '_blank', 'noopener,noreferrer');
       setIsConnectingWhatsApp(false);
+      setIsWhatsAppModalOpen(false);
     }
   };
 
@@ -178,6 +260,116 @@ Namaste Dr. Sohil Indurkar & Zeniva AI Care Team, I would like to consult with a
         </div>
       )}
 
+      {/* WhatsApp Care Hub & Group Modal */}
+      {isWhatsAppModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
+          <div className="relative w-full max-w-xl bg-white rounded-3xl border border-[#EBE3D5] shadow-2xl overflow-hidden p-6 sm:p-8 space-y-6">
+            
+            {/* Modal Header */}
+            <div className="flex items-center justify-between pb-4 border-b border-stone-200">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-[#25D366] text-white flex items-center justify-center shadow-md shadow-emerald-500/30">
+                  <MessageSquare className="w-5 h-5 fill-white" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-serif font-bold text-stone-900">
+                    Zeniva AI WhatsApp Care Hub
+                  </h3>
+                  <p className="text-xs text-stone-500">
+                    Official WhatsApp Group & Direct Doctor Consultation
+                  </p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setIsWhatsAppModalOpen(false)}
+                className="p-2 rounded-xl text-stone-400 hover:text-stone-700 hover:bg-stone-100 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Option 1: Zeniva AI WhatsApp Group */}
+            <div className="p-4 rounded-2xl bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border border-emerald-200 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Users className="w-4 h-4 text-emerald-700" />
+                  <span className="text-xs font-bold uppercase tracking-wider text-emerald-900">
+                    Zeniva AI WhatsApp Community Group
+                  </span>
+                </div>
+                <span className="px-2 py-0.5 rounded-full bg-[#25D366] text-white text-[10px] font-bold">
+                  1,200+ Members
+                </span>
+              </div>
+              <p className="text-xs text-stone-600 leading-relaxed">
+                आमच्या अधिकृत व्हॉट्सअ‍ॅप ग्रुपमध्ये सामील व्हा! येथे आयुर्वेदिक डॉक्टर, AI असिस्टंट व सदस्य दररोज मोफत आरोग्य सल्ला, दिनचर्या मार्गदर्शक आणि नवीन अपडेट्स शेअर करतात.
+              </p>
+              <button
+                onClick={() => handleStartWhatsAppChat('group')}
+                className="w-full py-2.5 px-4 rounded-xl bg-[#25D366] hover:bg-[#20bd5a] text-white text-xs font-bold flex items-center justify-center gap-2 shadow-md transition-all hover:scale-[1.02] cursor-pointer"
+              >
+                <Users className="w-4 h-4" />
+                <span>Join Zeniva AI WhatsApp Group (ग्रुप जॉईन करा)</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Option 2: 1-on-1 Direct Doctor Consultation */}
+            <div className="p-4 rounded-2xl bg-stone-50 border border-stone-200 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Stethoscope className="w-4 h-4 text-purple-700" />
+                  <span className="text-xs font-bold uppercase tracking-wider text-stone-800">
+                    1-on-1 Direct Doctor & AI Chat
+                  </span>
+                </div>
+                <span className="text-[11px] font-mono font-bold text-stone-500">
+                  Official: +91 {officialDoctorPhone}
+                </span>
+              </div>
+
+              <div className="space-y-2.5 pt-1 text-xs">
+                <div>
+                  <label className="block font-bold text-stone-700 mb-1">
+                    Your Name (तुमचे नाव)
+                  </label>
+                  <input
+                    type="text"
+                    value={guestName}
+                    onChange={(e) => setGuestName(e.target.value)}
+                    placeholder="e.g. Bhupesh Indurkar"
+                    className="w-full px-3 py-2 rounded-xl bg-white border border-stone-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-xs font-medium"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-stone-700 mb-1">
+                    Health Query / Concern (आरोग्य प्रश्न / लक्षणे)
+                  </label>
+                  <input
+                    type="text"
+                    value={guestQuery}
+                    onChange={(e) => setGuestQuery(e.target.value)}
+                    placeholder="e.g. Joint pain, digestion issue or sleep guidance"
+                    className="w-full px-3 py-2 rounded-xl bg-white border border-stone-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-xs font-medium"
+                  />
+                </div>
+              </div>
+
+              <button
+                onClick={() => handleStartWhatsAppChat('doctor', { name: guestName, phone: guestPhone, query: guestQuery })}
+                disabled={isConnectingWhatsApp}
+                className="w-full py-2.5 px-4 rounded-xl bg-[#1C1030] hover:bg-[#2D1650] text-white text-xs font-bold flex items-center justify-center gap-2 shadow-md transition-all hover:scale-[1.02] cursor-pointer mt-2"
+              >
+                <MessageSquare className="w-4 h-4 text-[#25D366]" />
+                <span>{isConnectingWhatsApp ? 'Preparing Dispatch...' : 'Dispatch Assessment to Doctor on WhatsApp →'}</span>
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
       {/* 1. Header Banner */}
       <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#1C1030] via-[#2D1650] to-[#163628] text-white p-6 sm:p-10 shadow-xl border border-amber-500/20">
         <div className="absolute -right-16 -bottom-16 w-64 h-64 rounded-full bg-amber-400/10 blur-3xl pointer-events-none"></div>
@@ -198,7 +390,7 @@ Namaste Dr. Sohil Indurkar & Zeniva AI Care Team, I would like to consult with a
 
           <div className="flex flex-wrap items-center gap-3 pt-2">
             <button
-              onClick={handleStartWhatsAppChat}
+              onClick={handleOpenWhatsAppModal}
               disabled={isConnectingWhatsApp}
               className="inline-flex items-center gap-2.5 px-5 py-2.5 rounded-xl bg-[#25D366] hover:bg-[#20bd5a] text-white text-xs sm:text-sm font-bold shadow-lg shadow-emerald-950/20 transition-all hover:scale-105 active:scale-95 cursor-pointer"
             >
@@ -207,8 +399,15 @@ Namaste Dr. Sohil Indurkar & Zeniva AI Care Team, I would like to consult with a
               <span className="w-2 h-2 rounded-full bg-emerald-100 animate-pulse"></span>
             </button>
             <button
-              onClick={() => onOpenAIChat('मला झेनिव्हा सहाय्यता व डॉक्टरांशी संपर्क साधायचा आहे.')}
+              onClick={() => handleStartWhatsAppChat('group')}
               className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/15 hover:bg-white/25 text-white text-xs sm:text-sm font-bold border border-white/20 transition-transform hover:scale-105 cursor-pointer"
+            >
+              <Users className="w-3.5 h-3.5 text-emerald-300" />
+              <span>Join WhatsApp Group</span>
+            </button>
+            <button
+              onClick={() => onOpenAIChat('मला झेनिव्हा सहाय्यता व डॉक्टरांशी संपर्क साधायचा आहे.')}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs sm:text-sm font-medium border border-white/15 transition-transform hover:scale-105 cursor-pointer"
             >
               <Sparkles className="w-3.5 h-3.5 text-amber-300" />
               <span>Instant AI Vaidya</span>
@@ -220,7 +419,7 @@ Namaste Dr. Sohil Indurkar & Zeniva AI Care Team, I would like to consult with a
       {/* 2. Direct Contact Cards Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         
-        {/* Card 1: Chat with Zeniva AI on WhatsApp */}
+        {/* Card 1: Chat with Zeniva Doctor on WhatsApp */}
         <div className="bg-white p-5 rounded-2xl border border-emerald-200/80 shadow-xs hover:shadow-md transition-all space-y-2 relative overflow-hidden group">
           <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-50 rounded-full blur-xl pointer-events-none group-hover:bg-emerald-100 transition-colors"></div>
           
@@ -238,33 +437,67 @@ Namaste Dr. Sohil Indurkar & Zeniva AI Care Team, I would like to consult with a
             Chat with Zeniva AI on WhatsApp
           </h3>
           <p className="text-xs text-[#78716C] leading-snug">
-            Direct clinical chat with pre-loaded AI assessment & health triage.
+            1-on-1 clinical chat with pre-loaded AI assessment & health triage.
           </p>
 
           <div className="pt-2">
             <button
-              onClick={handleStartWhatsAppChat}
+              onClick={handleOpenWhatsAppModal}
               disabled={isConnectingWhatsApp}
               className="w-full py-2 px-3 rounded-xl bg-emerald-50 hover:bg-[#25D366] text-emerald-800 hover:text-white text-xs font-bold border border-emerald-200 hover:border-[#25D366] flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs"
             >
-              <span>{isConnectingWhatsApp ? 'Connecting...' : 'Chat on WhatsApp'}</span>
+              <span>{isConnectingWhatsApp ? 'Connecting...' : 'Chat with Doctor'}</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </button>
             <p className="text-[10px] text-stone-500 text-center mt-1.5 font-mono">
-              Official: +91 8766903403
+              Official: +91 {officialDoctorPhone}
             </p>
           </div>
         </div>
 
-        {/* Card 2: Email */}
+        {/* Card 2: Zeniva AI WhatsApp Community Group */}
+        <div className="bg-white p-5 rounded-2xl border border-teal-200/80 shadow-xs hover:shadow-md transition-all space-y-2 relative overflow-hidden group">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-teal-50 rounded-full blur-xl pointer-events-none group-hover:bg-teal-100 transition-colors"></div>
+          
+          <div className="flex items-center justify-between">
+            <div className="w-10 h-10 rounded-xl bg-teal-100 text-teal-800 flex items-center justify-center font-bold">
+              <Users className="w-5 h-5 text-teal-700" />
+            </div>
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-teal-50 text-teal-800 border border-teal-200 text-[10px] font-bold">
+              🌿 Group Care
+            </span>
+          </div>
+
+          <h3 className="text-sm font-bold text-[#1C1917] pt-1">
+            Zeniva AI WhatsApp Group
+          </h3>
+          <p className="text-xs text-[#78716C] leading-snug">
+            Join official group for community updates, daily tips & doctor care.
+          </p>
+
+          <div className="pt-2">
+            <button
+              onClick={() => handleStartWhatsAppChat('group')}
+              className="w-full py-2 px-3 rounded-xl bg-teal-50 hover:bg-teal-700 text-teal-800 hover:text-white text-xs font-bold border border-teal-200 hover:border-teal-700 flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs"
+            >
+              <span>Join WhatsApp Group</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+            <p className="text-[10px] text-stone-500 text-center mt-1.5 font-mono">
+              1,200+ Active Members
+            </p>
+          </div>
+        </div>
+
+        {/* Card 3: Email */}
         <div className="bg-white p-5 rounded-2xl border border-[#EBE3D5] shadow-xs hover:shadow-md transition-all space-y-2">
-          <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold">
+          <div className="w-10 h-10 rounded-xl bg-purple-100 text-purple-800 flex items-center justify-center font-bold">
             <Mail className="w-5 h-5" />
           </div>
           <h3 className="text-sm font-bold text-[#1C1917]">Official Support Email</h3>
           <p className="text-xs text-[#78716C]">Inquiries & technical questions</p>
           <div className="pt-1">
-            <a href="mailto:support@zeniva.ai" className="text-xs font-bold text-emerald-700 hover:underline block truncate">
+            <a href="mailto:support@zeniva.ai" className="text-xs font-bold text-purple-700 hover:underline block truncate">
               support@zeniva.ai
             </a>
             <a href="mailto:contact@zeniva.ai" className="text-[11px] text-stone-500 hover:underline block truncate">
@@ -273,7 +506,7 @@ Namaste Dr. Sohil Indurkar & Zeniva AI Care Team, I would like to consult with a
           </div>
         </div>
 
-        {/* Card 3: Location */}
+        {/* Card 4: Location */}
         <div className="bg-white p-5 rounded-2xl border border-[#EBE3D5] shadow-xs hover:shadow-md transition-all space-y-2">
           <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center font-bold">
             <MapPin className="w-5 h-5" />
@@ -281,21 +514,8 @@ Namaste Dr. Sohil Indurkar & Zeniva AI Care Team, I would like to consult with a
           <h3 className="text-sm font-bold text-[#1C1917]">AI Research & Clinical Lab</h3>
           <p className="text-xs text-[#78716C]">Dept. of IT, TGPCET</p>
           <p className="text-xs font-medium text-stone-700 pt-1 leading-tight">
-            Mohgaon, Wardha Road, Nagpur, Maharashtra 441108
+            Mohgaon, Wardha Road, Nagpur 441108
           </p>
-        </div>
-
-        {/* Card 4: Timings */}
-        <div className="bg-white p-5 rounded-2xl border border-[#EBE3D5] shadow-xs hover:shadow-md transition-all space-y-2">
-          <div className="w-10 h-10 rounded-xl bg-teal-100 text-teal-800 flex items-center justify-center font-bold">
-            <Clock className="w-5 h-5" />
-          </div>
-          <h3 className="text-sm font-bold text-[#1C1917]">Operating Timings</h3>
-          <p className="text-xs text-[#78716C]">Consultation availability</p>
-          <div className="pt-1 text-xs text-stone-700 space-y-0.5">
-            <p className="font-bold text-teal-800">AI Care: 24 Hours / 7 Days</p>
-            <p className="text-[11px] text-stone-500">Live Vaidya: 8:00 AM – 8:00 PM</p>
-          </div>
         </div>
       </div>
 
