@@ -475,7 +475,7 @@ export const LoginPortal = ({
 
         if (matched) {
           // If a password was saved for this doctor, verify it
-          if (matched.password && matched.password.trim() !== signinPassword.trim()) {
+          if (matched.password && matched.password.trim() !== signinPassword.trim() && matched.password.trim().toLowerCase() !== signinPassword.trim().toLowerCase()) {
             throw new Error('Incorrect password. Please enter the correct password you created during registration.');
           }
 

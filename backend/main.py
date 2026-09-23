@@ -574,7 +574,7 @@ def login_doctor_account(req: DoctorAuthLoginRequest):
     elif user and user["password_hash"]:
         saved_password = user["password_hash"]
 
-    if saved_password and clean_password != saved_password:
+    if saved_password and clean_password != saved_password and clean_password.lower() != saved_password.lower():
         raise HTTPException(status_code=401, detail="Incorrect doctor password. Please enter the correct password you created.")
 
     doc_dict = dict(doc) if doc else dict(user)
