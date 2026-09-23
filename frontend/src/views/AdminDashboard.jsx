@@ -38,21 +38,27 @@ export const AdminDashboard = ({
   const [doctorsList, setDoctorsList] = useState(() => {
     try {
       const delRaw = localStorage.getItem('zeniva_deleted_doctor_ids');
-      const deletedIds = delRaw ? JSON.parse(delRaw) : ['ZEN-DOC-644980'];
+      let deletedIds = delRaw ? JSON.parse(delRaw) : ['ZEN-DOC-644980', 'ZEN-DOC-242834'];
+      // Ensure only explicit doctor ID strings are blacklisted, not valid phones or emails
+      deletedIds = deletedIds.filter(id => id && typeof id === 'string' && id.startsWith('ZEN-DOC-'));
+      if (!deletedIds.includes('ZEN-DOC-644980')) deletedIds.push('ZEN-DOC-644980');
+      if (!deletedIds.includes('ZEN-DOC-242834')) deletedIds.push('ZEN-DOC-242834');
+      localStorage.setItem('zeniva_deleted_doctor_ids', JSON.stringify(deletedIds));
+
       const listStr = localStorage.getItem('zeniva_registered_doctors_list');
       if (listStr) {
         const list = JSON.parse(listStr);
         if (Array.isArray(list)) {
-          return list.filter(d => {
+          const cleaned = list.filter(d => {
             if (!d || !d.name) return false;
-            const cleanP = String(d.phone || '').replace(/\D/g, '').slice(-10);
-            const cleanE = (d.email || '').trim().toLowerCase();
-            return !deletedIds.includes(d.id) && 
-                   !deletedIds.includes(d.doctor_id) && 
-                   !deletedIds.includes(d.phone) &&
-                   (!cleanP || !deletedIds.includes(cleanP)) &&
-                   (!cleanE || !deletedIds.includes(cleanE));
+            if (deletedIds.includes(d.id) || deletedIds.includes(d.doctor_id)) return false;
+            // Filter out dummy doctor entries with no phone and name containing Bhupesh
+            const isDummyBhupesh = (!d.phone || d.phone === '+91' || d.phone === '') && d.name.toLowerCase().includes('bhupesh');
+            if (isDummyBhupesh) return false;
+            return true;
           });
+          localStorage.setItem('zeniva_registered_doctors_list', JSON.stringify(cleaned));
+          return cleaned;
         }
       }
     } catch (e) {}
@@ -420,11 +426,15 @@ export const AdminDashboard = ({
           if (Array.isArray(list)) {
             list.forEach(doc => {
               if (doc && doc.name) {
-                const existsIdx = realDocs.findIndex(x => (x.id && x.id === doc.id) || (x.email && doc.email && x.email.toLowerCase() === doc.email.toLowerCase()) || (x.phone && doc.phone && x.phone === doc.phone));
-                if (existsIdx >= 0) {
-                  realDocs[existsIdx] = { ...realDocs[existsIdx], ...doc };
-                } else {
-                  realDocs.unshift(doc);
+                // Ignore legacy dummy records
+                const isDummy = doc.id === 'ZEN-DOC-242834' || doc.id === 'ZEN-DOC-644980' || ((!doc.phone || doc.phone === '+91') && doc.name.toLowerCase().includes('bhupesh'));
+                if (!isDummy) {
+                  const existsIdx = realDocs.findIndex(x => (x.id && x.id === doc.id) || (x.email && doc.email && x.email.toLowerCase() === doc.email.toLowerCase()) || (x.phone && doc.phone && x.phone === doc.phone));
+                  if (existsIdx >= 0) {
+                    realDocs[existsIdx] = { ...realDocs[existsIdx], ...doc };
+                  } else {
+                    realDocs.unshift(doc);
+                  }
                 }
               }
             });
@@ -435,31 +445,31 @@ export const AdminDashboard = ({
         if (regDocStr) {
           const regDoc = JSON.parse(regDocStr);
           if (regDoc && regDoc.name) {
-            const existsIdx = realDocs.findIndex(x => (x.id && x.id === regDoc.id) || (x.email && regDoc.email && x.email.toLowerCase() === regDoc.email.toLowerCase()) || (x.phone && regDoc.phone && x.phone === regDoc.phone));
-            if (existsIdx >= 0) {
-              realDocs[existsIdx] = { ...realDocs[existsIdx], ...regDoc };
-            } else {
-              realDocs.unshift(regDoc);
+            const isDummy = regDoc.id === 'ZEN-DOC-242834' || regDoc.id === 'ZEN-DOC-644980' || ((!regDoc.phone || regDoc.phone === '+91') && regDoc.name.toLowerCase().includes('bhupesh'));
+            if (!isDummy) {
+              const existsIdx = realDocs.findIndex(x => (x.id && x.id === regDoc.id) || (x.email && regDoc.email && x.email.toLowerCase() === regDoc.email.toLowerCase()) || (x.phone && regDoc.phone && x.phone === regDoc.phone));
+              if (existsIdx >= 0) {
+                realDocs[existsIdx] = { ...realDocs[existsIdx], ...regDoc };
+              } else {
+                realDocs.unshift(regDoc);
+              }
             }
           }
         }
       } catch (e) {}
 
-      // Filter out any deleted doctors from blacklist (including legacy test records)
+      // Filter out any deleted doctors from blacklist (strictly by doctor ID, never blocking real phones)
       try {
         const delRaw = localStorage.getItem('zeniva_deleted_doctor_ids');
         let deletedIds = delRaw ? JSON.parse(delRaw) : [];
         if (!deletedIds.includes('ZEN-DOC-644980')) deletedIds.push('ZEN-DOC-644980');
+        if (!deletedIds.includes('ZEN-DOC-242834')) deletedIds.push('ZEN-DOC-242834');
         if (Array.isArray(deletedIds) && deletedIds.length > 0) {
           realDocs = realDocs.filter(d => {
             if (!d || !d.name) return false;
-            const cleanP = String(d.phone || '').replace(/\D/g, '').slice(-10);
-            const cleanE = (d.email || '').trim().toLowerCase();
-            return !deletedIds.includes(d.id) && 
-                   !deletedIds.includes(d.doctor_id) && 
-                   !deletedIds.includes(d.phone) &&
-                   (!cleanP || !deletedIds.includes(cleanP)) &&
-                   (!cleanE || !deletedIds.includes(cleanE));
+            const isDummyBhupesh = (!d.phone || d.phone === '+91' || d.phone === '') && d.name.toLowerCase().includes('bhupesh');
+            if (isDummyBhupesh) return false;
+            return !deletedIds.includes(d.id) && !deletedIds.includes(d.doctor_id);
           });
         }
       } catch (e) {}
@@ -592,6 +602,40 @@ export const AdminDashboard = ({
   };
 
   useEffect(() => {
+    try {
+      // 1. Purge dummy test records from zeniva_registered_doctor
+      const regDocStr = localStorage.getItem('zeniva_registered_doctor');
+      if (regDocStr) {
+        const regDoc = JSON.parse(regDocStr);
+        if (regDoc && (regDoc.id === 'ZEN-DOC-242834' || regDoc.id === 'ZEN-DOC-644980' || ((!regDoc.phone || regDoc.phone === '+91') && regDoc.name?.toLowerCase().includes('bhupesh')))) {
+          localStorage.removeItem('zeniva_registered_doctor');
+        }
+      }
+
+      // 2. Clean zeniva_deleted_doctor_ids so it doesn't block valid real phone numbers
+      const delRaw = localStorage.getItem('zeniva_deleted_doctor_ids');
+      let deletedIds = delRaw ? JSON.parse(delRaw) : [];
+      let cleanedDeleted = deletedIds.filter(id => id && typeof id === 'string' && id.startsWith('ZEN-DOC-'));
+      if (!cleanedDeleted.includes('ZEN-DOC-644980')) cleanedDeleted.push('ZEN-DOC-644980');
+      if (!cleanedDeleted.includes('ZEN-DOC-242834')) cleanedDeleted.push('ZEN-DOC-242834');
+      localStorage.setItem('zeniva_deleted_doctor_ids', JSON.stringify(cleanedDeleted));
+
+      // 3. Clean zeniva_registered_doctors_list from stale dummy entries
+      const listStr = localStorage.getItem('zeniva_registered_doctors_list');
+      if (listStr) {
+        const list = JSON.parse(listStr);
+        if (Array.isArray(list)) {
+          const filtered = list.filter(d => {
+            if (!d || !d.name) return false;
+            if (cleanedDeleted.includes(d.id) || cleanedDeleted.includes(d.doctor_id)) return false;
+            if ((!d.phone || d.phone === '+91' || d.phone === '') && d.name.toLowerCase().includes('bhupesh')) return false;
+            return true;
+          });
+          localStorage.setItem('zeniva_registered_doctors_list', JSON.stringify(filtered));
+        }
+      }
+    } catch (e) {}
+
     fetchAllRealData();
   }, []);
 
@@ -616,12 +660,12 @@ export const AdminDashboard = ({
       event: 'Doctor MCIM License Verification Approved',
       category: 'Clinical Credentialing',
       actor: 'Super Admin',
-      user: 'ZEN-DOC-644980',
+      user: 'ZEN-DOC-784219',
       ip: '127.0.0.1 (Localhost)',
       token: 'sha256_b3f710a99c421d',
       severity: 'Success',
       status: 'Verified',
-      details: 'Dr. Bhupesh Indurkar credentials approved with MCIM reg AYU-MAH-8921.'
+      details: 'Ayurvedic practitioner credentials approved with statutory MCIM registry.'
     },
     {
       id: 'aud_init_03',
@@ -652,7 +696,15 @@ export const AdminDashboard = ({
     const isApprove = action === 'APPROVE' || action === 'APPROVED' || action === 'VERIFIED';
     const newStatus = isApprove ? 'verified' : 'rejected';
 
-    // 1. Immediately update localStorage for instant reactive UI & cross-tab sync
+    // 1. Immediately update React state so UI updates instantaneously!
+    setDoctorsList(prev => prev.map(d => {
+      if (d.id === doctorId || d.doctor_id === doctorId || (d.phone && d.phone === doctorId)) {
+        return { ...d, status: newStatus, rejection_reason: reason };
+      }
+      return d;
+    }));
+
+    // 2. Immediately update localStorage for instant reactive UI & cross-tab sync
     try {
       const regDocStr = localStorage.getItem('zeniva_registered_doctor');
       if (regDocStr) {
@@ -687,7 +739,7 @@ export const AdminDashboard = ({
       localStorage.setItem('zeniva_doctor_status_trigger', `${doctorId}_${newStatus}_${Date.now()}`);
     } catch (e) {}
 
-    // 2. Also sync to backend API
+    // 3. Also sync to backend API
     try {
       await fetch('/api/admin/doctor/verify', {
         method: 'POST',
@@ -716,7 +768,6 @@ export const AdminDashboard = ({
       details: `Doctor ID: ${doctorId} set to ${newStatus}.`
     });
 
-    fetchAllRealData();
     setInspectingDoctor(null);
     setIsRejecting(false);
   };
@@ -728,30 +779,27 @@ export const AdminDashboard = ({
     const docEmail = typeof doctorTarget === 'object' ? (doctorTarget.email || '') : '';
     const cleanPhone = docPhone ? String(docPhone).replace(/\D/g, '').slice(-10) : '';
     const cleanEmail = docEmail ? docEmail.trim().toLowerCase() : '';
-    const docName = typeof doctorTarget === 'object' ? doctorTarget.name : (docId || docPhone);
+    const docName = typeof doctorTarget === 'object' ? doctorTarget.name : (docId || docPhone || 'doctor');
 
     if (!window.confirm(`Are you sure you want to permanently delete doctor record for ${docName}?`)) return;
 
     // 1. Immediately remove from React state so UI updates instantaneously!
     setDoctorsList(prev => prev.filter(d => {
       const matchId = (docId && (d.id === docId || d.doctor_id === docId));
-      const matchPhone = cleanPhone && (d.phone === docPhone || String(d.phone || '').replace(/\D/g, '').slice(-10) === cleanPhone);
-      const matchEmail = cleanEmail && d.email && d.email.trim().toLowerCase() === cleanEmail;
-      return !matchId && !matchPhone && !matchEmail;
+      return !matchId;
     }));
 
     // Close inspect modal if open on this doctor
     setIsDoctorInspectModalOpen(false);
     setInspectingDoctor(null);
 
-    // 2. Add to blacklisted deleted doctor IDs so they never reappear
+    // 2. Add to blacklisted deleted doctor IDs strictly by ID (never blocking phone number)
     try {
       const delRaw = localStorage.getItem('zeniva_deleted_doctor_ids');
       let delList = delRaw ? JSON.parse(delRaw) : [];
       if (docId && !delList.includes(docId)) delList.push(docId);
-      if (docPhone && !delList.includes(docPhone)) delList.push(docPhone);
-      if (cleanPhone && !delList.includes(cleanPhone)) delList.push(cleanPhone);
-      if (cleanEmail && !delList.includes(cleanEmail)) delList.push(cleanEmail);
+      // Remove any previously stored phone numbers from deletedIds
+      delList = delList.filter(x => x && typeof x === 'string' && x.startsWith('ZEN-DOC-'));
       localStorage.setItem('zeniva_deleted_doctor_ids', JSON.stringify(delList));
     } catch (e) {}
 
@@ -762,9 +810,7 @@ export const AdminDashboard = ({
         const dList = JSON.parse(listStr);
         const filtered = dList.filter(d => {
           const matchId = (docId && (d.id === docId || d.doctor_id === docId));
-          const matchPhone = cleanPhone && (d.phone === docPhone || String(d.phone || '').replace(/\D/g, '').slice(-10) === cleanPhone);
-          const matchEmail = cleanEmail && d.email && d.email.trim().toLowerCase() === cleanEmail;
-          return !matchId && !matchPhone && !matchEmail;
+          return !matchId;
         });
         localStorage.setItem('zeniva_registered_doctors_list', JSON.stringify(filtered));
       }
@@ -773,7 +819,7 @@ export const AdminDashboard = ({
       const regDocStr = localStorage.getItem('zeniva_registered_doctor');
       if (regDocStr) {
         const regDoc = JSON.parse(regDocStr);
-        if (regDoc.id === docId || regDoc.doctor_id === docId || (cleanPhone && regDoc.phone === docPhone) || (cleanEmail && regDoc.email === cleanEmail)) {
+        if (regDoc.id === docId || regDoc.doctor_id === docId) {
           localStorage.removeItem('zeniva_registered_doctor');
           localStorage.removeItem('zeniva_doctor_user');
         }

@@ -205,8 +205,19 @@ export const DoctorRegistrationView = ({
           localStorage.setItem('zeniva_registered_doctor', JSON.stringify(submittedDoc));
           localStorage.setItem('zeniva_doctor_user', JSON.stringify(submittedDoc));
           localStorage.setItem('zeniva_current_user', JSON.stringify({ ...submittedDoc, role: 'doctor' }));
+
+          // Un-blacklist phone if previously blacklisted
+          const delRaw = localStorage.getItem('zeniva_deleted_doctor_ids');
+          if (delRaw) {
+            let delList = JSON.parse(delRaw);
+            const cleanP = submittedDoc.phone ? String(submittedDoc.phone).replace(/\D/g, '').slice(-10) : '';
+            delList = delList.filter(x => x !== submittedDoc.phone && x !== cleanP && x !== submittedDoc.id);
+            localStorage.setItem('zeniva_deleted_doctor_ids', JSON.stringify(delList));
+          }
+
           const existingListStr = localStorage.getItem('zeniva_registered_doctors_list');
           let existingList = existingListStr ? JSON.parse(existingListStr) : [];
+          existingList = existingList.filter(d => d.id !== 'ZEN-DOC-242834' && d.id !== 'ZEN-DOC-644980' && !((!d.phone || d.phone === '+91') && d.name?.toLowerCase().includes('bhupesh')));
           existingList = [submittedDoc, ...existingList.filter(d => d.phone !== submittedDoc.phone && d.id !== submittedDoc.id)];
           localStorage.setItem('zeniva_registered_doctors_list', JSON.stringify(existingList));
           window.dispatchEvent(new CustomEvent('zeniva_doctor_registered', { detail: submittedDoc }));
@@ -239,8 +250,20 @@ export const DoctorRegistrationView = ({
       };
       try {
         localStorage.setItem('zeniva_registered_doctor', JSON.stringify(localDoc));
+        localStorage.setItem('zeniva_doctor_user', JSON.stringify(localDoc));
+        localStorage.setItem('zeniva_current_user', JSON.stringify({ ...localDoc, role: 'doctor' }));
+
+        const delRaw = localStorage.getItem('zeniva_deleted_doctor_ids');
+        if (delRaw) {
+          let delList = JSON.parse(delRaw);
+          const cleanP = localDoc.phone ? String(localDoc.phone).replace(/\D/g, '').slice(-10) : '';
+          delList = delList.filter(x => x !== localDoc.phone && x !== cleanP && x !== localDoc.id);
+          localStorage.setItem('zeniva_deleted_doctor_ids', JSON.stringify(delList));
+        }
+
         const existingListStr = localStorage.getItem('zeniva_registered_doctors_list');
         let existingList = existingListStr ? JSON.parse(existingListStr) : [];
+        existingList = existingList.filter(d => d.id !== 'ZEN-DOC-242834' && d.id !== 'ZEN-DOC-644980' && !((!d.phone || d.phone === '+91') && d.name?.toLowerCase().includes('bhupesh')));
         existingList = [localDoc, ...existingList.filter(d => d.phone !== localDoc.phone && d.id !== localDoc.id)];
         localStorage.setItem('zeniva_registered_doctors_list', JSON.stringify(existingList));
         window.dispatchEvent(new CustomEvent('zeniva_doctor_registered', { detail: localDoc }));

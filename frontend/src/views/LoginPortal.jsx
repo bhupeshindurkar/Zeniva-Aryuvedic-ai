@@ -207,7 +207,7 @@ export const LoginPortal = ({
         console.warn('Supabase doctor auth notice:', authErr);
       }
 
-      const doctorId = backendDoctor?.id || authUser?.id || `ZEN-DOC-${Math.floor(100000 + Math.random() * 900000)}`;
+      const doctorId = `ZEN-DOC-${Math.floor(100000 + Math.random() * 900000)}`;
 
       // 3. Upsert to Supabase profiles table strictly with pending_verification
       try {
@@ -236,11 +236,13 @@ export const LoginPortal = ({
         role: 'doctor',
         id: doctorId,
         doctor_id: doctorId,
+        auth_user_id: authUser?.id || doctorId,
         name: formattedName,
         email: email,
         phone: phone,
         password: password,
-        council_reg_number: '',
+        council_reg_number: 'AYU-MAH-8921',
+        council_name: 'Maharashtra Council of Indian Medicine (MCIM)',
         qualification: qualification.trim() || 'BAMS, MD (Ayurveda)',
         specialization: specialization.trim() || 'Kayachikitsa & Panchakarma',
         organization: 'Zeniva Ayurvedic Clinical Center',
@@ -259,8 +261,19 @@ export const LoginPortal = ({
         localStorage.setItem('zeniva_current_user', JSON.stringify(newDoctor));
         localStorage.setItem('zeniva_registered_doctor', JSON.stringify(newDoctor));
 
+        // Un-blacklist phone or email if it was previously blacklisted by old deletion
+        const delRaw = localStorage.getItem('zeniva_deleted_doctor_ids');
+        if (delRaw) {
+          let delList = JSON.parse(delRaw);
+          const cleanP = phone ? String(phone).replace(/\D/g, '').slice(-10) : '';
+          delList = delList.filter(x => x !== phone && x !== cleanP && x !== email && x !== email.toLowerCase());
+          localStorage.setItem('zeniva_deleted_doctor_ids', JSON.stringify(delList));
+        }
+
         const listStr = localStorage.getItem('zeniva_registered_doctors_list');
         let dList = listStr ? JSON.parse(listStr) : [];
+        // Purge dummy test records
+        dList = dList.filter(d => d.id !== 'ZEN-DOC-242834' && d.id !== 'ZEN-DOC-644980' && !((!d.phone || d.phone === '+91') && d.name?.toLowerCase().includes('bhupesh')));
         dList = [newDoctor, ...dList.filter(d => d.id !== newDoctor.id && (!d.email || d.email !== newDoctor.email))];
         localStorage.setItem('zeniva_registered_doctors_list', JSON.stringify(dList));
       } catch (err) {}

@@ -242,7 +242,18 @@ export default function App() {
     specialization: ''
   });
 
-  const [registeredDoctorProfile, setRegisteredDoctorProfile] = useState(null);
+  const [registeredDoctorProfile, setRegisteredDoctorProfile] = useState(() => {
+    try {
+      const saved = localStorage.getItem('zeniva_registered_doctor') || localStorage.getItem('zeniva_doctor_user');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && (parsed.name || parsed.phone || parsed.email)) {
+          return parsed;
+        }
+      }
+    } catch (e) {}
+    return null;
+  });
 
   // Sync state with URL hash changes
   useEffect(() => {
@@ -492,7 +503,13 @@ export default function App() {
         role: 'doctor'
       });
     } else if (docAuth.isRegistered) {
-      setRegisteredDoctorProfile(docAuth.user);
+      const docUser = docAuth.user || docAuth;
+      setRegisteredDoctorProfile(docUser);
+      try {
+        localStorage.setItem('zeniva_registered_doctor', JSON.stringify(docUser));
+        localStorage.setItem('zeniva_doctor_user', JSON.stringify(docUser));
+      } catch (e) {}
+      window.location.hash = 'doctor/status';
       setAuthView('doctor_status');
     } else {
       setAuthView('doctor_registration');
@@ -520,34 +537,43 @@ export default function App() {
 
   // 2. Doctor Verification Status View (Countdown & Secure Access - Uses its own clean verified badge / flash)
   if (authView === 'doctor_status') {
+    const activeDoc = registeredDoctorProfile || (() => {
+      try {
+        const saved = localStorage.getItem('zeniva_registered_doctor') || localStorage.getItem('zeniva_doctor_user');
+        if (saved) return JSON.parse(saved);
+      } catch (e) {}
+      return null;
+    })() || {
+      id: `ZEN-DOC-${Math.floor(100000 + Math.random() * 900000)}`,
+      name: doctorTempAuth.name || 'Ayurvedic Vaidya',
+      phone: doctorTempAuth.phone || doctorTempAuth.email || '',
+      qualification: doctorTempAuth.qualification || 'BAMS, MD (Ayurveda)',
+      specialization: doctorTempAuth.specialization || 'Kayachikitsa & Panchakarma',
+      organization: 'Zeniva Ayurvedic Clinical Center',
+      council_reg_number: 'AYU-MAH-8921',
+      council_name: 'Maharashtra Council of Indian Medicine (MCIM)',
+      status: 'pending_verification',
+      avatar: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=400'
+    };
+
     return (
       <DoctorVerificationStatusView
-        doctorProfile={registeredDoctorProfile || {
-          id: `ZEN-DOC-${Math.floor(100000 + Math.random() * 900000)}`,
-          name: doctorTempAuth.name || 'Dr. Vaidya',
-          phone: doctorTempAuth.phone || doctorTempAuth.email || '',
-          qualification: doctorTempAuth.qualification || 'BAMS, MD (Ayurveda)',
-          organization: '',
-          council_reg_number: '',
-          council_name: 'Maharashtra Council of Indian Medicine (MCIM)',
-          status: 'pending_verification',
-          avatar: currentUser.avatar || 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=400'
-        }}
+        doctorProfile={activeDoc}
         onOpenDoctorDashboard={(docData) => {
-          const doc = docData || registeredDoctorProfile || {};
+          const doc = docData || activeDoc;
           handleLoginSuccess({
             role: 'doctor',
             id: doc.id || `ZEN-DOC-${Math.floor(100000 + Math.random() * 900000)}`,
             doctor_id: doc.doctor_id || doc.id || `ZEN-DOC-${Math.floor(100000 + Math.random() * 900000)}`,
-            name: doc.name || doctorTempAuth.name || 'Doctor',
-            phone: doc.phone || doctorTempAuth.phone || '',
-            councilId: doc.council_reg_number || doc.councilId || '',
-            council_reg_number: doc.council_reg_number || '',
-            qualification: doc.qualification || doctorTempAuth.qualification || 'BAMS, MD (Ayurveda)',
-            specialization: doc.specialization || doctorTempAuth.specialization || 'Kayachikitsa & Panchakarma',
-            organization: doc.organization || '',
-            city: doc.city || '',
-            avatar: doc.avatar || currentUser.avatar,
+            name: doc.name || 'Doctor',
+            phone: doc.phone || '',
+            councilId: doc.council_reg_number || 'AYU-MAH-8921',
+            council_reg_number: doc.council_reg_number || 'AYU-MAH-8921',
+            qualification: doc.qualification || 'BAMS, MD (Ayurveda)',
+            specialization: doc.specialization || 'Kayachikitsa & Panchakarma',
+            organization: doc.organization || 'Zeniva Ayurvedic Clinical Center',
+            city: doc.city || 'Nagpur, Maharashtra',
+            avatar: doc.avatar || 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=400',
             status: 'verified'
           });
         }}
@@ -560,6 +586,11 @@ export default function App() {
           setAuthView('authenticated');
         }}
         onLogout={() => {
+          try {
+            localStorage.removeItem('zeniva_registered_doctor');
+            localStorage.removeItem('zeniva_doctor_user');
+          } catch (e) {}
+          setRegisteredDoctorProfile(null);
           setAuthView('login');
         }}
       />
