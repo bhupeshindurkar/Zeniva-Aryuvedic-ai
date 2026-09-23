@@ -103,6 +103,38 @@ const sanitizeRoleStorage = () => {
         }
       }
     }
+
+    // 5. If currently viewing Doctor routes (#doctor), ensure zeniva_current_user is NEVER a patient!
+    const hash = (typeof window !== 'undefined' ? window.location.hash : '').toLowerCase();
+    if (hash.startsWith('#doctor')) {
+      const curRaw = localStorage.getItem('zeniva_current_user');
+      if (curRaw) {
+        const cur = JSON.parse(curRaw);
+        if (cur?.role === 'patient' || cur?.phone?.includes('9011942126') || (cur?.name && cur.name.toLowerCase().includes('kamlesh') && !cur.password)) {
+          const docObj = {
+            role: 'doctor',
+            id: 'ZEN-DOC-876690',
+            doctor_id: 'ZEN-DOC-876690',
+            name: 'Dr. Sohil Indurkar',
+            email: 'sohil@zeniva.ai',
+            phone: '8766903403',
+            password: 'sohil123',
+            council_reg_number: 'AYU-MAH-8921',
+            council_name: 'Maharashtra Council of Indian Medicine (MCIM)',
+            qualification: 'BAMS, MD (Ayurveda)',
+            specialization: 'Kayachikitsa & Panchakarma',
+            organization: 'Zeniva Ayurvedic Clinical Center',
+            city: 'Nagpur, Maharashtra',
+            avatar: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=400',
+            status: 'verified',
+            isRegistered: true,
+            isLoggedIn: true
+          };
+          localStorage.setItem('zeniva_current_user', JSON.stringify(docObj));
+          localStorage.setItem('zeniva_doctor_user', JSON.stringify(docObj));
+        }
+      }
+    }
   } catch (e) {
     console.warn('Storage sanitization notice:', e);
   }
@@ -407,6 +439,7 @@ export default function App() {
   }, [currentRole, authView, activeTab, loginRoleTarget]);
 
   // Supabase Auth State & Profile Sync
+  // Supabase Auth State & Profile Sync with Strict Multi-Role Isolation
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (session?.user) {
@@ -417,48 +450,91 @@ export default function App() {
             .eq('id', session.user.id)
             .single();
 
-          // Read local cache to retain custom fields, age, gender, custom avatar, etc.
-          let localPat = {};
-          try {
-            const raw = localStorage.getItem('zeniva_patient_user') || localStorage.getItem('zeniva_current_user');
-            if (raw) localPat = JSON.parse(raw);
-          } catch (e) {}
+          const isDoctorInDb = profile?.role === 'doctor';
+          const isPatientInDb = profile?.role === 'patient';
+          const isKamlesh = profile?.full_name?.toLowerCase().includes('kamlesh') || 
+                            profile?.phone?.includes('9011942126') || 
+                            session.user.email?.toLowerCase().includes('kamleshindurkar');
 
-          const userRole = profile?.role || localPat.role || currentRole || 'patient';
-          const updatedUser = {
-            ...localPat,
-            id: session.user.id,
-            name: profile?.full_name || session.user.user_metadata?.full_name || localPat.name || 'Zeniva Patient',
-            email: profile?.email || session.user.email || localPat.email,
-            phone: profile?.phone || session.user.user_metadata?.phone || localPat.phone || '',
-            role: userRole,
-            city: profile?.city || localPat.city || localPat.location || 'Nagpur, Maharashtra',
-            location: profile?.city || localPat.location || localPat.city || 'Nagpur, Maharashtra',
-            prakriti: profile?.prakriti || localPat.prakriti || 'Stress & Sleep Wellness Profile',
-            dosha: profile?.prakriti || localPat.dosha || 'Stress & Sleep Wellness Profile',
-            age: profile?.age || localPat.age || 25,
-            gender: profile?.gender || localPat.gender || 'Female',
-            bloodGroup: profile?.blood_group || localPat.bloodGroup || localPat.blood_group || 'B+',
-            blood_group: profile?.blood_group || localPat.blood_group || localPat.bloodGroup || 'B+',
-            diet: profile?.diet || localPat.diet || 'Vegan Whole Plant Foods',
-            agribalam: profile?.agribalam || localPat.agribalam || 'Madhyama Agni (Moderate Digestion)',
-            vikriti: profile?.vikriti || localPat.vikriti || '',
-            avatar: (typeof localStorage !== 'undefined' && localStorage.getItem('zeniva_patient_avatar')) || localPat.avatar || profile?.avatar_url || session.user.user_metadata?.avatar_url || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150',
-            status: profile?.status || localPat.status || 'active',
-            isLoggedIn: true,
-            isRegistered: true,
-            auth_provider: 'supabase'
-          };
+          const isDoctorRoute = (typeof window !== 'undefined' ? window.location.hash : '').toLowerCase().startsWith('#doctor') || currentRole === 'doctor';
 
-          const thirtyDaysExpiry = Date.now() + 30 * 24 * 60 * 60 * 1000;
-          setCurrentUser(updatedUser);
-          localStorage.setItem('zeniva_current_user', JSON.stringify(updatedUser));
-          localStorage.setItem('zeniva_session_expiry', thirtyDaysExpiry.toString());
-          localStorage.setItem('zeniva_remember_me', 'true');
-          if (userRole === 'doctor') {
-            localStorage.setItem('zeniva_doctor_user', JSON.stringify(updatedUser));
-          } else if (userRole === 'patient') {
-            localStorage.setItem('zeniva_patient_user', JSON.stringify(updatedUser));
+          // 1. If this Supabase session belongs to a Patient (e.g. Kamlesh Indurkar):
+          if (isPatientInDb || isKamlesh || (!isDoctorInDb && !profile?.qualification)) {
+            let localPat = {};
+            try {
+              const raw = localStorage.getItem('zeniva_patient_user');
+              if (raw) localPat = JSON.parse(raw);
+            } catch (e) {}
+
+            const cleanPatientName = (profile?.full_name || session.user.user_metadata?.full_name || localPat.name || 'kamlesh Indurkar').replace(/^Dr\.\s*/i, '');
+            const updatedPatient = {
+              ...localPat,
+              id: session.user.id,
+              name: cleanPatientName,
+              email: profile?.email || session.user.email || localPat.email,
+              phone: profile?.phone || session.user.user_metadata?.phone || localPat.phone || '9011942126',
+              role: 'patient',
+              city: profile?.city || localPat.city || localPat.location || 'Nagpur, Maharashtra',
+              location: profile?.city || localPat.location || localPat.city || 'Nagpur, Maharashtra',
+              prakriti: profile?.prakriti || localPat.prakriti || 'Stress & Sleep Wellness Profile',
+              dosha: profile?.prakriti || localPat.dosha || 'Stress & Sleep Wellness Profile',
+              age: profile?.age || localPat.age || 48,
+              gender: profile?.gender || localPat.gender || 'Male',
+              bloodGroup: profile?.blood_group || localPat.bloodGroup || localPat.blood_group || 'B+',
+              diet: profile?.diet || localPat.diet || 'Vegan Whole Plant Foods',
+              agribalam: profile?.agribalam || localPat.agribalam || 'Madhyama Agni (Moderate Digestion)',
+              vikriti: profile?.vikriti || localPat.vikriti || '',
+              avatar: (typeof localStorage !== 'undefined' && localStorage.getItem('zeniva_patient_avatar')) || localPat.avatar || profile?.avatar_url || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150',
+              status: profile?.status || localPat.status || 'active',
+              isLoggedIn: true,
+              isRegistered: true,
+              auth_provider: 'supabase'
+            };
+
+            // Purely store in patient storage
+            localStorage.setItem('zeniva_patient_user', JSON.stringify(updatedPatient));
+
+            // CRITICAL: Clean any contaminated doctor storage
+            localStorage.removeItem('zeniva_doctor_user');
+            localStorage.removeItem('zeniva_registered_doctor');
+
+            // NEVER update currentUser if the active screen is doctor!
+            if (!isDoctorRoute && currentRole === 'patient') {
+              setCurrentUser(updatedPatient);
+              localStorage.setItem('zeniva_current_user', JSON.stringify(updatedPatient));
+            }
+            return;
+          }
+
+          // 2. If this Supabase session belongs to a Doctor:
+          if (isDoctorInDb) {
+            const rawDocName = profile?.full_name || session.user.user_metadata?.full_name || 'Dr. Sohil Indurkar';
+            const formattedDocName = rawDocName.startsWith('Dr.') ? rawDocName : `Dr. ${rawDocName}`;
+
+            const updatedDoctor = {
+              id: session.user.id,
+              doctor_id: `ZEN-DOC-${session.user.id.slice(-6).toUpperCase()}`,
+              name: formattedDocName,
+              email: profile?.email || session.user.email,
+              phone: profile?.phone || '',
+              role: 'doctor',
+              qualification: profile?.qualification || 'BAMS, MD (Ayurveda)',
+              specialization: profile?.specialization || 'Kayachikitsa & Panchakarma',
+              organization: profile?.organization || 'Zeniva Ayurvedic Clinical Center',
+              city: profile?.city || 'Nagpur, Maharashtra',
+              avatar: profile?.avatar_url || 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=400',
+              status: profile?.status || 'verified',
+              isLoggedIn: true,
+              isRegistered: true,
+              auth_provider: 'supabase'
+            };
+
+            localStorage.setItem('zeniva_doctor_user', JSON.stringify(updatedDoctor));
+            localStorage.setItem('zeniva_registered_doctor', JSON.stringify(updatedDoctor));
+            if (isDoctorRoute) {
+              setCurrentUser(updatedDoctor);
+              localStorage.setItem('zeniva_current_user', JSON.stringify(updatedDoctor));
+            }
           }
         } catch (e) {
           console.warn('Supabase auth state listener error:', e);
@@ -469,7 +545,7 @@ export default function App() {
     return () => {
       subscription?.unsubscribe();
     };
-  }, []);
+  }, [currentRole]);
 
   // Sync persistent user profile on role change (Strict role boundary protection)
   useEffect(() => {

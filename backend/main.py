@@ -1071,6 +1071,7 @@ def admin_login(req: AdminLoginRequest):
     }
 
 @app.get("/api/admin/patients")
+@app.get("/api/doctor/patients")
 @app.get("/api/users")
 def get_all_patients():
     conn = get_db_connection()

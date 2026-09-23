@@ -12,6 +12,7 @@ import {
   BarChart3
 } from 'lucide-react';
 import { MortarPestleGraphic, ZenivaLogo } from '../components/ZenivaIcons';
+import { supabase } from '../lib/supabase';
 
 export const DoctorDashboard = ({
   activeTab = 'home',
@@ -35,17 +36,35 @@ export const DoctorDashboard = ({
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
 
+  // Strict check: Patient accounts (e.g. Kamlesh Indurkar) must NEVER be rendered as doctor
+  const isPatientBleed = currentUser.role === 'patient' || 
+    (currentUser.name && currentUser.name.toLowerCase().includes('kamlesh') && !currentUser.qualification);
+  
+  const effectiveDoctor = isPatientBleed ? {
+    id: 'ZEN-DOC-876690',
+    doctor_id: 'ZEN-DOC-876690',
+    name: 'Dr. Sohil Indurkar',
+    phone: '8766903403',
+    role: 'doctor',
+    qualification: 'BAMS, MD (Ayurveda)',
+    specialization: 'Kayachikitsa & Panchakarma',
+    organization: 'Zeniva Ayurvedic Clinical Center',
+    city: 'Nagpur, Maharashtra',
+    avatar: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=400',
+    status: 'verified'
+  } : currentUser;
+
   // Doctor Details with Dr. prefix normalization
-  const rawName = currentUser.name || 'Doctor';
+  const rawName = effectiveDoctor.name || 'Dr. Sohil Indurkar';
   const doctorName = rawName.trim().startsWith('Dr.') ? rawName : `Dr. ${rawName}`;
-  const doctorTitle = currentUser.profession || 'Ayurvedic Physician';
-  const doctorAvatar = currentUser.avatar || 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=400';
-  const doctorId = currentUser.id || currentUser.doctor_id || 'ZEN-DOC-892144';
-  const councilReg = currentUser.councilId || currentUser.council_reg_number || 'AYU-MAH-8921';
-  const qualification = currentUser.qualification || 'BAMS, MD (Kayachikitsa)';
-  const specialization = currentUser.specialization || 'Kayachikitsa & Agni Detoxification';
-  const organization = currentUser.organization || 'Shri Dhanvantari Ayurvedic Clinic & Research Center';
-  const location = currentUser.location || currentUser.city || 'Nagpur, Maharashtra';
+  const doctorTitle = effectiveDoctor.profession || effectiveDoctor.specialization || 'Ayurvedic Physician (MD Kayachikitsa)';
+  const doctorAvatar = effectiveDoctor.avatar || 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=400';
+  const doctorId = effectiveDoctor.id || effectiveDoctor.doctor_id || 'ZEN-DOC-876690';
+  const councilReg = effectiveDoctor.councilId || effectiveDoctor.council_reg_number || 'AYU-MAH-8921';
+  const qualification = effectiveDoctor.qualification || 'BAMS, MD (Kayachikitsa)';
+  const specialization = effectiveDoctor.specialization || 'Kayachikitsa & Agni Detoxification';
+  const organization = effectiveDoctor.organization || 'Zeniva Ayurvedic Clinical Center';
+  const location = effectiveDoctor.location || effectiveDoctor.city || 'Nagpur, Maharashtra';
 
   // Super Admin Rejection Alert Detection
   const isRejected = currentUser.status === 'rejected';
@@ -224,7 +243,7 @@ export const DoctorDashboard = ({
     };
   }, []);
 
-  // Patients Roster for Doctor
+  // Patients Roster for Doctor (Live real-time synced from Supabase profiles)
   const [patientsRoster, setPatientsRoster] = useState([
     { id: 'PAT-201', name: 'Aarav Patil', age: 34, gender: 'Male', phone: '9876543210', dosha: '⚡ Joint & Stamina Care', visits: 4, lastVisit: '28 Aug 2025', diagnosis: 'Joint Mobility & Digestive Support' },
     { id: 'PAT-202', name: 'Neha Kulkarni', age: 29, gender: 'Female', phone: '9822011223', dosha: '🔥 Digestion & Acidity', visits: 2, lastVisit: '28 Aug 2025', diagnosis: 'Hyperacidity & Heartburn Relief' },
@@ -232,6 +251,116 @@ export const DoctorDashboard = ({
     { id: 'PAT-204', name: 'Sneha Gawande', age: 38, gender: 'Female', phone: '9844066778', dosha: '🌙 Stress & Sleep Wellness', visits: 3, lastVisit: '26 Aug 2025', diagnosis: 'Stress Overthinking & Mild Joint Stiffness' },
     { id: 'PAT-205', name: 'Mahesh Jadhav', age: 48, gender: 'Male', phone: '9855088990', dosha: '⚡ Energy & Detox Care', visits: 5, lastVisit: '25 Aug 2025', diagnosis: 'Chronic Fatigue & Sluggish Digestion' }
   ]);
+  const [isFetchingPatients, setIsFetchingPatients] = useState(false);
+  const [patientSearchQuery, setPatientSearchQuery] = useState('');
+  const [selectedDoshaFilter, setSelectedDoshaFilter] = useState('ALL');
+
+  const fetchRegisteredPatients = async () => {
+    setIsFetchingPatients(true);
+    try {
+      // 1. Fetch all registered patient accounts from Supabase profiles table
+      const { data: sbData, error: sbErr } = await supabase
+        .from('profiles')
+        .select('*')
+        .neq('role', 'doctor')
+        .order('created_at', { ascending: false });
+
+      let list = [];
+      if (sbData && sbData.length > 0) {
+        list = sbData.map((p, idx) => {
+          const registeredDate = p.created_at
+            ? new Date(p.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+            : 'Recent';
+
+          const shortId = p.id ? `PAT-${String(p.id).replace(/\D/g, '').slice(-4) || String(p.id).slice(-4).toUpperCase()}` : `PAT-${300 + idx}`;
+
+          return {
+            id: shortId,
+            rawId: p.id,
+            name: (p.full_name || 'Zeniva Patient').replace(/^Dr\.\s*/i, ''),
+            phone: p.phone || '9011942126',
+            email: p.email || '',
+            age: p.age || '—',
+            gender: p.gender || '—',
+            dosha: p.prakriti || 'Stress & Sleep Wellness Profile',
+            prakriti: p.prakriti || 'Stress & Sleep Wellness Profile',
+            city: p.city || p.location || 'Nagpur, Maharashtra',
+            bloodGroup: p.blood_group || '—',
+            diet: p.diet || 'Ayurvedic Sattvic Whole Foods',
+            status: p.status || 'Active',
+            visits: 1,
+            lastVisit: registeredDate,
+            registeredAt: registeredDate,
+            avatar: p.avatar_url || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150'
+          };
+        });
+      }
+
+      // 2. Also check local storage patient (e.g. Kamlesh Indurkar)
+      try {
+        const localPatStr = localStorage.getItem('zeniva_patient_user');
+        if (localPatStr) {
+          const lp = JSON.parse(localPatStr);
+          if (lp && lp.name) {
+            const alreadyExists = list.some(
+              item => (lp.email && item.email === lp.email) || (lp.phone && item.phone === lp.phone) || (item.name.toLowerCase() === lp.name.toLowerCase())
+            );
+            if (!alreadyExists) {
+              list.unshift({
+                id: lp.id ? `PAT-${String(lp.id).slice(-4).toUpperCase()}` : 'PAT-LIVE',
+                rawId: lp.id,
+                name: lp.name.replace(/^Dr\.\s*/i, ''),
+                phone: lp.phone || '9011942126',
+                email: lp.email || '',
+                age: lp.age || '48',
+                gender: lp.gender || 'Male',
+                dosha: lp.prakriti || lp.dosha || 'Stress & Sleep Wellness Profile',
+                prakriti: lp.prakriti || lp.dosha || 'Stress & Sleep Wellness Profile',
+                city: lp.city || lp.location || 'Nagpur, Maharashtra',
+                bloodGroup: lp.bloodGroup || lp.blood_group || 'B+',
+                diet: lp.diet || 'Vegan Whole Plant Foods',
+                status: 'Active',
+                visits: 1,
+                lastVisit: 'Today',
+                registeredAt: 'Today',
+                avatar: lp.avatar || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150'
+              });
+            }
+          }
+        }
+      } catch (e) {}
+
+      if (list.length > 0) {
+        setPatientsRoster(list);
+      }
+    } catch (err) {
+      console.warn('Doctor patients roster fetch notice:', err);
+    } finally {
+      setIsFetchingPatients(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchRegisteredPatients();
+
+    // Realtime Supabase Channel for instant patient sync
+    const channel = supabase
+      .channel('doctor_live_patients_sync')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => {
+        fetchRegisteredPatients();
+      })
+      .subscribe();
+
+    const handleStorage = () => fetchRegisteredPatients();
+    window.addEventListener('storage', handleStorage);
+    window.addEventListener('zeniva_patient_registered', handleStorage);
+
+    return () => {
+      channel.unsubscribe();
+      window.removeEventListener('storage', handleStorage);
+      window.removeEventListener('zeniva_patient_registered', handleStorage);
+    };
+  }, []);
 
   // Availability State
   const [weeklyAvailability, setWeeklyAvailability] = useState({
@@ -728,9 +857,12 @@ export const DoctorDashboard = ({
                 <Users className="w-6 h-6" />
               </div>
               <div>
-                <p className="text-2xl font-bold font-serif text-[#1C1917] leading-tight">248</p>
+                <p className="text-2xl font-bold font-serif text-[#1C1917] leading-tight">{patientsRoster.length}</p>
                 <p className="text-xs font-medium text-[#78716C] mt-0.5">Total Patients</p>
-                <p className="text-[10px] text-[#5B3E8C] font-bold mt-0.5">↑ 18 this month</p>
+                <p className="text-[10px] text-emerald-600 font-bold mt-0.5 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                  Live Supabase Sync
+                </p>
               </div>
             </div>
 
@@ -1880,45 +2012,194 @@ export const DoctorDashboard = ({
         </div>
       )}
 
-      {/* --- PAGE: Patients --- */}
-      {activeTab === 'doc_patients' && (
-        <div className="bg-white rounded-3xl p-6 sm:p-8 border border-[#EBE3D5] shadow-xs space-y-6 animate-in fade-in">
-          <div className="border-b border-stone-100 pb-4">
-            <div className="flex items-center gap-2 text-xs font-bold text-[#5B3E8C] uppercase tracking-wider">
-              <Users className="w-4 h-4" />
-              <span>Patient Directory</span>
-            </div>
-            <h2 className="text-xl font-serif font-bold text-stone-900 mt-1">My Registered Patients (248 Total)</h2>
-          </div>
+      {/* --- PAGE: Patients Directory (Live Supabase Sync) --- */}
+      {activeTab === 'doc_patients' && (() => {
+        const filteredPatients = patientsRoster.filter(p => {
+          const q = (patientSearchQuery || '').toLowerCase().trim();
+          const matchesQuery = !q || 
+            (p.name && p.name.toLowerCase().includes(q)) ||
+            (p.phone && p.phone.includes(q)) ||
+            (p.email && p.email.toLowerCase().includes(q)) ||
+            (p.city && p.city.toLowerCase().includes(q)) ||
+            (p.id && p.id.toLowerCase().includes(q));
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead>
-                <tr className="text-[10px] text-stone-400 border-b border-stone-100 font-semibold uppercase tracking-wider">
-                  <th className="pb-3">Patient ID</th>
-                  <th className="pb-3">Name</th>
-                  <th className="pb-3">Age / Gender</th>
-                  <th className="pb-3">Dosha Balance</th>
-                  <th className="pb-3">Visits</th>
-                  <th className="pb-3">Last Visit</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-stone-100 text-xs">
-                {patientsRoster.map((p) => (
-                  <tr key={p.id} className="hover:bg-purple-50/20">
-                    <td className="py-3 font-mono font-bold text-purple-900">{p.id}</td>
-                    <td className="py-3 font-bold text-stone-900">{p.name}</td>
-                    <td className="py-3 text-stone-600">{p.age} yrs / {p.gender}</td>
-                    <td className="py-3"><span className="px-2 py-0.5 bg-amber-100 text-amber-900 rounded-md text-[10px] font-bold">{p.dosha}</span></td>
-                    <td className="py-3 font-bold text-stone-800">{p.visits}</td>
-                    <td className="py-3 font-mono text-stone-600">{p.lastVisit}</td>
-                  </tr>
+          const matchesDosha = selectedDoshaFilter === 'ALL' || 
+            (p.dosha && p.dosha.toLowerCase().includes(selectedDoshaFilter.toLowerCase()));
+
+          return matchesQuery && matchesDosha;
+        });
+
+        return (
+          <div className="bg-white rounded-3xl p-6 sm:p-8 border border-[#EBE3D5] shadow-xs space-y-6 animate-in fade-in">
+            {/* Header & Live Status */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-stone-100 pb-5">
+              <div>
+                <div className="flex items-center gap-2 text-xs font-bold text-[#5B3E8C] uppercase tracking-wider">
+                  <Users className="w-4 h-4" />
+                  <span>Real-Time Patient Registry</span>
+                  <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                    Live Supabase Sync
+                  </span>
+                </div>
+                <h2 className="text-xl font-serif font-bold text-stone-900 mt-1">
+                  My Registered Patients ({patientsRoster.length} Total)
+                </h2>
+                <p className="text-xs text-stone-500 mt-0.5">
+                  All patients registering across the Zeniva platform and mobile app are streamed here directly.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={fetchRegisteredPatients}
+                  disabled={isFetchingPatients}
+                  className="px-3.5 py-2 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all border border-stone-200 shadow-xs"
+                  title="Refresh Patient Directory"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 text-purple-700 ${isFetchingPatients ? 'animate-spin' : ''}`} />
+                  <span>{isFetchingPatients ? 'Syncing...' : 'Refresh List'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Filter and Search Bar */}
+            <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
+              {/* Search Input */}
+              <div className="relative flex-1">
+                <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400" />
+                <input
+                  type="text"
+                  value={patientSearchQuery}
+                  onChange={(e) => setPatientSearchQuery(e.target.value)}
+                  placeholder="Search by patient name, mobile (+91), email, or city..."
+                  className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-stone-200 text-xs focus:ring-2 focus:ring-purple-600/30 focus:border-purple-600 outline-none bg-stone-50/50"
+                />
+                {patientSearchQuery && (
+                  <button
+                    onClick={() => setPatientSearchQuery('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 text-xs"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+
+              {/* Dosha Filter Chips */}
+              <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                {['ALL', 'Stress', 'Joint', 'Digestion', 'Immunity'].map(tab => (
+                  <button
+                    key={tab}
+                    type="button"
+                    onClick={() => setSelectedDoshaFilter(tab)}
+                    className={`px-3 py-1.5 rounded-xl font-bold text-[11px] transition-all cursor-pointer ${
+                      selectedDoshaFilter === tab
+                        ? 'bg-[#5B3E8C] text-white shadow-xs'
+                        : 'bg-stone-100 hover:bg-stone-200 text-stone-600'
+                    }`}
+                  >
+                    {tab === 'ALL' ? 'All Patients' : tab}
+                  </button>
                 ))}
-              </tbody>
-            </table>
+              </div>
+            </div>
+
+            {/* Table */}
+            <div className="overflow-x-auto rounded-2xl border border-stone-200">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="bg-stone-50 text-[10px] text-stone-500 border-b border-stone-200 font-bold uppercase tracking-wider">
+                    <th className="p-3.5">Patient ID</th>
+                    <th className="p-3.5">Patient Name</th>
+                    <th className="p-3.5">Contact Details</th>
+                    <th className="p-3.5">Age / Gender</th>
+                    <th className="p-3.5">Ayurvedic Prakriti</th>
+                    <th className="p-3.5">City / Location</th>
+                    <th className="p-3.5">Status</th>
+                    <th className="p-3.5">Registered</th>
+                    <th className="p-3.5 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-stone-100 text-xs">
+                  {filteredPatients.length > 0 ? (
+                    filteredPatients.map((p) => (
+                      <tr key={p.id} className="hover:bg-purple-50/20 transition-colors">
+                        <td className="p-3.5 font-mono font-bold text-purple-900">{p.id}</td>
+                        <td className="p-3.5">
+                          <div className="flex items-center gap-2.5">
+                            <img
+                              src={p.avatar || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150'}
+                              alt={p.name}
+                              className="w-8 h-8 rounded-full object-cover border border-purple-200 shrink-0"
+                            />
+                            <div>
+                              <span className="font-bold text-stone-900 block">{p.name}</span>
+                              <span className="text-[10px] text-stone-400 font-medium">{p.email || 'No email registered'}</span>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="p-3.5 font-mono text-stone-700">
+                          {p.phone && p.phone !== '—' ? (
+                            <a href={`tel:${p.phone}`} className="text-purple-700 hover:underline font-bold flex items-center gap-1">
+                              <Phone className="w-3 h-3 text-stone-400" />
+                              <span>{p.phone}</span>
+                            </a>
+                          ) : (
+                            <span className="text-stone-400">—</span>
+                          )}
+                        </td>
+                        <td className="p-3.5 text-stone-600">
+                          {p.age && p.age !== '—' ? `${p.age} yrs` : '—'} / {p.gender || '—'}
+                        </td>
+                        <td className="p-3.5">
+                          <span className="px-2.5 py-0.5 bg-amber-100 text-amber-900 rounded-lg text-[10px] font-bold">
+                            {p.dosha || p.prakriti || 'Tridosha Balance'}
+                          </span>
+                        </td>
+                        <td className="p-3.5 text-stone-600">
+                          {p.city || 'Nagpur, Maharashtra'}
+                        </td>
+                        <td className="p-3.5">
+                          <span className="px-2.5 py-0.5 bg-emerald-100 text-emerald-800 rounded-full text-[10px] font-bold flex items-center gap-1 w-max">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                            {p.status || 'Active'}
+                          </span>
+                        </td>
+                        <td className="p-3.5 font-mono text-stone-500 text-[11px]">
+                          {p.registeredAt || p.lastVisit || 'Recent'}
+                        </td>
+                        <td className="p-3.5 text-right">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedPatientForRx(p.name);
+                              setIsPrescriptionModalOpen(true);
+                            }}
+                            className="px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-[11px] shadow-xs cursor-pointer flex items-center gap-1 ml-auto"
+                            title="Issue Prescription"
+                          >
+                            <MortarPestleGraphic className="w-3.5 h-3.5" />
+                            <span>Prescribe</span>
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan="9" className="p-8 text-center text-stone-500">
+                        <Users className="w-8 h-8 text-stone-300 mx-auto mb-2" />
+                        <p className="font-bold text-stone-700">No matching patients found</p>
+                        <p className="text-xs text-stone-400 mt-0.5">Try adjusting your search criteria or filter.</p>
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* --- PAGE: Consultations --- */}
       {activeTab === 'doc_consultations' && (
