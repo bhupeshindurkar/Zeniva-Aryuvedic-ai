@@ -29,7 +29,7 @@ import { SplashScreen } from './components/SplashScreen';
 import { ZenivaLLMWidget } from './components/ZenivaLLMWidget';
 import { AyurvedicAIChatModal } from './components/AyurvedicAIChatModal';
 import { supabase } from './lib/supabase';
-import { Home, Activity, Phone, Sparkles, User, Menu, Stethoscope, Briefcase } from 'lucide-react';
+import { Home, Activity, Phone, Sparkles, User, Users, Menu, Stethoscope, Briefcase } from 'lucide-react';
 
 // Strict isolation utility: Ensures Patient sessions (e.g. Kamlesh Indurkar) NEVER bleed into Doctor accounts (Dr. Sohil Indurkar)
 const sanitizeRoleStorage = () => {
