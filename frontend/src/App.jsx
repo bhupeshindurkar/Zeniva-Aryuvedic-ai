@@ -953,6 +953,7 @@ export default function App() {
               onSelectTab={(tabId) => {
                 setActiveTab(tabId);
               }}
+              onOpenMobileMenu={() => setIsMobileMenuOpen(true)}
               onAddPrescription={() => setIsAppointmentOpen(true)}
               onOpenPhotoReview={() => setIsAppointmentOpen(true)}
               onViewSchedule={() => setIsAppointmentOpen(true)}
@@ -1166,20 +1167,63 @@ export default function App() {
         onOpenAuth={() => setIsAuthModalOpen(true)}
       />
 
-      {/* Modern Floating Mobile Bottom Navigation Bar (Patient & Public) */}
-      {(currentRole === 'patient' || currentRole === 'public') && authView === 'authenticated' && !showSplash && (
+      {/* Modern Floating Mobile Bottom Navigation Bar (Doctor, Patient & Public) */}
+      {(currentRole === 'patient' || currentRole === 'public' || currentRole === 'doctor') && authView === 'authenticated' && !showSplash && (
         <nav className="lg:hidden fixed bottom-0 inset-x-0 bg-[#160B28]/95 backdrop-blur-lg border-t border-[#311E54] py-1.5 px-3 flex items-center justify-around z-30 shadow-[0_-4px_20px_rgba(0,0,0,0.3)]">
-          <button
-            onClick={() => setActiveTab('home')}
-            className={`flex flex-col items-center gap-0.5 py-1 px-2.5 rounded-xl transition-colors cursor-pointer ${
-              activeTab === 'home' ? 'text-amber-300 font-bold' : 'text-stone-300 hover:text-white'
-            }`}
-          >
-            <Home className="w-4 h-4" />
-            <span className="text-[10px]">Home</span>
-          </button>
+          {currentRole === 'doctor' ? (
+            <>
+              <button
+                onClick={() => setActiveTab('home')}
+                className={`flex flex-col items-center gap-0.5 py-1 px-2.5 rounded-xl transition-colors cursor-pointer ${
+                  activeTab === 'home' || activeTab === 'doc_dashboard' ? 'text-amber-300 font-bold' : 'text-stone-300 hover:text-white'
+                }`}
+              >
+                <Home className="w-4 h-4" />
+                <span className="text-[10px]">Home</span>
+              </button>
 
-          {currentRole === 'public' ? (
+              <button
+                onClick={() => setActiveTab('doc_patients')}
+                className={`flex flex-col items-center gap-0.5 py-1 px-2.5 rounded-xl transition-colors cursor-pointer relative ${
+                  activeTab === 'doc_patients' ? 'text-amber-300 font-bold' : 'text-stone-300 hover:text-white'
+                }`}
+              >
+                <Users className="w-4 h-4" />
+                <span className="text-[10px]">Patients</span>
+                <span className="absolute top-1 right-2 w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setChatInitialPrompt('');
+                  setIsAIChatOpen(true);
+                }}
+                className="flex flex-col items-center justify-center -mt-5 w-11 h-11 rounded-full bg-gradient-to-tr from-purple-600 to-amber-500 text-white shadow-[0_0_15px_rgba(168,85,247,0.6)] border-2 border-amber-300 cursor-pointer transition-transform hover:scale-110"
+                title="Ayurvedic AI Clinical Assistant"
+              >
+                <Sparkles className="w-5 h-5 animate-pulse" />
+              </button>
+
+              <button
+                onClick={() => setActiveTab('doc_consultations')}
+                className={`flex flex-col items-center gap-0.5 py-1 px-2.5 rounded-xl transition-colors cursor-pointer ${
+                  activeTab === 'doc_consultations' ? 'text-amber-300 font-bold' : 'text-stone-300 hover:text-white'
+                }`}
+              >
+                <Stethoscope className="w-4 h-4" />
+                <span className="text-[10px]">Consults</span>
+              </button>
+
+              <button
+                onClick={() => setIsMobileMenuOpen(true)}
+                className="flex flex-col items-center gap-0.5 py-1 px-2.5 rounded-xl text-stone-300 hover:text-white transition-colors cursor-pointer"
+                title="Open Doctor Menu"
+              >
+                <Menu className="w-4 h-4" />
+                <span className="text-[10px]">Menu</span>
+              </button>
+            </>
+          ) : currentRole === 'public' ? (
             <>
               <button
                 onClick={() => setActiveTab('opportunities')}

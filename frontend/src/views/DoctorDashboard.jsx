@@ -9,7 +9,7 @@ import {
   Edit, Save, Phone, Eye, Star, FileSpreadsheet, Download,
   Headphones, Flame, Droplet, Wind, Shield, AlertCircle,
   Navigation, Compass, ExternalLink, RefreshCw, Camera, Video,
-  BarChart3
+  BarChart3, Menu
 } from 'lucide-react';
 import { MortarPestleGraphic, ZenivaLogo } from '../components/ZenivaIcons';
 import { supabase } from '../lib/supabase';
@@ -18,6 +18,7 @@ export const DoctorDashboard = ({
   activeTab = 'home',
   currentUser = {},
   onSelectTab = () => {},
+  onOpenMobileMenu = () => {},
   onAddPrescription,
   onOpenPhotoReview,
   onViewSchedule,
@@ -469,7 +470,7 @@ export const DoctorDashboard = ({
   const isMainDashboard = activeTab === 'home' || activeTab === 'doc_dashboard' || activeTab === 'dashboard';
 
   return (
-    <div className="p-6 sm:p-8 max-w-[1450px] mx-auto space-y-6 select-none bg-[#FAF7F2] min-h-screen font-sans">
+    <div className="px-3.5 py-4 sm:p-6 lg:p-8 max-w-[1450px] mx-auto space-y-5 sm:space-y-6 select-none bg-[#FAF7F2] min-h-screen font-sans pb-24 lg:pb-8">
       
       {/* Action Notification Toast */}
       {toastMessage && (
@@ -480,25 +481,62 @@ export const DoctorDashboard = ({
       )}
 
       {/* ========================================================================= */}
-      {/* 1. TOP HEADER (EXACT REPLICA OF REFERENCE SCREENSHOT)                      */}
+      {/* 1. TOP HEADER (EXACT REPLICA OF REFERENCE SCREENSHOT, MOBILE OPTIMIZED)   */}
       {/* ========================================================================= */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-1">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3.5 sm:gap-4 pb-1">
         
-        {/* Left: Namaste Doctor Greeting with Purple Leaf */}
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl sm:text-3xl font-serif font-bold text-[#1C1917] tracking-tight">
-              Namaste, {doctorName}
-            </h1>
-            <span className="text-purple-600 text-xl font-serif">🪻</span>
+        {/* Left: Namaste Doctor Greeting with Purple Leaf + Mobile Menu Button */}
+        <div className="flex items-center justify-between w-full md:w-auto">
+          <div className="flex items-center gap-2.5 sm:gap-3">
+            {/* Hamburger Button for Mobile Drawer Navigation */}
+            <button
+              type="button"
+              onClick={onOpenMobileMenu}
+              className="lg:hidden p-2 rounded-2xl bg-white border border-[#EBE3D5] text-[#5B3E8C] shadow-xs hover:bg-stone-50 cursor-pointer transition-all active:scale-95 shrink-0"
+              title="Open Navigation Menu"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+
+            <div>
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <h1 className="text-xl sm:text-2xl md:text-3xl font-serif font-bold text-[#1C1917] tracking-tight">
+                  Namaste, {doctorName}
+                </h1>
+                <span className="text-purple-600 text-lg sm:text-xl font-serif">🪻</span>
+              </div>
+              <p className="text-[11px] sm:text-xs text-[#78716C] mt-0.5 font-medium">
+                Here's what's happening in your practice today.
+              </p>
+            </div>
           </div>
-          <p className="text-xs text-[#78716C] mt-1 font-medium">
-            Here's what's happening in your practice today.
-          </p>
+
+          {/* Quick Doctor Profile avatar on small mobile screens */}
+          <div className="sm:hidden flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
+              className="relative w-8 h-8 rounded-full bg-white border border-[#EBE3D5] flex items-center justify-center text-[#44403C]"
+            >
+              <Bell className="w-3.5 h-3.5" />
+              <span className={`absolute -top-0.5 -right-0.5 w-3.5 h-3.5 rounded-full text-white text-[8px] font-bold flex items-center justify-center ${
+                isRejected ? 'bg-red-600 animate-bounce' : 'bg-[#5B3E8C]'
+              }`}>
+                {isRejected ? '!' : '3'}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsProfileDropdownOpen(!isProfileDropdownOpen)}
+              className="w-8 h-8 rounded-full overflow-hidden border border-purple-300"
+            >
+              <img src={doctorAvatar} alt={doctorName} className="w-full h-full object-cover" />
+            </button>
+          </div>
         </div>
 
         {/* Right: Search Bar + Notification Bell + Doctor Profile Pill */}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2.5 sm:gap-4 w-full md:w-auto">
           
           {/* Rounded Pill Search Bar */}
           <div className="relative w-64 sm:w-72">
