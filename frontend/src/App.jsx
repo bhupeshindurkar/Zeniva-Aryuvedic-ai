@@ -312,7 +312,7 @@ export default function App() {
         return {
           id: 'usr_admin',
           name: 'Bhupesh Indurkar (Super Admin)',
-          phone: '9800000000',
+          phone: '8766903403',
           role: 'admin',
           title: 'Super Administrator'
         };
@@ -332,7 +332,7 @@ export default function App() {
     } : initialState.role === 'admin' ? {
       id: 'usr_admin',
       name: 'Bhupesh Indurkar (Super Admin)',
-      phone: '9800000000',
+      phone: '8766903403',
       role: 'admin',
       title: 'Super Administrator'
     } : initialState.role === 'public' ? {

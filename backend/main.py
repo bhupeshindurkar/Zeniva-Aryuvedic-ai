@@ -2,6 +2,7 @@ import os
 import sys
 import random
 import json
+import urllib.parse
 from datetime import datetime, timedelta
 
 # Ensure backend directory is in sys.path
@@ -1719,6 +1720,101 @@ def record_dosha_assessment(req: DoshaAssessmentRequest):
         "primary_dosha": primary,
         "wellness_score": req.wellness_score
     }
+
+# --- WhatsApp AI Chat Session & Consultation Dispatch ---
+class WhatsAppSessionRequest(BaseModel):
+    patient_id: Optional[str] = None
+    patient_name: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    prakriti: Optional[str] = None
+    dosha_imbalance: Optional[str] = None
+    primary_concern: Optional[str] = None
+    recent_query: Optional[str] = None
+    recent_reply: Optional[str] = None
+    chat_summary: Optional[str] = None
+    source: Optional[str] = "patient_contact_page"
+
+@app.post("/api/contact/whatsapp-session")
+def create_whatsapp_session(req: WhatsAppSessionRequest):
+    try:
+        # Load official verified Zeniva number from server environment (default: +91 8766903403)
+        raw_number = os.getenv("ZENIVA_OFFICIAL_WHATSAPP", "918766903403")
+        official_wa_number = raw_number.replace("+", "").replace(" ", "").replace("-", "")
+        wa_display = os.getenv("ZENIVA_WHATSAPP_DISPLAY", "+91 8766903403")
+
+        # Unique session reference
+        session_ref = f"ZEN-WA-{random.randint(100000, 999999)}"
+        timestamp_str = datetime.now().strftime("%d %b %Y, %I:%M %p")
+
+        pat_name = req.patient_name or "Zeniva Patient"
+        pat_phone = req.phone or "Not provided"
+        prakriti = req.prakriti or "Ayurvedic Constitution (Vata-Pitta)"
+        concern = req.primary_concern or req.recent_query or "Ayurvedic Clinical Consultation & Inquiry"
+        
+        # Build concise clinical summary
+        summary = req.chat_summary or req.recent_reply or "Consultation regarding holistic Ayurvedic lifestyle, herbal formulations & doctor guidance."
+        # Truncate summary if too long for WhatsApp deep link URL limit
+        if len(summary) > 260:
+            summary = summary[:257] + "..."
+
+        wa_text = (
+            f"🌿 *Zeniva Ayurvedic AI - Patient Consultation Dispatch*\n"
+            f"━━━━━━━━━━━━━━━━━━━━━\n"
+            f"📋 *Ref ID:* `{session_ref}`\n"
+            f"👤 *Patient:* {pat_name}\n"
+            f"📱 *Phone:* {pat_phone}\n"
+            f"⚖️ *Prakriti / Dosha:* {prakriti}\n"
+            f"🩺 *Chief Concern:* {concern}\n"
+            f"💡 *Zeniva AI Assessment:* {summary}\n"
+            f"⏰ *Dispatched:* {timestamp_str}\n"
+            f"━━━━━━━━━━━━━━━━━━━━━\n"
+            f"Namaste Dr. Sohil Indurkar & Zeniva AI Care Team, I would like to consult with an Ayurvedic Doctor regarding this assessment."
+        )
+
+        # Store session in database for audit and doctor continuity
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute("""
+            INSERT OR REPLACE INTO patient_ai_chats (id, patient_id, patient_name, phone, city, prakriti, primary_concern, dosha_imbalance, last_query, last_reply, status, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            """, (
+                f"wa-{session_ref}",
+                req.patient_id or f"PAT-{random.randint(100000, 999999)}",
+                pat_name,
+                pat_phone,
+                "Nagpur, Maharashtra",
+                prakriti,
+                concern,
+                req.dosha_imbalance or "Vata-Pitta",
+                req.recent_query or concern,
+                summary,
+                "whatsapp_redirected"
+            ))
+            conn.commit()
+            conn.close()
+        except Exception as dbe:
+            print("[WhatsApp Session DB Save Notice]:", dbe)
+
+        encoded_text = urllib.parse.quote(wa_text)
+        whatsapp_url = f"https://api.whatsapp.com/send?phone={official_wa_number}&text={encoded_text}"
+
+        return {
+            "success": True,
+            "session_id": session_ref,
+            "whatsapp_number": official_wa_number,
+            "whatsapp_display": wa_display,
+            "whatsapp_url": whatsapp_url,
+            "formatted_text": wa_text
+        }
+    except Exception as e:
+        print("[WhatsApp Session Generation Error]:", e)
+        return {
+            "success": False,
+            "error": str(e),
+            "whatsapp_url": "https://api.whatsapp.com/send?phone=918766903403"
+        }
 
 if __name__ == "__main__":
     import uvicorn
