@@ -222,6 +222,24 @@ def init_db():
     )
     """)
 
+    # Real-Time Targeted Doctor-to-Patient Notifications
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS targeted_notifications (
+        id TEXT PRIMARY KEY,
+        patient_id TEXT,
+        patient_phone TEXT,
+        patient_name TEXT,
+        doctor_name TEXT,
+        doctor_avatar TEXT,
+        doctor_specialization TEXT,
+        title TEXT,
+        message TEXT,
+        type TEXT DEFAULT 'doctor_message',
+        is_read INTEGER DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
+
     # System Broadcast Video Table (Universal Cross-Browser Persistence)
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS system_broadcasts (

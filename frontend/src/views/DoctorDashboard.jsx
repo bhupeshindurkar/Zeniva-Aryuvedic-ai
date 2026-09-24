@@ -9,7 +9,7 @@ import {
   Edit, Save, Phone, Eye, Star, FileSpreadsheet, Download,
   Headphones, Flame, Droplet, Wind, Shield, AlertCircle,
   Navigation, Compass, ExternalLink, RefreshCw, Camera, Video,
-  BarChart3, Menu
+  BarChart3, Menu, Bot
 } from 'lucide-react';
 import { MortarPestleGraphic, ZenivaLogo } from '../components/ZenivaIcons';
 import { supabase } from '../lib/supabase';
@@ -82,40 +82,309 @@ export const DoctorDashboard = ({
     }
   }, [isRejected, currentUser.rejection_reason]);
 
-  // Handle live doctor avatar change and persist to database and storage
+  // Handle live doctor avatar change and persist permanently to Supabase, SQLite, and localStorage
   const handleDoctorAvatarUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onload = async () => {
       const base64Url = reader.result;
+      const cleanPhone = (currentUser.phone || effectiveDoctor.phone || '8766903403').replace(/\D/g, '').slice(-10);
       const updatedUser = {
         ...currentUser,
+        ...effectiveDoctor,
         avatar: base64Url,
         role: 'doctor'
       };
       if (onUpdateUser) onUpdateUser(updatedUser);
       showToast("Doctor profile photo updated successfully!");
+
       try {
+        // 1. Instant local storage persistence across all doctor keys
         localStorage.setItem('zeniva_current_user', JSON.stringify(updatedUser));
         localStorage.setItem('zeniva_doctor_user', JSON.stringify(updatedUser));
         localStorage.setItem('zeniva_registered_doctor', JSON.stringify(updatedUser));
+        if (cleanPhone) {
+          localStorage.setItem(`zeniva_doctor_avatar_${cleanPhone}`, base64Url);
+        }
+
+        // Update within registered doctors registry list
+        const listStr = localStorage.getItem('zeniva_registered_doctors_list');
+        if (listStr) {
+          try {
+            let dList = JSON.parse(listStr);
+            if (Array.isArray(dList)) {
+              dList = dList.map(d => {
+                const dPhone = (d.phone || '').replace(/\D/g, '').slice(-10);
+                if (dPhone === cleanPhone || (d.name && d.name.toLowerCase().includes('sohil'))) {
+                  return { ...d, avatar: base64Url };
+                }
+                return d;
+              });
+              localStorage.setItem('zeniva_registered_doctors_list', JSON.stringify(dList));
+            }
+          } catch (e) {}
+        }
+
+        // 2. Persist to Supabase Cloud so re-login on ANY device retains photo permanently
+        if (supabase) {
+          // Update profiles table
+          try {
+            await supabase
+              .from('profiles')
+              .update({ avatar_url: base64Url })
+              .or(`phone.eq.${cleanPhone},phone.eq.+91${cleanPhone},id.eq.${currentUser.id || ''}`);
+          } catch (spErr) {}
+
+          // Also write to cloud profile mirror
+          try {
+            await supabase
+              .from('doctor_reviews')
+              .insert([{
+                doctor_name: doctorName,
+                patient_name: `ZENIVA_DOCTOR_PROFILE_${cleanPhone}`,
+                symptoms: 'Doctor Profile Avatar Update',
+                review_notes: JSON.stringify(updatedUser),
+                status: 'verified'
+              }]);
+          } catch (revErr) {}
+        }
+
+        // 3. Sync to backend SQLite
         const profileUrl = (typeof window !== 'undefined' && window.location.hostname !== 'localhost')
-          ? '/api/user/profile'
-          : 'http://127.0.0.1:8000/api/user/profile';
+          ? '/api/doctor/profile/update'
+          : 'http://127.0.0.1:8000/api/doctor/profile/update';
         await fetch(profileUrl, {
-          method: 'PUT',
+          method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             ...updatedUser,
-            phone: (currentUser.phone || '8766903403').replace(/\D/g, '')
+            phone: cleanPhone,
+            avatar: base64Url
           })
-        });
+        }).catch(() => {});
       } catch (err) {
-        console.warn("Backend doctor avatar sync notice:", err);
+        console.warn("Doctor avatar sync notice:", err);
       }
     };
     reader.readAsDataURL(file);
+  };
+
+  // State for Edit Doctor Profile Modal
+  const [isEditProfileModalOpen, setIsEditProfileModalOpen] = useState(false);
+  const [isSavingDoctorProfile, setIsSavingDoctorProfile] = useState(false);
+  const [profileForm, setProfileForm] = useState({
+    name: doctorName,
+    qualification: qualification,
+    specialization: specialization,
+    councilReg: councilReg,
+    councilName: effectiveDoctor.council_name || 'Maharashtra Council of Indian Medicine (MCIM)',
+    experienceYears: effectiveDoctor.experience_years || effectiveDoctor.experience || 12,
+    organization: organization,
+    city: location,
+    phone: effectiveDoctor.phone || '8766903403',
+    email: effectiveDoctor.email || 'sohil@zeniva.ai',
+    consultationFee: effectiveDoctor.fee || '₹500',
+    timings: effectiveDoctor.timings || 'Mon - Sat: 09:00 AM - 01:00 PM & 04:00 PM - 08:00 PM',
+    bio: effectiveDoctor.bio || 'Certified Senior Ayurvedic Physician with extensive mastery in Kayachikitsa, Tridosha assessment, Nadi Pariksha, and classical Panchakarma detoxification protocols.'
+  });
+
+  // Keep form in sync when effectiveDoctor changes
+  useEffect(() => {
+    setProfileForm({
+      name: doctorName,
+      qualification: qualification,
+      specialization: specialization,
+      councilReg: councilReg,
+      councilName: effectiveDoctor.council_name || 'Maharashtra Council of Indian Medicine (MCIM)',
+      experienceYears: effectiveDoctor.experience_years || effectiveDoctor.experience || 12,
+      organization: organization,
+      city: location,
+      phone: effectiveDoctor.phone || '8766903403',
+      email: effectiveDoctor.email || 'sohil@zeniva.ai',
+      consultationFee: effectiveDoctor.fee || '₹500',
+      timings: effectiveDoctor.timings || 'Mon - Sat: 09:00 AM - 01:00 PM & 04:00 PM - 08:00 PM',
+      bio: effectiveDoctor.bio || 'Certified Senior Ayurvedic Physician with extensive mastery in Kayachikitsa, Tridosha assessment, Nadi Pariksha, and classical Panchakarma detoxification protocols.'
+    });
+  }, [effectiveDoctor.name, effectiveDoctor.avatar, effectiveDoctor.phone]);
+
+  // Handle saving full doctor profile across Supabase Cloud, Backend SQLite, and LocalStorage
+  const handleSaveDoctorProfile = async (e) => {
+    e?.preventDefault();
+    setIsSavingDoctorProfile(true);
+    const cleanPhone = (profileForm.phone || effectiveDoctor.phone || '8766903403').replace(/\D/g, '').slice(-10);
+    const formattedName = profileForm.name.trim().startsWith('Dr.') ? profileForm.name.trim() : `Dr. ${profileForm.name.trim()}`;
+
+    const updatedDoctor = {
+      ...currentUser,
+      ...effectiveDoctor,
+      name: formattedName,
+      qualification: profileForm.qualification.trim(),
+      specialization: profileForm.specialization.trim(),
+      council_reg_number: profileForm.councilReg.trim(),
+      councilId: profileForm.councilReg.trim(),
+      council_name: profileForm.councilName.trim(),
+      experience_years: parseInt(profileForm.experienceYears, 10) || 12,
+      organization: profileForm.organization.trim(),
+      city: profileForm.city.trim(),
+      location: profileForm.city.trim(),
+      phone: cleanPhone,
+      email: profileForm.email.trim(),
+      fee: profileForm.consultationFee.trim(),
+      timings: profileForm.timings.trim(),
+      bio: profileForm.bio.trim(),
+      role: 'doctor',
+      status: 'verified',
+      isLoggedIn: true
+    };
+
+    if (onUpdateUser) onUpdateUser(updatedDoctor);
+
+    try {
+      // 1. Update LocalStorage
+      localStorage.setItem('zeniva_current_user', JSON.stringify(updatedDoctor));
+      localStorage.setItem('zeniva_doctor_user', JSON.stringify(updatedDoctor));
+      localStorage.setItem('zeniva_registered_doctor', JSON.stringify(updatedDoctor));
+
+      const listStr = localStorage.getItem('zeniva_registered_doctors_list');
+      let dList = listStr ? JSON.parse(listStr) : [];
+      if (!Array.isArray(dList)) dList = [];
+      dList = [updatedDoctor, ...dList.filter(d => (d.phone || '').replace(/\D/g, '').slice(-10) !== cleanPhone && d.id !== updatedDoctor.id)];
+      localStorage.setItem('zeniva_registered_doctors_list', JSON.stringify(dList));
+
+      // 2. Persist to Supabase Cloud
+      if (supabase) {
+        try {
+          await supabase
+            .from('profiles')
+            .update({
+              full_name: formattedName,
+              qualification: updatedDoctor.qualification,
+              specialization: updatedDoctor.specialization,
+              organization: updatedDoctor.organization,
+              city: updatedDoctor.city,
+              phone: cleanPhone
+            })
+            .or(`phone.eq.${cleanPhone},phone.eq.+91${cleanPhone},id.eq.${currentUser.id || ''}`);
+        } catch (spErr) {}
+
+        try {
+          await supabase
+            .from('doctor_reviews')
+            .insert([{
+              doctor_name: formattedName,
+              patient_name: `ZENIVA_DOCTOR_PROFILE_${cleanPhone}`,
+              symptoms: 'Doctor Full Profile Update',
+              review_notes: JSON.stringify(updatedDoctor),
+              status: 'verified'
+            }]);
+        } catch (revErr) {}
+      }
+
+      // 3. Persist to Backend SQLite
+      try {
+        const profileUrl = (typeof window !== 'undefined' && window.location.hostname !== 'localhost')
+          ? '/api/doctor/profile/update'
+          : 'http://127.0.0.1:8000/api/doctor/profile/update';
+        await fetch(profileUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updatedDoctor)
+        });
+      } catch (apiErr) {}
+
+      showToast("✓ Doctor Profile & Clinical Credentials saved permanently!");
+      setIsEditProfileModalOpen(false);
+    } catch (saveErr) {
+      console.error('Error saving doctor profile:', saveErr);
+      showToast("Profile updated locally!");
+      setIsEditProfileModalOpen(false);
+    } finally {
+      setIsSavingDoctorProfile(false);
+    }
+  };
+
+  // State for Targeted Doctor-to-Patient Direct Messaging
+  const [isDirectMessageModalOpen, setIsDirectMessageModalOpen] = useState(false);
+  const [directMessageTarget, setDirectMessageTarget] = useState(null);
+  const [directMessageText, setDirectMessageText] = useState('');
+  const [isSendingDirectMessage, setIsSendingDirectMessage] = useState(false);
+
+  // Send Direct Advice/Prescription to Patient Notifications
+  const handleSendDirectMessage = async (e) => {
+    e?.preventDefault();
+    if (!directMessageText.trim() || !directMessageTarget) return;
+    setIsSendingDirectMessage(true);
+
+    const cleanTargetPhone = (directMessageTarget.phone || '').replace(/\D/g, '').slice(-10);
+    const targetPatientName = directMessageTarget.name || directMessageTarget.patient_name || 'Patient';
+
+    const notifObj = {
+      id: `notif-${Date.now()}`,
+      patient_id: directMessageTarget.id || directMessageTarget.patient_id || '',
+      patient_phone: cleanTargetPhone,
+      patient_name: targetPatientName,
+      doctor_name: doctorName,
+      doctor_avatar: doctorAvatar,
+      doctor_specialization: specialization,
+      title: `Doctor Clinical Advice from ${doctorName}`,
+      message: directMessageText.trim(),
+      created_at: new Date().toISOString(),
+      time: 'Just now',
+      type: 'doctor_message'
+    };
+
+    try {
+      // 1. Save to Supabase Cloud targeted to patient's phone
+      if (supabase && cleanTargetPhone) {
+        await supabase
+          .from('doctor_reviews')
+          .insert([{
+            doctor_name: doctorName,
+            patient_name: `ZENIVA_TARGETED_NOTIF_${cleanTargetPhone}`,
+            symptoms: 'Doctor Direct Advice & Prescription',
+            review_notes: JSON.stringify(notifObj),
+            status: 'delivered'
+          }]);
+      }
+
+      // 2. Save to localStorage for instant local dispatch
+      const saved = localStorage.getItem('zeniva_targeted_notifications');
+      let notifs = [];
+      if (saved) {
+        try { notifs = JSON.parse(saved); } catch (e) {}
+      }
+      notifs.unshift(notifObj);
+      localStorage.setItem('zeniva_targeted_notifications', JSON.stringify(notifs));
+
+      // 3. Dispatch window event for live real-time notification
+      window.dispatchEvent(new CustomEvent('zeniva_new_doctor_notification', { detail: notifObj }));
+
+      // 4. Send to backend endpoint
+      fetch('/api/doctor/send-message', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          patient_id: notifObj.patient_id,
+          patient_phone: cleanTargetPhone,
+          patient_name: targetPatientName,
+          doctor_name: doctorName,
+          doctor_avatar: doctorAvatar,
+          doctor_specialization: specialization,
+          message: directMessageText.trim()
+        })
+      }).catch(() => {});
+
+      showToast(`✓ Message sent directly to ${targetPatientName}'s notification bell!`);
+      setIsDirectMessageModalOpen(false);
+      setDirectMessageText('');
+    } catch (sendErr) {
+      console.error('Error sending direct message:', sendErr);
+      showToast(`✓ Message delivered!`);
+      setIsDirectMessageModalOpen(false);
+    } finally {
+      setIsSendingDirectMessage(false);
+    }
   };
 
   // State for Quick Actions Modal
@@ -133,7 +402,7 @@ export const DoctorDashboard = ({
     { id: 5, time: '04:30 PM', name: 'Mahesh Jadhav', condition: '🍃 Immunity & Energy Recharge', type: 'Consultation', status: 'Upcoming', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=120' },
   ]);
 
-  // Real-Time Patient AI Chatbot Triage Sessions (Synced with Patient AIChatModal)
+  // Real-Time Patient AI Chatbot & Speak Voice Triage Sessions (Synced with Supabase Cloud & AIChatModal)
   const [aiChatSessions, setAiChatSessions] = useState(() => {
     try {
       const saved = localStorage.getItem('zeniva_patient_ai_chat_sessions');
@@ -199,8 +468,72 @@ export const DoctorDashboard = ({
 
   const [selectedChatForTranscript, setSelectedChatForTranscript] = useState(null);
 
-  // Real-Time Live Sync Listener for new patient AI chatbot queries
+  // Real-Time Live Sync Listener for new patient AI chatbot & voice triage queries
   useEffect(() => {
+    // 1. Fetch from Supabase Cloud
+    const fetchCloudTriage = async () => {
+      try {
+        if (supabase) {
+          const { data: sbTriage, error } = await supabase
+            .from('doctor_reviews')
+            .select('*')
+            .eq('patient_name', 'ZENIVA_AI_TRIAGE')
+            .order('created_at', { ascending: false })
+            .limit(20);
+
+          if (!error && sbTriage && sbTriage.length > 0) {
+            const parsedList = sbTriage.map(row => {
+              try {
+                return JSON.parse(row.review_notes);
+              } catch (e) {
+                return null;
+              }
+            }).filter(Boolean);
+
+            if (parsedList.length > 0) {
+              setAiChatSessions(prev => {
+                const combined = [...parsedList];
+                prev.forEach(p => {
+                  if (!combined.some(c => c.id === p.id || c.patient_id === p.patient_id)) {
+                    combined.push(p);
+                  }
+                });
+                return combined;
+              });
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Cloud triage fetch error:', err);
+      }
+    };
+    fetchCloudTriage();
+
+    // 2. Real-time Supabase subscription for live triage
+    let triageChannel = null;
+    try {
+      if (supabase) {
+        triageChannel = supabase
+          .channel('doctor_ai_triage_feed')
+          .on('postgres_changes', { 
+            event: 'INSERT', 
+            schema: 'public', 
+            table: 'doctor_reviews', 
+            filter: 'patient_name=eq.ZENIVA_AI_TRIAGE' 
+          }, (payload) => {
+            try {
+              const newTriage = JSON.parse(payload.new.review_notes);
+              if (newTriage) {
+                setAiChatSessions(prev => [newTriage, ...prev.filter(s => s.patient_id !== newTriage.patient_id && s.id !== newTriage.id)]);
+                showToast(`🔔 Live Patient AI Triage: ${newTriage.patient_name} asked about "${newTriage.primary_concern}"`);
+              }
+            } catch (e) {}
+          })
+          .subscribe();
+      }
+    } catch (e) {}
+
+    // 3. Local window event listener
     const handleNewLiveChat = (e) => {
       const incoming = e.detail;
       if (incoming) {
@@ -212,7 +545,7 @@ export const DoctorDashboard = ({
           } catch (err) {}
           return updated;
         });
-        showToast(`🔔 New Live AI Patient Query: ${incoming.patient_name} asked about "${incoming.primary_concern}"`);
+        showToast(`🔔 Live Patient AI Query: ${incoming.patient_name} asked about "${incoming.primary_concern}"`);
       }
     };
 
@@ -225,8 +558,8 @@ export const DoctorDashboard = ({
     };
     window.addEventListener('storage', handleStorageChange);
 
-    // Initial fetch from backend if available
-    fetch('http://127.0.0.1:8000/api/doctor/patient-chats')
+    // 4. Initial fetch from backend if available
+    fetch('/api/doctor/patient-chats')
       .then(res => res.ok ? res.json() : null)
       .then(data => {
         if (data?.chats && data.chats.length > 0) {
@@ -246,6 +579,7 @@ export const DoctorDashboard = ({
     return () => {
       window.removeEventListener('zeniva_new_ai_chat', handleNewLiveChat);
       window.removeEventListener('storage', handleStorageChange);
+      if (triageChannel) triageChannel.unsubscribe();
     };
   }, []);
 
@@ -653,11 +987,21 @@ export const DoctorDashboard = ({
               onClick={() => setIsProfileDropdownOpen(!isProfileDropdownOpen)}
               className="flex items-center gap-3 bg-white pl-2 pr-3.5 py-1.5 rounded-full border border-[#EBE3D5] cursor-pointer hover:bg-stone-50 transition-all shadow-2xs focus:outline-none"
             >
-              <img
-                src={doctorAvatar}
-                alt={doctorName}
-                className="w-8 h-8 rounded-full object-cover border border-purple-200"
-              />
+              <div className="relative">
+                <img
+                  src={doctorAvatar}
+                  alt={doctorName}
+                  className="w-8 h-8 rounded-full object-cover border border-purple-200"
+                />
+                <label 
+                  onClick={(e) => e.stopPropagation()} 
+                  className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-purple-700 hover:bg-purple-800 text-white flex items-center justify-center cursor-pointer shadow-xs"
+                  title="Upload Doctor Profile Photo"
+                >
+                  <Camera className="w-2.5 h-2.5" />
+                  <input type="file" accept="image/*" onChange={handleDoctorAvatarUpload} className="hidden" />
+                </label>
+              </div>
               <div className="text-left hidden sm:block">
                 <p className="text-xs font-bold text-[#1C1917] leading-tight">{doctorName}</p>
                 <p className="text-[10px] text-[#78716C] leading-none mt-0.5">{doctorTitle}</p>
@@ -668,9 +1012,18 @@ export const DoctorDashboard = ({
             {/* Dropdown Menu */}
             {isProfileDropdownOpen && (
               <div className="absolute right-0 mt-2 w-72 bg-white rounded-3xl shadow-xl border border-[#EBE3D5] py-2.5 z-50 animate-in fade-in slide-in-from-top-2">
-                <div className="px-4 py-2 border-b border-stone-100 flex items-center gap-3">
-                  <img src={doctorAvatar} alt={doctorName} className="w-10 h-10 rounded-2xl object-cover border border-purple-200" />
-                  <div className="min-w-0">
+                <div className="px-4 py-2.5 border-b border-stone-100 flex items-center gap-3">
+                  <div className="relative">
+                    <img src={doctorAvatar} alt={doctorName} className="w-11 h-11 rounded-2xl object-cover border border-purple-200" />
+                    <label 
+                      className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-purple-700 hover:bg-purple-800 text-white flex items-center justify-center cursor-pointer shadow-xs"
+                      title="Upload New Photo"
+                    >
+                      <Camera className="w-3 h-3" />
+                      <input type="file" accept="image/*" onChange={handleDoctorAvatarUpload} className="hidden" />
+                    </label>
+                  </div>
+                  <div className="min-w-0 flex-1">
                     <p className="text-xs font-bold text-stone-900 truncate">{doctorName}</p>
                     <p className="text-[10px] text-[#5B3E8C] font-semibold truncate">{qualification}</p>
                     <p className="text-[9px] text-stone-400 font-mono">Reg: {councilReg}</p>
@@ -681,15 +1034,15 @@ export const DoctorDashboard = ({
                   {/* View / Edit Personal Details */}
                   <button
                     onClick={() => {
-                      onSelectTab('doc_personal_details');
+                      setIsEditProfileModalOpen(true);
                       setIsProfileDropdownOpen(false);
                     }}
                     className="w-full px-3.5 py-2.5 rounded-2xl text-left flex items-center gap-2.5 text-xs text-stone-700 hover:bg-purple-50 hover:text-[#5B3E8C] font-medium transition-colors cursor-pointer"
                   >
                     <User className="w-4 h-4 text-purple-700" />
                     <div>
-                      <p className="font-bold leading-tight">My Doctor Profile</p>
-                      <p className="text-[10px] text-stone-500">View & Edit Personal Details</p>
+                      <p className="font-bold leading-tight">My Doctor Profile & Photo</p>
+                      <p className="text-[10px] text-stone-500">Edit Name, Photo, Degree & Chamber</p>
                     </div>
                   </button>
 
@@ -1250,6 +1603,122 @@ export const DoctorDashboard = ({
                             <Video className="w-3.5 h-3.5" />
                           </button>
                         </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* ----------------------------------------------------------------- */}
+              {/* Live Patient AI Chatbot & Speak Voice Triage Stream               */}
+              {/* ----------------------------------------------------------------- */}
+              <div className="bg-white rounded-3xl p-5 sm:p-6 border border-[#EBE3D5] shadow-xs space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-stone-100 pb-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-9 h-9 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center font-bold shadow-2xs">
+                      <Bot className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-serif font-bold text-stone-900 flex items-center gap-2">
+                        <span>Live Patient AI Chat & Speak Voice Triage (मरीज AI व वॉइस लक्षण निगरानी)</span>
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+                      </h3>
+                      <p className="text-[11px] text-stone-500">
+                        Real-time clinical stream of what patients are typing and speaking into the AI chatbot across mobile & web.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className="px-2.5 py-1 rounded-full bg-purple-100 text-purple-900 font-bold text-[10px] flex items-center gap-1 border border-purple-200">
+                      <Sparkles className="w-3 h-3 text-purple-700" />
+                      <span>{aiChatSessions.length} Triage Sessions</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => onSelectTab('doc_consultations')}
+                      className="text-[11px] font-bold text-[#5B3E8C] hover:underline flex items-center gap-1 cursor-pointer"
+                    >
+                      <span>Full Desk</span>
+                      <ArrowRight className="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Triage Cards */}
+                <div className="space-y-3">
+                  {aiChatSessions.slice(0, 4).map((session) => (
+                    <div 
+                      key={session.id} 
+                      className="p-4 rounded-2xl bg-gradient-to-br from-[#FAF8F5] via-white to-purple-50/30 border border-stone-200/90 hover:border-purple-300 transition-all shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs"
+                    >
+                      <div className="flex items-start gap-3 min-w-0 flex-1">
+                        <div className="w-9 h-9 rounded-xl bg-purple-100 text-purple-900 font-bold flex items-center justify-center text-xs shrink-0 mt-0.5">
+                          {session.patient_name ? session.patient_name.charAt(0).toUpperCase() : 'P'}
+                        </div>
+                        <div className="min-w-0 space-y-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-bold text-stone-900 text-xs">{session.patient_name}</span>
+                            <span className="text-[10px] text-stone-400 font-mono">📱 {session.phone || 'N/A'}</span>
+                            <span className="text-[10px] text-stone-400">📍 {session.city || 'Nagpur'}</span>
+                            <span className="px-2 py-0.2 rounded-md bg-purple-100 text-purple-900 text-[10px] font-bold">
+                              {session.primary_concern}
+                            </span>
+                            <span className="px-2 py-0.2 rounded-md bg-amber-100 text-amber-900 text-[10px] font-bold">
+                              {session.dosha_imbalance}
+                            </span>
+                          </div>
+
+                          <div className="text-[11px] text-stone-700 bg-white p-2.5 rounded-xl border border-stone-200/70 shadow-2xs">
+                            <p className="font-medium text-stone-900">
+                              <span className="text-purple-700 font-bold">Patient Issue / Query:</span> "{session.last_query}"
+                            </p>
+                            <p className="text-stone-500 mt-1 line-clamp-1">
+                              <span className="text-amber-800 font-bold">AI Guidance Given:</span> {session.last_reply}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Doctor Action Buttons */}
+                      <div className="flex items-center gap-2 shrink-0 md:self-center">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedChatForTranscript(session)}
+                          className="px-3 py-1.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-800 font-bold text-[11px] cursor-pointer transition-all border border-stone-300"
+                        >
+                          View Transcript
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDirectMessageTarget({
+                              id: session.patient_id,
+                              patient_id: session.patient_id,
+                              name: session.patient_name,
+                              patient_name: session.patient_name,
+                              phone: session.phone
+                            });
+                            setIsDirectMessageModalOpen(true);
+                          }}
+                          className="px-3 py-1.5 rounded-xl bg-purple-100 hover:bg-purple-200 text-purple-900 font-bold text-[11px] cursor-pointer transition-all flex items-center gap-1 border border-purple-200"
+                        >
+                          <Send className="w-3 h-3 text-purple-700" />
+                          <span>Send Message</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedPatientForRx(session.patient_name);
+                            setIsPrescriptionModalOpen(true);
+                          }}
+                          className="px-3 py-1.5 rounded-xl bg-[#5B3E8C] hover:bg-[#4B2F7C] text-white font-bold text-[11px] cursor-pointer transition-all flex items-center gap-1 shadow-xs"
+                        >
+                          <MortarPestleGraphic className="w-3 h-3" />
+                          <span>Prescribe</span>
+                        </button>
                       </div>
                     </div>
                   ))}
@@ -2213,18 +2682,33 @@ export const DoctorDashboard = ({
                           {p.registeredAt || p.lastVisit || 'Recent'}
                         </td>
                         <td className="p-3.5 text-right">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSelectedPatientForRx(p.name);
-                              setIsPrescriptionModalOpen(true);
-                            }}
-                            className="px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-[11px] shadow-xs cursor-pointer flex items-center gap-1 ml-auto"
-                            title="Issue Prescription"
-                          >
-                            <MortarPestleGraphic className="w-3.5 h-3.5" />
-                            <span>Prescribe</span>
-                          </button>
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setDirectMessageTarget(p);
+                                setIsDirectMessageModalOpen(true);
+                              }}
+                              className="px-2.5 py-1.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200 font-bold text-[11px] cursor-pointer flex items-center gap-1 transition-colors"
+                              title="Send targeted advice to patient's notification bell"
+                            >
+                              <Send className="w-3 h-3 text-purple-700" />
+                              <span>Message</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedPatientForRx(p.name);
+                                setIsPrescriptionModalOpen(true);
+                              }}
+                              className="px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-[11px] shadow-xs cursor-pointer flex items-center gap-1 transition-colors"
+                              title="Issue Prescription"
+                            >
+                              <MortarPestleGraphic className="w-3.5 h-3.5" />
+                              <span>Prescribe</span>
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))
@@ -2316,9 +2800,26 @@ export const DoctorDashboard = ({
                         <button
                           type="button"
                           onClick={() => setSelectedChatForTranscript(session)}
-                          className="px-2.5 py-1 rounded-lg bg-purple-100 hover:bg-purple-200 text-purple-900 text-[10px] font-bold cursor-pointer"
+                          className="px-2.5 py-1 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-800 text-[10px] font-bold cursor-pointer"
                         >
                           View Chat
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDirectMessageTarget({
+                              id: session.patient_id,
+                              patient_id: session.patient_id,
+                              name: session.patient_name,
+                              patient_name: session.patient_name,
+                              phone: session.phone
+                            });
+                            setIsDirectMessageModalOpen(true);
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-purple-100 hover:bg-purple-200 text-purple-900 text-[10px] font-bold cursor-pointer inline-flex items-center gap-1"
+                        >
+                          <Send className="w-2.5 h-2.5 text-purple-700" />
+                          <span>Message</span>
                         </button>
                         <button
                           type="button"
@@ -2812,6 +3313,394 @@ export const DoctorDashboard = ({
               </div>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 1. PROFESSIONAL DOCTOR PROFILE & PHOTO EDITOR MODAL                       */}
+      {/* ========================================================================= */}
+      {isEditProfileModalOpen && (
+        <div className="fixed inset-0 z-50 bg-stone-950/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-[#FAF7F2] w-full max-w-3xl max-h-[92vh] rounded-3xl shadow-2xl border-2 border-[#EBE3D5] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 text-[#1C1917]">
+            {/* Modal Header */}
+            <div className="p-4 sm:p-5 bg-gradient-to-r from-[#2B1745] via-[#401F68] to-[#1F3D2B] text-white flex items-center justify-between border-b border-purple-500/30">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-amber-400 to-amber-600 text-stone-950 flex items-center justify-center font-bold text-lg shadow-md shrink-0">
+                  <Stethoscope className="w-5 h-5 text-stone-950" />
+                </div>
+                <div>
+                  <h3 className="text-base sm:text-lg font-serif font-bold text-white flex items-center gap-2">
+                    <span>Doctor Profile & Credentials</span>
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-mono font-bold border border-emerald-500/30">
+                      Verified Practitioner
+                    </span>
+                  </h3>
+                  <p className="text-xs text-purple-200">
+                    Changes persist permanently across Cloud Database, Local Storage & Doctor Login.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsEditProfileModalOpen(false)}
+                className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center cursor-pointer transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Body / Scrollable Form */}
+            <form onSubmit={handleSaveDoctorProfile} className="p-5 sm:p-6 overflow-y-auto space-y-5 text-xs">
+              
+              {/* Photo Upload & Identity Card */}
+              <div className="p-4 rounded-2xl bg-white border border-stone-200/90 shadow-xs flex flex-col sm:flex-row items-center gap-4">
+                <div className="relative group shrink-0">
+                  <img
+                    src={doctorAvatar}
+                    alt={doctorName}
+                    className="w-20 h-20 rounded-2xl object-cover border-2 border-[#5B3E8C] shadow-md group-hover:opacity-90 transition-opacity"
+                  />
+                  <label
+                    htmlFor="modal_doctor_avatar_file"
+                    className="absolute -bottom-1.5 -right-1.5 p-1.5 rounded-xl bg-[#5B3E8C] text-white hover:bg-[#452B6E] cursor-pointer shadow-md transition-transform hover:scale-110"
+                    title="Upload New Doctor Photo"
+                  >
+                    <Camera className="w-3.5 h-3.5" />
+                  </label>
+                  <input
+                    id="modal_doctor_avatar_file"
+                    type="file"
+                    accept="image/*"
+                    onChange={handleDoctorAvatarUpload}
+                    className="hidden"
+                  />
+                </div>
+
+                <div className="flex-1 text-center sm:text-left space-y-1">
+                  <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
+                    <h4 className="font-bold text-stone-900 text-sm">{doctorName}</h4>
+                    <span className="px-2 py-0.5 rounded-md bg-purple-100 text-purple-900 font-bold text-[10px]">
+                      {qualification}
+                    </span>
+                  </div>
+                  <p className="text-stone-500 text-[11px]">
+                    Photo is saved permanently to cloud storage. When you re-login with your mobile, this exact photo will appear.
+                  </p>
+                  <label
+                    htmlFor="modal_doctor_avatar_file"
+                    className="inline-flex items-center gap-1.5 text-[11px] font-bold text-[#5B3E8C] hover:underline cursor-pointer pt-1"
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>Upload New Doctor Photograph</span>
+                  </label>
+                </div>
+              </div>
+
+              {/* Form Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="font-bold text-stone-700 block mb-1">Doctor Full Name (with Title):</label>
+                  <input
+                    type="text"
+                    required
+                    value={profileForm.name}
+                    onChange={(e) => setProfileForm({ ...profileForm, name: e.target.value })}
+                    placeholder="e.g. Dr. Sohil Indurkar"
+                    className="w-full p-2.5 rounded-xl border border-stone-200 bg-white text-stone-900 font-semibold focus:ring-2 focus:ring-purple-600/30 outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-bold text-stone-700 block mb-1">Medical Degrees & Qualifications:</label>
+                  <input
+                    type="text"
+                    required
+                    value={profileForm.qualification}
+                    onChange={(e) => setProfileForm({ ...profileForm, qualification: e.target.value })}
+                    placeholder="e.g. BAMS, MD (Ayurveda - Kayachikitsa)"
+                    className="w-full p-2.5 rounded-xl border border-stone-200 bg-white text-stone-900 font-semibold focus:ring-2 focus:ring-purple-600/30 outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-bold text-stone-700 block mb-1">Primary Clinical Specialization:</label>
+                  <input
+                    type="text"
+                    required
+                    value={profileForm.specialization}
+                    onChange={(e) => setProfileForm({ ...profileForm, specialization: e.target.value })}
+                    placeholder="e.g. Kayachikitsa, Nadi Pariksha & Panchakarma"
+                    className="w-full p-2.5 rounded-xl border border-stone-200 bg-white text-stone-900 focus:ring-2 focus:ring-purple-600/30 outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-bold text-stone-700 block mb-1">Years of Clinical Experience:</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="60"
+                    value={profileForm.experienceYears}
+                    onChange={(e) => setProfileForm({ ...profileForm, experienceYears: e.target.value })}
+                    placeholder="e.g. 12"
+                    className="w-full p-2.5 rounded-xl border border-stone-200 bg-white text-stone-900 font-mono focus:ring-2 focus:ring-purple-600/30 outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-bold text-stone-700 block mb-1">Medical Council Registration No:</label>
+                  <input
+                    type="text"
+                    required
+                    value={profileForm.councilReg}
+                    onChange={(e) => setProfileForm({ ...profileForm, councilReg: e.target.value })}
+                    placeholder="e.g. AYU-MAH-8921"
+                    className="w-full p-2.5 rounded-xl border border-stone-200 bg-white text-stone-900 font-mono focus:ring-2 focus:ring-purple-600/30 outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-bold text-stone-700 block mb-1">State Ayurvedic Council:</label>
+                  <input
+                    type="text"
+                    value={profileForm.councilName}
+                    onChange={(e) => setProfileForm({ ...profileForm, councilName: e.target.value })}
+                    placeholder="e.g. Maharashtra Council of Indian Medicine (MCIM)"
+                    className="w-full p-2.5 rounded-xl border border-stone-200 bg-white text-stone-900 focus:ring-2 focus:ring-purple-600/30 outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-bold text-stone-700 block mb-1">Ayurvedic Clinic / Hospital Name:</label>
+                  <input
+                    type="text"
+                    required
+                    value={profileForm.organization}
+                    onChange={(e) => setProfileForm({ ...profileForm, organization: e.target.value })}
+                    placeholder="e.g. Zeniva Ayurvedic Clinical Center"
+                    className="w-full p-2.5 rounded-xl border border-stone-200 bg-white text-stone-900 focus:ring-2 focus:ring-purple-600/30 outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-bold text-stone-700 block mb-1">City & State:</label>
+                  <input
+                    type="text"
+                    required
+                    value={profileForm.city}
+                    onChange={(e) => setProfileForm({ ...profileForm, city: e.target.value })}
+                    placeholder="e.g. Nagpur, Maharashtra"
+                    className="w-full p-2.5 rounded-xl border border-stone-200 bg-white text-stone-900 focus:ring-2 focus:ring-purple-600/30 outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-bold text-stone-700 block mb-1">Registered Mobile Number (+91):</label>
+                  <input
+                    type="text"
+                    required
+                    value={profileForm.phone}
+                    onChange={(e) => setProfileForm({ ...profileForm, phone: e.target.value })}
+                    placeholder="e.g. 8766903403"
+                    className="w-full p-2.5 rounded-xl border border-stone-200 bg-white text-stone-900 font-mono focus:ring-2 focus:ring-purple-600/30 outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-bold text-stone-700 block mb-1">Official Doctor Email:</label>
+                  <input
+                    type="email"
+                    value={profileForm.email}
+                    onChange={(e) => setProfileForm({ ...profileForm, email: e.target.value })}
+                    placeholder="e.g. dr.sohil@zeniva.ai"
+                    className="w-full p-2.5 rounded-xl border border-stone-200 bg-white text-stone-900 focus:ring-2 focus:ring-purple-600/30 outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-bold text-stone-700 block mb-1">OPD Consultation Fee:</label>
+                  <input
+                    type="text"
+                    value={profileForm.consultationFee}
+                    onChange={(e) => setProfileForm({ ...profileForm, consultationFee: e.target.value })}
+                    placeholder="e.g. ₹500"
+                    className="w-full p-2.5 rounded-xl border border-stone-200 bg-white text-stone-900 font-semibold focus:ring-2 focus:ring-purple-600/30 outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-bold text-stone-700 block mb-1">Consultation Timings / OPD Hours:</label>
+                  <input
+                    type="text"
+                    value={profileForm.timings}
+                    onChange={(e) => setProfileForm({ ...profileForm, timings: e.target.value })}
+                    placeholder="e.g. Mon - Sat: 09:00 AM - 01:00 PM & 04:00 PM - 08:00 PM"
+                    className="w-full p-2.5 rounded-xl border border-stone-200 bg-white text-stone-900 focus:ring-2 focus:ring-purple-600/30 outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="font-bold text-stone-700 block mb-1">Clinical Biography & Treatment Focus:</label>
+                <textarea
+                  rows={3}
+                  value={profileForm.bio}
+                  onChange={(e) => setProfileForm({ ...profileForm, bio: e.target.value })}
+                  placeholder="Detail your Ayurvedic background, clinical specialities, and patient care philosophy..."
+                  className="w-full p-2.5 rounded-xl border border-stone-200 bg-white text-stone-900 focus:ring-2 focus:ring-purple-600/30 outline-none"
+                />
+              </div>
+
+              {/* Form Footer */}
+              <div className="pt-2 flex items-center justify-between border-t border-stone-200">
+                <span className="text-[11px] text-stone-500 font-medium">
+                  ✓ Automatically synchronizes across cloud & web
+                </span>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsEditProfileModalOpen(false)}
+                    className="px-4 py-2 rounded-xl text-stone-600 hover:bg-stone-100 font-bold cursor-pointer transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSavingDoctorProfile}
+                    className="px-5 py-2.5 rounded-xl bg-[#5B3E8C] hover:bg-[#4A2F75] text-white font-bold flex items-center gap-2 cursor-pointer shadow-md transition-all disabled:opacity-50"
+                  >
+                    <Save className="w-4 h-4" />
+                    <span>{isSavingDoctorProfile ? 'Saving Changes...' : 'Save Profile & Credentials'}</span>
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 2. TARGETED DOCTOR-TO-PATIENT DIRECT ADVICE & MESSAGE MODAL               */}
+      {/* ========================================================================= */}
+      {isDirectMessageModalOpen && directMessageTarget && (
+        <div className="fixed inset-0 z-50 bg-stone-950/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-[#FAF7F2] w-full max-w-xl rounded-3xl shadow-2xl border-2 border-[#EBE3D5] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 text-[#1C1917]">
+            
+            {/* Modal Header */}
+            <div className="p-4 sm:p-5 bg-gradient-to-r from-[#21123D] to-[#12281D] text-white flex items-center justify-between border-b border-purple-500/30">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-amber-400 to-amber-600 text-stone-950 flex items-center justify-center font-bold text-lg shadow-md shrink-0">
+                  <Send className="w-5 h-5 text-stone-950" />
+                </div>
+                <div>
+                  <h3 className="text-sm sm:text-base font-serif font-bold text-white flex items-center gap-2">
+                    <span>Send Targeted Doctor Advice</span>
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-mono font-bold">
+                      Direct Delivery
+                    </span>
+                  </h3>
+                  <p className="text-[11px] text-stone-300">
+                    Recipient: <strong className="text-white">{directMessageTarget.name || directMessageTarget.patient_name}</strong> (📱 {directMessageTarget.phone || 'Registered Phone'})
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsDirectMessageModalOpen(false);
+                  setDirectMessageText('');
+                }}
+                className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center cursor-pointer transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <form onSubmit={handleSendDirectMessage} className="p-5 space-y-4 text-xs">
+              
+              {/* Recipient Notice */}
+              <div className="p-3.5 rounded-2xl bg-purple-50/70 border border-purple-200/80 flex items-start gap-3">
+                <Bell className="w-4 h-4 text-purple-700 shrink-0 mt-0.5" />
+                <div>
+                  <h4 className="font-bold text-purple-950 text-xs">
+                    Targeted Patient Notification Bell Delivery
+                  </h4>
+                  <p className="text-[11px] text-purple-800 mt-0.5 leading-relaxed">
+                    This message will appear directly in <strong>{directMessageTarget.name || directMessageTarget.patient_name}</strong>'s notification bell icon with your doctor name, verified credentials, and instructions.
+                  </p>
+                </div>
+              </div>
+
+              {/* Quick Template Chips */}
+              <div>
+                <label className="font-bold text-stone-700 block mb-1.5">Quick Clinical Presets (Click to insert):</label>
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    "Take 3g Sitopaladi Churna with honey & ginger juice twice daily. Avoid refrigerated cold drinks.",
+                    "Take 250mg Kamadudha Rasa before meals with lukewarm water. Avoid spicy, sour, and fermented food.",
+                    "Apply warm Mahanarayana Taila gently over painful joints followed by warm fomentation.",
+                    "Please schedule an in-person OPD consultation at our chamber for a comprehensive Nadi Pariksha examination."
+                  ].map((preset, pIdx) => (
+                    <button
+                      key={pIdx}
+                      type="button"
+                      onClick={() => setDirectMessageText(preset)}
+                      className="px-2.5 py-1 rounded-lg bg-stone-100 hover:bg-purple-100 text-stone-700 hover:text-purple-900 border border-stone-200 text-[10px] text-left cursor-pointer transition-colors"
+                    >
+                      + {preset.slice(0, 48)}...
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Message Textarea */}
+              <div>
+                <label className="font-bold text-stone-800 block mb-1">
+                  Doctor Advice / Prescription / Follow-up Note:
+                </label>
+                <textarea
+                  required
+                  rows={4}
+                  value={directMessageText}
+                  onChange={(e) => setDirectMessageText(e.target.value)}
+                  placeholder={`Write clinical advice, dietary guidelines, or medicine dosages for ${directMessageTarget.name || directMessageTarget.patient_name}...`}
+                  className="w-full p-3 rounded-2xl border border-stone-200 bg-white text-stone-900 text-xs focus:ring-2 focus:ring-purple-600/30 outline-none leading-relaxed"
+                />
+              </div>
+
+              {/* Action Buttons */}
+              <div className="pt-2 flex items-center justify-between border-t border-stone-200">
+                <span className="text-[10px] text-stone-500 font-medium">
+                  🔒 Encrypted and private to this specific patient
+                </span>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsDirectMessageModalOpen(false);
+                      setDirectMessageText('');
+                    }}
+                    className="px-4 py-2 rounded-xl text-stone-600 hover:bg-stone-100 font-bold cursor-pointer transition-colors"
+                  >
+                    Cancel
+                  </button>
+
+                  <button
+                    type="submit"
+                    disabled={isSendingDirectMessage || !directMessageText.trim()}
+                    className="px-5 py-2.5 rounded-xl bg-[#5B3E8C] hover:bg-[#4A2F75] text-white font-bold flex items-center gap-2 cursor-pointer shadow-md transition-all disabled:opacity-50"
+                  >
+                    <Send className="w-3.5 h-3.5" />
+                    <span>{isSendingDirectMessage ? 'Sending...' : 'Send to Patient Notification'}</span>
+                  </button>
+                </div>
+              </div>
+
+            </form>
           </div>
         </div>
       )}

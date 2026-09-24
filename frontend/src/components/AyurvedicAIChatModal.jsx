@@ -6,6 +6,7 @@ import {
   Stethoscope, User, HeartPulse, Globe, ArrowRight, PhoneCall,
   Radio, Play, Pause, Smile, MessageCircle, Languages
 } from 'lucide-react';
+import { supabase } from '../lib/supabase';
 
 // Utility to render markdown cleanly without raw symbols like **, ##, ###, ---
 const renderCleanFormattedText = (rawText) => {
@@ -674,7 +675,24 @@ export const AyurvedicAIChatModal = ({
       // 2. Dispatch custom event for real-time live listener in DoctorDashboard
       window.dispatchEvent(new CustomEvent('zeniva_new_ai_chat', { detail: newChatRecord }));
 
-      // 3. Post to backend
+      // 3. Persist to Supabase Cloud so Doctor Portal on ANY phone or computer sees this patient query instantly
+      try {
+        if (supabase) {
+          supabase
+            .from('doctor_reviews')
+            .insert([{
+              doctor_name: 'Ayurvedic AI Triage Bot',
+              patient_name: 'ZENIVA_AI_TRIAGE',
+              symptoms: concern,
+              review_notes: JSON.stringify(newChatRecord),
+              status: 'pending_doctor_review'
+            }])
+            .then(() => {})
+            .catch(err => console.warn('Supabase triage save notice:', err));
+        }
+      } catch (sbErr) {}
+
+      // 4. Post to backend
       fetch('/api/chat/save-session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

@@ -490,6 +490,38 @@ export const LoginPortal = ({
             isLoggedIn: true,
             isRegistered: true
           };
+
+          // Retrieve custom uploaded avatar and profile from cloud / storage
+          try {
+            const targetP = cleanPhone || (foundDoc.phone ? String(foundDoc.phone).replace(/\D/g, '').slice(-10) : '');
+            const cachedAvatar = targetP ? localStorage.getItem(`zeniva_doctor_avatar_${targetP}`) : null;
+            if (cachedAvatar) {
+              foundDoc.avatar = cachedAvatar;
+            }
+            if (supabase && targetP) {
+              const { data: cReview } = await supabase
+                .from('doctor_reviews')
+                .select('review_notes')
+                .eq('patient_name', `ZENIVA_DOCTOR_PROFILE_${targetP}`)
+                .order('created_at', { ascending: false })
+                .limit(1);
+              if (cReview && cReview.length > 0 && cReview[0].review_notes) {
+                const cloudProfile = JSON.parse(cReview[0].review_notes);
+                if (cloudProfile && cloudProfile.name) {
+                  foundDoc = {
+                    ...foundDoc,
+                    ...cloudProfile,
+                    role: 'doctor',
+                    status: finalStatus,
+                    isLoggedIn: true,
+                    isRegistered: true
+                  };
+                }
+              }
+            }
+          } catch (restErr) {
+            console.warn('Doctor profile cloud restoration notice:', restErr);
+          }
         }
       }
 

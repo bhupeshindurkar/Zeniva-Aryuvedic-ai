@@ -1661,6 +1661,185 @@ def get_doctor_patient_chats():
         print("[Get Doctor Patient Chats Error]:", e)
         return {"success": False, "chats": []}
 
+class DoctorProfileUpdateRequest(BaseModel):
+    id: Optional[str] = None
+    doctor_id: Optional[str] = None
+    name: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    qualification: Optional[str] = None
+    specialization: Optional[str] = None
+    experience_years: Optional[int] = 0
+    organization: Optional[str] = None
+    city: Optional[str] = None
+    council_name: Optional[str] = None
+    council_reg_number: Optional[str] = None
+    avatar: Optional[str] = None
+    status: Optional[str] = "verified"
+
+@app.post("/api/doctor/profile/update")
+@app.put("/api/user/profile")
+def update_doctor_profile_endpoint(req: DoctorProfileUpdateRequest):
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        clean_phone = (req.phone or "").strip()
+        clean_name = (req.name or "Dr. Sohil Indurkar").strip()
+        if not clean_name.startswith("Dr."):
+            clean_name = f"Dr. {clean_name}"
+            
+        doc_id = req.doctor_id or req.id or f"ZEN-DOC-{(clean_phone[-6:] if len(clean_phone) >= 6 else '876690')}"
+        
+        # Upsert into doctors table
+        cursor.execute("""
+        INSERT OR REPLACE INTO doctors (
+            id, phone, name, email, qualification, specialization,
+            experience_years, organization, city, council_name,
+            council_reg_number, avatar, status
+        ) VALUES (
+            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+        )
+        """, (
+            doc_id,
+            clean_phone,
+            clean_name,
+            req.email or "",
+            req.qualification or "BAMS, MD (Ayurveda)",
+            req.specialization or "Kayachikitsa & Panchakarma",
+            req.experience_years or 0,
+            req.organization or "Zeniva Ayurvedic Clinical Center",
+            req.city or "Nagpur, Maharashtra",
+            req.council_name or "Maharashtra Council of Indian Medicine (MCIM)",
+            req.council_reg_number or "AYU-MAH-8921",
+            req.avatar or "",
+            req.status or "verified"
+        ))
+        
+        # Also sync to users table
+        cursor.execute("""
+        INSERT OR REPLACE INTO users (
+            id, phone, name, email, role, qualification, specialization,
+            location, city, avatar, status
+        ) VALUES (
+            ?, ?, ?, ?, 'doctor', ?, ?, ?, ?, ?, 'active'
+        )
+        """, (
+            doc_id,
+            clean_phone,
+            clean_name,
+            req.email or "",
+            req.qualification or "BAMS, MD (Ayurveda)",
+            req.specialization or "Kayachikitsa & Panchakarma",
+            req.city or "Nagpur, Maharashtra",
+            req.city or "Nagpur, Maharashtra",
+            req.avatar or "",
+        ))
+        
+        conn.commit()
+        conn.close()
+        
+        return {
+            "success": True,
+            "message": "Doctor profile and photo updated successfully!",
+            "doctor": {
+                "id": doc_id,
+                "doctor_id": doc_id,
+                "name": clean_name,
+                "phone": clean_phone,
+                "email": req.email,
+                "qualification": req.qualification,
+                "specialization": req.specialization,
+                "organization": req.organization,
+                "city": req.city,
+                "avatar": req.avatar,
+                "council_reg_number": req.council_reg_number,
+                "status": req.status or "verified"
+            }
+        }
+    except Exception as e:
+        print("[Update Doctor Profile Error]:", e)
+        return {"success": False, "error": str(e)}
+
+class DoctorMessageRequest(BaseModel):
+    patient_id: Optional[str] = None
+    patient_phone: Optional[str] = None
+    patient_name: Optional[str] = None
+    doctor_name: Optional[str] = "Dr. Sohil Indurkar"
+    doctor_avatar: Optional[str] = None
+    doctor_specialization: Optional[str] = "Kayachikitsa"
+    title: Optional[str] = "Doctor Clinical Advice"
+    message: str
+    type: Optional[str] = "doctor_message"
+
+@app.post("/api/doctor/send-message")
+def send_doctor_message_to_patient(req: DoctorMessageRequest):
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        notif_id = f"notif-{uuid.uuid4().hex[:10]}"
+        clean_pat_phone = (req.patient_phone or "").replace("+", "").replace("-", "").replace(" ", "").strip()
+        
+        cursor.execute("""
+        INSERT INTO targeted_notifications (
+            id, patient_id, patient_phone, patient_name, doctor_name,
+            doctor_avatar, doctor_specialization, title, message, type
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            notif_id,
+            req.patient_id or "",
+            clean_pat_phone,
+            req.patient_name or "Patient",
+            req.doctor_name or "Doctor",
+            req.doctor_avatar or "",
+            req.doctor_specialization or "Ayurvedic Physician",
+            req.title or "Doctor Clinical Advice",
+            req.message,
+            req.type or "doctor_message"
+        ))
+        conn.commit()
+        conn.close()
+        return {"success": True, "notification_id": notif_id, "message": "Advice sent directly to patient notifications!"}
+    except Exception as e:
+        print("[Send Doctor Message Error]:", e)
+        return {"success": False, "error": str(e)}
+
+@app.get("/api/patient/notifications/{identifier}")
+def get_patient_notifications(identifier: str):
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        clean_id = identifier.replace("+", "").replace("-", "").replace(" ", "").strip()
+        cursor.execute("""
+        SELECT * FROM targeted_notifications 
+        WHERE patient_phone = ? OR patient_phone LIKE ? OR patient_id = ?
+        ORDER BY created_at DESC LIMIT 20
+        """, (clean_id, f"%{clean_id[-10:] if len(clean_id) >= 10 else clean_id}%", identifier))
+        rows = cursor.fetchall()
+        conn.close()
+        
+        notifs = []
+        for r in rows:
+            notifs.append({
+                "id": r["id"],
+                "patient_id": r["patient_id"],
+                "patient_phone": r["patient_phone"],
+                "patient_name": r["patient_name"],
+                "doctor_name": r["doctor_name"],
+                "doctor_avatar": r["doctor_avatar"],
+                "doctor_specialization": r["doctor_specialization"],
+                "title": r["title"],
+                "message": r["message"],
+                "type": r["type"],
+                "is_read": bool(r["is_read"]),
+                "created_at": r["created_at"],
+                "time": "Just now"
+            })
+        return {"success": True, "notifications": notifs}
+    except Exception as e:
+        print("[Get Patient Notifications Error]:", e)
+        return {"success": False, "notifications": []}
+
 @app.post("/api/translate")
 def translate_text_endpoint(req: ChatRequest):
     user_prompt = req.prompt or req.query or req.message or ""

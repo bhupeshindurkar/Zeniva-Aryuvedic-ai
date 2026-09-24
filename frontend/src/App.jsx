@@ -1174,6 +1174,7 @@ export default function App() {
         isOpen={isNotificationsOpen}
         onClose={() => setIsNotificationsOpen(false)}
         currentRole={currentRole}
+        currentUser={currentUser}
         onOpenConsultation={() => setActiveTab('consultation')}
         onOpenAIChat={() => setActiveTab('library')}
       />
