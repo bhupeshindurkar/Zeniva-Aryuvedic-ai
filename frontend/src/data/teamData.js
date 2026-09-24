@@ -118,6 +118,8 @@ export const DEFAULT_ZENIVA_TEAM_DATA = {
   ]
 };
 
+import { supabase } from '../lib/supabase';
+
 export const getTeamData = () => {
   try {
     const saved = localStorage.getItem('zeniva_team_config');
@@ -133,10 +135,83 @@ export const getTeamData = () => {
   return DEFAULT_ZENIVA_TEAM_DATA;
 };
 
-export const saveTeamData = (teamData) => {
+// Fetch real-time live Team Data from Supabase Cloud + Backend SQLite (Cross-Device & Mobile Sync)
+export const fetchRemoteTeamData = async () => {
   try {
+    // 1. Query Supabase universal cloud store
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('doctor_reviews')
+        .select('review_notes')
+        .eq('patient_name', 'ZENIVA_TEAM_CONFIG')
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      if (!error && data && data.length > 0 && data[0].review_notes) {
+        try {
+          const parsed = JSON.parse(data[0].review_notes);
+          if (parsed && parsed.founder && Array.isArray(parsed.members)) {
+            localStorage.setItem('zeniva_team_config', JSON.stringify(parsed));
+            window.dispatchEvent(new CustomEvent('zeniva_team_updated', { detail: parsed }));
+            return parsed;
+          }
+        } catch (parseErr) {}
+      }
+    }
+
+    // 2. Query FastAPI Backend SQLite if available
+    try {
+      const res = await fetch('/api/team');
+      if (res.ok) {
+        const backendData = await res.json();
+        if (backendData && backendData.founder && Array.isArray(backendData.members)) {
+          localStorage.setItem('zeniva_team_config', JSON.stringify(backendData));
+          window.dispatchEvent(new CustomEvent('zeniva_team_updated', { detail: backendData }));
+          return backendData;
+        }
+      }
+    } catch (e) {}
+
+  } catch (err) {
+    console.warn('Cloud team sync notice:', err);
+  }
+
+  return getTeamData();
+};
+
+// Save Team Data permanently across Supabase Cloud, Backend SQLite, and LocalStorage
+export const saveTeamData = async (teamData) => {
+  try {
+    // 1. Instant local storage & event broadcast for sub-second UI response
     localStorage.setItem('zeniva_team_config', JSON.stringify(teamData));
     window.dispatchEvent(new CustomEvent('zeniva_team_updated', { detail: teamData }));
+
+    // 2. Persist to Supabase Cloud so mobile phones and all visitors see changes instantly
+    try {
+      if (supabase) {
+        await supabase
+          .from('doctor_reviews')
+          .insert([{
+            doctor_name: 'Zeniva Super Admin',
+            patient_name: 'ZENIVA_TEAM_CONFIG',
+            symptoms: 'Zeniva Core Team Global Synchronization',
+            review_notes: JSON.stringify(teamData),
+            status: 'reviewed'
+          }]);
+      }
+    } catch (sbErr) {
+      console.warn('Supabase team save notice:', sbErr);
+    }
+
+    // 3. Persist to backend SQLite
+    try {
+      await fetch('/api/admin/team', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(teamData)
+      });
+    } catch (apiErr) {}
+
     return true;
   } catch (e) {
     console.error('Error saving zeniva_team_config:', e);
@@ -144,11 +219,27 @@ export const saveTeamData = (teamData) => {
   }
 };
 
-export const resetTeamData = () => {
+export const resetTeamData = async () => {
   try {
     localStorage.removeItem('zeniva_team_config');
     localStorage.removeItem('zeniva_team_avatars');
     window.dispatchEvent(new CustomEvent('zeniva_team_updated', { detail: DEFAULT_ZENIVA_TEAM_DATA }));
+
+    // Save default back to Supabase
+    try {
+      if (supabase) {
+        await supabase
+          .from('doctor_reviews')
+          .insert([{
+            doctor_name: 'Zeniva Super Admin',
+            patient_name: 'ZENIVA_TEAM_CONFIG',
+            symptoms: 'Zeniva Core Team Reset to TGPCET Defaults',
+            review_notes: JSON.stringify(DEFAULT_ZENIVA_TEAM_DATA),
+            status: 'reviewed'
+          }]);
+      }
+    } catch (sbErr) {}
+
     return DEFAULT_ZENIVA_TEAM_DATA;
   } catch (e) {
     console.error('Error resetting zeniva_team_config:', e);

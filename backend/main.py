@@ -1267,6 +1267,46 @@ def set_broadcast_video(req: BroadcastVideoRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+class TeamConfigRequest(BaseModel):
+    founder: dict
+    members: list
+
+@app.get("/api/team")
+def get_team_configuration():
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT desc FROM system_broadcasts WHERE key = 'team_config'")
+        row = cursor.fetchone()
+        conn.close()
+        if row and row["desc"]:
+            import json
+            return json.loads(row["desc"])
+    except Exception as e:
+        print("[Team Config Fetch DB Error]:", e)
+    return None
+
+@app.post("/api/admin/team")
+def save_team_configuration(req: TeamConfigRequest):
+    try:
+        import json
+        payload_str = json.dumps({"founder": req.founder, "members": req.members})
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+        INSERT INTO system_broadcasts (key, enabled, title, sanskrit, duration, url, desc, published_at)
+        VALUES ('team_config', 1, 'Zeniva Core Team', '॥ टीम ॥', 'Live', '', ?, datetime('now'))
+        ON CONFLICT(key) DO UPDATE SET
+            desc = excluded.desc,
+            published_at = excluded.published_at
+        """, (payload_str,))
+        conn.commit()
+        conn.close()
+        return {"success": True, "message": "Zeniva team configuration saved permanently and synchronized across all portals."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 
 # =====================================================================
 # 5. CLINICAL APPOINTMENTS & DOCTOR PHOTO REVIEWS

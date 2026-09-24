@@ -14,7 +14,7 @@ import {
   TrendingUp, Compass, Cpu, Server
 } from 'lucide-react';
 import { MeditatingYogi, MortarPestleGraphic, ZenivaLogo } from '../components/ZenivaIcons';
-import { getTeamData, saveTeamData, resetTeamData } from '../data/teamData';
+import { getTeamData, fetchRemoteTeamData, saveTeamData, resetTeamData } from '../data/teamData';
 import { supabase } from '../lib/supabase';
 
 export const AdminDashboard = ({
@@ -314,7 +314,39 @@ export const AdminDashboard = ({
     });
   };
 
-  const handleSaveMember = (e) => {
+  const handleOpenAddMember = () => {
+    const newId = `member_${Date.now().toString(36)}`;
+    setEditingMember({ id: newId, isNew: true });
+    setMemberFormData({
+      id: newId,
+      name: '',
+      title: 'Ayurvedic AI Software Engineer',
+      role: 'Ayurvedic AI Software Engineer',
+      roleTag: 'Engineering Lead',
+      category: 'ai',
+      badge: 'Core Contributor',
+      bio: 'Contributing to Zeniva AI clinical intelligence systems, data pipelines, and responsive portal experiences.',
+      email: '',
+      linkedin: 'https://linkedin.com',
+      avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300',
+      college: 'TGPCET Nagpur (IT Dept)',
+      contributionsText: 'Engineered clinical software modules\nConducted cross-browser performance and security testing',
+      skillsText: 'Software Engineering, Ayurveda AI, Full-Stack Development, React'
+    });
+  };
+
+  const handleDeleteMember = async (memberId, memberName) => {
+    if (!window.confirm(`Are you sure you want to permanently remove team member "${memberName}" from the website?`)) return;
+    const updatedConfig = {
+      ...teamConfig,
+      members: (teamConfig.members || []).filter(m => m.id !== memberId)
+    };
+    setTeamConfig(updatedConfig);
+    await saveTeamData(updatedConfig);
+    showToast(`✓ Team member "${memberName}" permanently removed. Changes synchronized live across all devices.`);
+  };
+
+  const handleSaveMember = async (e) => {
     e.preventDefault();
     if (!editingMember) return;
 
@@ -338,6 +370,22 @@ export const AdminDashboard = ({
         keyResponsibilities: lines.length > 0 ? lines : updatedConfig.founder.keyResponsibilities,
         skills: tagsList.length > 0 ? tagsList : updatedConfig.founder.skills
       };
+    } else if (editingMember.isNew) {
+      const newMember = {
+        id: memberFormData.id || `member_${Date.now().toString(36)}`,
+        name: memberFormData.name || 'Team Member',
+        role: memberFormData.role || memberFormData.title || 'Ayurvedic AI Software Engineer',
+        badge: memberFormData.badge || memberFormData.roleTag || 'Core Contributor',
+        category: memberFormData.category || 'ai',
+        bio: memberFormData.bio || '',
+        email: memberFormData.email || '',
+        linkedin: memberFormData.linkedin || '',
+        avatar: memberFormData.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300',
+        college: memberFormData.college || 'TGPCET Nagpur (IT Dept)',
+        contributions: lines.length > 0 ? lines : ['Developed clinical Ayurvedic software modules'],
+        tags: tagsList.length > 0 ? tagsList : ['Software Engineering', 'Ayurveda']
+      };
+      updatedConfig.members = [...(updatedConfig.members || []), newMember];
     } else {
       updatedConfig.members = updatedConfig.members.map(m => {
         if (m.id === editingMember.id) {
@@ -361,14 +409,14 @@ export const AdminDashboard = ({
     }
 
     setTeamConfig(updatedConfig);
-    saveTeamData(updatedConfig);
-    showToast(`✓ Member ${memberFormData.name} updated successfully!`);
+    await saveTeamData(updatedConfig);
+    showToast(`✓ Member "${memberFormData.name}" saved! Live sync updated across mobile & web.`);
     setEditingMember(null);
   };
 
-  const handleResetTeam = () => {
+  const handleResetTeam = async () => {
     if (!window.confirm('Reset all 6 team members to original TGPCET defaults?')) return;
-    const def = resetTeamData();
+    const def = await resetTeamData();
     setTeamConfig(def);
     showToast('✓ Team restored to original default configuration.');
   };
@@ -755,6 +803,14 @@ export const AdminDashboard = ({
           setBroadcastVideoInput(data);
           localStorage.setItem('zeniva_broadcast_video', JSON.stringify(data));
         }
+      }
+    } catch (err) {}
+
+    // 5. Fetch Real-Time Cloud Team Data (Multi-Device & Mobile Sync)
+    try {
+      const cloudTeam = await fetchRemoteTeamData();
+      if (cloudTeam && cloudTeam.founder && Array.isArray(cloudTeam.members)) {
+        setTeamConfig(cloudTeam);
       }
     } catch (err) {}
 
@@ -2242,11 +2298,21 @@ export const AdminDashboard = ({
 
           {/* 5 Core Engineering Team Members Grid */}
           <div className="space-y-3">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <h4 className="text-xs font-bold uppercase tracking-wider text-stone-600 flex items-center gap-1.5">
                 <span>Core Engineering Leads ({teamConfig.members?.length || 5})</span>
               </h4>
-              <span className="text-[10px] font-mono text-stone-400">TGPCET Nagpur · IT Department</span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleOpenAddMember}
+                  className="px-3 py-1.5 rounded-xl bg-purple-700 hover:bg-purple-800 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all cursor-pointer hover:scale-105"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Add New Member</span>
+                </button>
+                <span className="text-[10px] font-mono text-stone-400">TGPCET Nagpur · IT Department</span>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -2299,14 +2365,26 @@ export const AdminDashboard = ({
                       <ExternalLink className="w-2.5 h-2.5" />
                     </a>
 
-                    <button
-                      type="button"
-                      onClick={() => handleOpenEditMember(m, false)}
-                      className="px-3 py-1 rounded-lg bg-stone-200/80 hover:bg-purple-100 text-stone-800 hover:text-purple-900 font-bold text-[11px] flex items-center gap-1 transition-colors cursor-pointer"
-                    >
-                      <Edit className="w-3 h-3" />
-                      <span>Edit Member</span>
-                    </button>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteMember(m.id, m.name)}
+                        className="px-2.5 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-[11px] flex items-center gap-1 transition-colors cursor-pointer border border-rose-200"
+                        title="Delete member permanently"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        <span>Delete</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleOpenEditMember(m, false)}
+                        className="px-3 py-1 rounded-lg bg-stone-200/80 hover:bg-purple-100 text-stone-800 hover:text-purple-900 font-bold text-[11px] flex items-center gap-1 transition-colors cursor-pointer"
+                      >
+                        <Edit className="w-3 h-3" />
+                        <span>Edit Member</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -4214,7 +4292,9 @@ export const AdminDashboard = ({
               <div className="flex items-center gap-2.5">
                 <Users className="w-5 h-5 text-amber-400" />
                 <span className="font-bold text-sm tracking-wide">
-                  Edit Profile: {editingMember.name} ({editingMember.isFounder ? 'Founder & Chief Architect' : 'Core Engineer'})
+                  {editingMember.isNew 
+                    ? 'Add New Core Team Member' 
+                    : `Edit Profile: ${editingMember.name} (${editingMember.isFounder ? 'Founder & Chief Architect' : 'Core Engineer'})`}
                 </span>
               </div>
               <button

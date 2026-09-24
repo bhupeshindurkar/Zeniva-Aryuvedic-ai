@@ -6,7 +6,7 @@ import {
   Camera, UploadCloud
 } from 'lucide-react';
 import { ZenivaLogo, MeditatingYogi } from '../components/ZenivaIcons';
-import { getTeamData } from '../data/teamData';
+import { getTeamData, fetchRemoteTeamData } from '../data/teamData';
 
 const LinkedinIcon = ({ className = "w-3 h-3" }) => (
   <svg className={className} fill="currentColor" viewBox="0 0 24 24">
@@ -30,6 +30,13 @@ export const TeamContributorsView = ({ onBackToOverview = () => { } }) => {
   const [teamConfig, setTeamConfig] = useState(getTeamData);
 
   useEffect(() => {
+    // 1. Asynchronously fetch latest live team configuration from Supabase & API for real-time mobile sync
+    fetchRemoteTeamData().then(data => {
+      if (data && data.founder && Array.isArray(data.members)) {
+        setTeamConfig(data);
+      }
+    });
+
     const handleUpdate = (e) => {
       if (e.detail) {
         setTeamConfig(e.detail);
