@@ -219,15 +219,16 @@ class AyurvedicRAGEngine:
                         {"type": "image_url", "image_url": {"url": f"data:{image_mime};base64,{b64_img}"}}
                     ]
                 })
+                model_name = "openai/gpt-4o-mini"
             else:
                 messages.append({"role": "user", "content": user_prompt})
+                model_name = os.getenv("OPENROUTER_MODEL", "meta-llama/llama-3.1-8b-instruct")
 
-            model_name = os.getenv("OPENROUTER_MODEL", "meta-llama/llama-3.1-8b-instruct")
             payload = {
                 "model": model_name,
                 "messages": messages,
                 "temperature": 0.3,
-                "max_tokens": 650
+                "max_tokens": 750
             }
             try:
                 resp = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload, timeout=15.0)
@@ -288,6 +289,35 @@ class AyurvedicRAGEngine:
         return None
 
     def _diagnose_image_attachment(self, image_bytes: bytes, target_lang: str, user_prompt: str) -> Optional[Dict[str, Any]]:
+        # 1. Attempt True Multimodal Vision AI for any image (Deity, Animal, Food, Face, etc.)
+        try:
+            is_mr = target_lang == "mr" or any(ord(c) >= 0x0900 and ord(c) <= 0x097F for c in user_prompt)
+            is_hi = target_lang == "hi"
+
+            vision_sys = (
+                "You are Zeniva AI (झेनिव्हा AI), an expert certified Ayurvedic Physician and Multimodal Visual Health Specialist. "
+                "Accurately recognize the image. "
+                "1. If it shows Deities/Gods (e.g. Lord Ganesha / Ganpati Bappa, Shiva, Krishna, etc.): respectfully identify the sacred deity (विघ्नहर्ता श्री गणेश / Ganpati Bappa), answer any question, state it is a holy deity (पवित्र दैवी रूप), NOT a disease, and connect with spiritual wellness (Daivavyapashraya Chikitsa). NEVER declare a sacred idol to have acne or pimples! "
+                "2. If it shows Food/Herbs: analyze Ayurvedic Rasa, Guna, Virya, Vipaka, and Tridosha balance. "
+                "3. If it shows Animals/Pets/Cow: identify and explain wellness significance (e.g. Gomata A2 milk/ghee, pet companionship). "
+                "4. If it shows a Human Face: check if it's healthy (praise Ojas/Tejas) or has true skin conditions (provide Ayurvedic remedies). "
+                f"Respond in {'Marathi' if is_mr else 'Hindi' if is_hi else 'English'}."
+            )
+            v_reply = self._call_openrouter_api(vision_sys, user_prompt or "Analyze this image", image_bytes=image_bytes)
+            if v_reply and len(v_reply.strip()) > 20:
+                return {
+                    "reply": v_reply.strip(),
+                    "intent": "multimodal_vision",
+                    "is_emergency": False,
+                    "has_doctor": True,
+                    "has_patient": False,
+                    "model_used": "zeniva-vision-gpt-4o-mini",
+                    "citations": "Zeniva Multimodal Vision AI · Ayurvedic Visual Intelligence"
+                }
+        except Exception as e_v:
+            print("[Vision OpenRouter attempt in rag_engine]:", e_v)
+
+        # 2. Local Fallback Diagnostic Engine
         try:
             from skin_diagnostic_engine import perform_complete_skin_diagnosis
             diag = perform_complete_skin_diagnosis(image_bytes=image_bytes, filename="chat_attachment.jpg")

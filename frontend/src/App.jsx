@@ -438,6 +438,34 @@ export default function App() {
     }
   }, [currentRole, authView, activeTab, loginRoleTarget]);
 
+  // Real-time synchronization of patient profile & avatar updates across the whole app
+  useEffect(() => {
+    const handleAvatarUpdate = (e) => {
+      const newAvatar = e.detail;
+      if (newAvatar) {
+        setCurrentUser(prev => ({
+          ...prev,
+          avatar: newAvatar
+        }));
+      }
+    };
+    const handleProfileUpdate = (e) => {
+      const updatedProfile = e.detail;
+      if (updatedProfile) {
+        setCurrentUser(prev => ({
+          ...prev,
+          ...updatedProfile
+        }));
+      }
+    };
+    window.addEventListener('zeniva_patient_avatar_updated', handleAvatarUpdate);
+    window.addEventListener('zeniva_patient_profile_updated', handleProfileUpdate);
+    return () => {
+      window.removeEventListener('zeniva_patient_avatar_updated', handleAvatarUpdate);
+      window.removeEventListener('zeniva_patient_profile_updated', handleProfileUpdate);
+    };
+  }, []);
+
   // Supabase Auth State & Profile Sync
   // Supabase Auth State & Profile Sync with Strict Multi-Role Isolation
   useEffect(() => {

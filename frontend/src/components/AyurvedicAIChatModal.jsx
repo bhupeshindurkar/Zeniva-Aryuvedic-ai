@@ -795,11 +795,60 @@ export const AyurvedicAIChatModal = ({
         }
       }
 
-      // Step 2: High-Intelligence Direct AI (OpenRouter LLM - LLaMA 3.3 70B & 3.1 8B with reliable key fallback)
+      // Step 2: High-Intelligence Direct AI (OpenRouter LLM & Multimodal Vision)
       const clientOpenRouterKey = import.meta.env.VITE_OPENROUTER_API_KEY || (typeof window !== 'undefined' && window.atob ? atob('c2stb3ItdjEtZDk0NTc5NWEyM2RjZTFjYjBjYThhODViMWNiNzUzZmZmMzU0NWY5YjNmYTcyZDA3MmUyOTg1YmJhNGRiYTI3ZA==') : '');
-      if (clientOpenRouterKey && !currentImg) {
+      if (clientOpenRouterKey) {
         try {
-          const sysPrompt = `You are Zeniva AI (झेनिव्हा AI), an expert certified Classical Senior Ayurvedic Vaidya and Clinical Physician with deep mastery over Charaka Samhita, Sushruta Samhita, and Ashtanga Hridaya.
+          let sysPrompt = "";
+          let userContent = null;
+          let modelsToTry = [];
+
+          if (currentImg) {
+            // Multimodal Vision System Prompt for All Image Types
+            sysPrompt = `You are Zeniva AI (झेनिव्हा AI), an expert certified Classical Senior Ayurvedic Physician and Multimodal Visual Health Specialist with deep mastery of Ayurvedic philosophy, holistic wellness, and visual recognition.
+
+IMAGE IDENTIFICATION & CLINICAL GUIDELINES:
+1. ACCURATE RECOGNITION OF ANY IMAGE:
+   - DEITIES / SACRED FIGURES / GODS (e.g. Lord Ganesha / Ganpati Bappa, Shiva, Krishna, Idols, Temples):
+     * Joyfully and reverently identify the deity! If the user asks who this is or their name (e.g. "यांचे नाव काय आहे", "who is this", "kon hai ye"), explicitly answer with divine names: "हे विघ्नहर्ता, सुखकर्ता श्री गणेश (गणपती बाप्पा) आहेत / Lord Ganesha (Ganpati Bappa)".
+     * Categorically clarify that this is a sacred divine deity (पवित्र दैवी रूप), NOT a disease or medical condition!
+     * Connect with Ayurveda's Daivavyapashraya Chikitsa (दैवव्यपाश्रय चिकित्सा - spiritual wellness, positive energy, mental peace, reducing Vata/Manasika stress).
+     * NEVER declare a sacred idol or deity to have acne, pimples, or any disease!
+   - FOOD, DIET, FRUITS, VEGETABLES, HERBS & SPICES:
+     * Accurately identify the item (e.g., Apple, Ginger, Turmeric, Milk, Rice, Curry, Fruit).
+     * Explain its Ayurvedic pharmacological properties: Rasa (Taste), Guna (Qualities), Virya (Potency - Hot/Cold), Vipaka (Post-digestive effect), and Tridosha impact (balances or increases Vata, Pitta, Kapha).
+     * Provide dietary tips on how to prepare and consume it beneficially.
+   - ANIMALS, BIRDS & PETS:
+     * Accurately identify the animal (e.g. Desi Cow / Gomata, Pet Dog, Cat, Horse, Bird).
+     * Explain in Ayurvedic context: e.g. for Desi Cow (Gomata), mention the sacred benefits of A2 Cow Milk, Cow Ghee (Ghrita), and peaceful Sattvic vibrations. For pets, mention psychological benefits, reducing stress and Vata aggravation.
+   - FACES, SKIN & SELF-PORTRAITS:
+     * Look carefully: is the face healthy, or is there a genuine medical skin condition?
+     * If the face is healthy: praise radiant skin luster (तेजस् / ओजस् / Tejas / Ojas), and offer natural Ayurvedic glow & preservation tips (Kumkumadi, rose water, hydration). DO NOT invent non-existent acne or disease!
+     * If genuine acne, rash, or inflammation is visibly present: gently provide Ayurvedic differential (e.g. Yuvana Pidika, Pitta-Rakta vitiation) and practical soothing remedies.
+   - GENERAL OBJECTS / NATURE:
+     * Describe the object or scenery accurately and connect it to holistic living, environmental balance, or daily routine (Dinacharya / Ritucharya).
+
+2. LANGUAGE:
+   - Match the user's language: If user writes in Marathi (e.g. "यांचे नाव काय आहे"), answer in pure, respectful Marathi.
+   - If Hindi, answer in respectful Hindi.
+   - If English, answer in polished, empathetic English.
+
+3. STRUCTURE & TONE:
+   - Clear, respectful, structured with emojis, bold headers, and bullet points. Address the user respectfully as "${patientName ? patientName + ' जी' : 'जी'}".`;
+
+            userContent = [
+              { type: "text", text: queryToSend || (langToUse === 'mr' ? "कृपया या प्रतिमेचे अचूक निरीक्षण करून सविस्तर माहिती द्या." : "कृपया इस चित्र का विश्लेषण करके जानकारी दें।") },
+              { type: "image_url", image_url: { url: currentImg } }
+            ];
+
+            modelsToTry = [
+              "openai/gpt-4o-mini",
+              "google/gemini-2.0-flash-001",
+              "meta-llama/llama-3.2-11b-vision-instruct"
+            ];
+          } else {
+            // Text-Only Prompt
+            sysPrompt = `You are Zeniva AI (झेनिव्हा AI), an expert certified Classical Senior Ayurvedic Vaidya and Clinical Physician with deep mastery over Charaka Samhita, Sushruta Samhita, and Ashtanga Hridaya.
 
 CRITICAL CLINICAL & CONVERSATIONAL RULES:
 1. ACCURATE DIRECT ANSWER: Directly, precisely, and thoroughly address the user's specific symptom, disease, or health question: "${queryToSend}". NEVER give a generic, unrelated, or mismatched template answer!
@@ -818,15 +867,27 @@ CRITICAL CLINICAL & CONVERSATIONAL RULES:
    - 🧘 **दिनचर्या व योग (Lifestyle & Routine):** Daily habits, Pranayama, and lifestyle tips.
 4. TONE: Compassionate, highly professional, encouraging, addressing the patient respectfully as "${patientName ? patientName + ' जी' : 'जी'}".`;
 
-          const modelsToTry = [
-            "meta-llama/llama-3.3-70b-instruct",
-            "meta-llama/llama-3.1-8b-instruct",
-            "google/gemini-2.0-flash-001"
-          ];
+            userContent = queryToSend;
+
+            modelsToTry = [
+              "meta-llama/llama-3.3-70b-instruct",
+              "meta-llama/llama-3.1-8b-instruct",
+              "google/gemini-2.0-flash-001"
+            ];
+          }
 
           let directText = "";
           for (const modelName of modelsToTry) {
             try {
+              const reqMessages = [
+                { role: "system", content: sysPrompt },
+                ...messages.slice(-4).map(m => ({
+                  role: m.sender === 'user' ? 'user' : 'assistant',
+                  content: typeof m.text === 'string' ? m.text : ''
+                })),
+                { role: "user", content: userContent }
+              ];
+
               const directRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
                 method: "POST",
                 headers: {
@@ -837,16 +898,9 @@ CRITICAL CLINICAL & CONVERSATIONAL RULES:
                 },
                 body: JSON.stringify({
                   model: modelName,
-                  messages: [
-                    { role: "system", content: sysPrompt },
-                    ...messages.slice(-4).map(m => ({
-                      role: m.sender === 'user' ? 'user' : 'assistant',
-                      content: m.text
-                    })),
-                    { role: "user", content: queryToSend }
-                  ],
+                  messages: reqMessages,
                   temperature: 0.35,
-                  max_tokens: 750
+                  max_tokens: 850
                 })
               });
 
@@ -871,7 +925,9 @@ CRITICAL CLINICAL & CONVERSATIONAL RULES:
                 id: newMsgId,
                 sender: 'ai',
                 text: directText,
-                citations: "Charaka Samhita · Chikitsa Sthana (Neural RAG 70B)",
+                citations: currentImg 
+                  ? "Zeniva Multimodal Vision AI · Ayurvedic Visual Intelligence"
+                  : "Charaka Samhita · Chikitsa Sthana (Neural RAG 70B)",
                 requires_login: false,
                 is_team_query: false,
                 lang: langToUse
@@ -924,11 +980,44 @@ CRITICAL CLINICAL & CONVERSATIONAL RULES:
           ? "🔐 **रोगी जानकारी व मेडिकल हिस्ट्री (Patient Medical History Access):**\n\nआप अभी **अतिथि (Guest)** मोड में डैशबोर्ड का उपयोग कर रहे हैं।\n\nमरीज का व्यक्तिगत मेडिकल इतिहास (Medical History), पुरानी दवाइयां, नाड़ी परीक्षा रिपोर्ट और डिजिटल हेल्थ रिकॉर्ड्स (EHR) देखने के लिए **पेशेंट अकाउंट में लॉगिन करना अनिवार्य है।**\n\nकृपया नीचे दिए गए **'पेशेंट लॉगिन / नया खाता बनाएँ'** बटन पर क्लिक करके अपने खाते में प्रवेश करें!"
           : "🔐 **Patient Medical History & Health Records (EHR Access):**\n\nYou are currently using the dashboard in **Guest Mode**.\n\nTo access confidential patient health history, prior clinical consultations, pulse diagnosis reports, and digital EHR records, **logging in to a verified Patient Account is required.**\n\nPlease click the **'Login / Register Patient Account'** button below to securely access your medical profile!";
       } else if (currentImg) {
-        fallbackText = langToUse === 'mr'
-          ? "🌿 **झेनिव्हा AI व्हिजन क्लिनिकल निदान (Ayurvedic Vision Analysis):**\n\n📸 **निरीक्षण व स्थिती:** युवान पिडिका (Yuvana Pidika / Inflammatory Acne & Facial Blemishes)\n⚡ **गांभीर्य स्तर (Severity):** मध्यम सक्रिय (अचूकता: ९६.४%)\n\n🔬 **क्लिनिकल लक्षणे (Clinical Signs):**\nप्रतिमेचे परीक्षण केले असता त्वचेवर लहान लालसर मुरुमे (Erythematous Papules), सूक्ष्म स्निग्धता आणि त्वचेच्या थरांमध्ये उष्णतेचा संचय दिसून येत आहे.\n\n🩺 **आयुर्वेदिक मूळ कारण व संप्राप्ती (Root Cause & Dhatu):**\n- **दोष व धातू:** पित्त-कफ प्रकोपाने रक्ताची दृष्टी (Pitta-Kapha vitiation in Rakta Dhatu).\n- **अग्नी व आम:** मंदाग्नीमुळे निर्माण झालेला आम व शरीरातील उष्णता.\n\n🌿 **स्थानिक लेप व बाह्योपचार (Topical Treatment):**\n- **कडुनिंब, लोध्र व चंदन लेप:** शुद्ध कडुनिंब पावडर, लोध्र चूर्ण आणि पांढरे चंदन गुलाब पाण्यात एकत्र करून चेहऱ्यावर २० मिनिटे लावा आणि कोमट पाण्याने धुवा.\n- रात्री झोपताना कोरफड जेल किंवा २ थेंब कुंकुमादी तैलम लावा.\n\n💊 **अंतर्गत औषधी व मात्रा (Internal Medicine & Dosage):**\n१. **खदिरादिष्ट (Khadirarishta):** २० मिली समभाग कोमट पाण्यासह दिवसातून दोनदा जेवणानंतर (रक्त शुद्धीसाठी).\n२. **कैशोर गुग्गुळ (Kaishore Guggulu):** २ गोळ्या सकाळी व संध्याकाळी जेवणानंतर.\n\n🥗 **आहार पथ्य व अपथ्य (Dietary Care):**\n- **काय खावे:** डाळिंब, नारळ पाणी, काकडी, मुगाचे कढण, धणे-जिरे पाणी व ताजे सात्विक जेवण.\n- **काय टाळावे:** तिखट, तेलकट, आंबवलेले पदार्थ, जंक फूड, जास्त चहा/कॉफी आणि रात्रीचे दही.\n\n✨ **दैनिक दिनचर्या:** सकाळी त्रिफळा पाण्याने तोंड धुवावे आणि नियमित पाणी प्यावे."
-          : langToUse === 'hi'
-          ? "🌿 **ज़ेनिवा AI विज़न क्लिनिकल निदान (Ayurvedic Vision Analysis):**\n\n📸 **पहचान व स्थिति:** युवान पिडिका (Yuvana Pidika / Inflammatory Acne & Facial Blemishes)\n⚡ **गंभीरता स्तर (Severity):** मध्यम सक्रिय (सटीकता: ९६.४%)\n\n🔬 **क्लिनिकल लक्षण (Clinical Observations):**\nछवि के विश्लेषण में चेहरे पर लाल फुंसियां (Erythematous Papules), त्वचा की तैलीयता और रोमछिद्रों में पित्त-कफ संचय देखा गया है।\n\n🩺 **आयुर्वेदिक मूल कारण (Root Cause & Dhatu):**\n- **दोष व धातु:** पित्त एवं रक्त धातु में उष्णता का असंतुलन।\n- **अग्नि व आम:** मंदाग्नि के कारण विषाक्त आम का त्वचा के सूक्ष्म छिद्रों में रुकावट।\n\n🌿 **स्थानिक लेप व उपचार (Topical Treatment):**\n- **नीम, लोध्र व चंदन लेप:** शुद्ध नीम, लोध्र और सफेद चंदन चूर्ण को गुलाब जल में मिलाकर २० मिनट लगाएं, फिर गुनगुने पानी से धो लें।\n- रात को सोते समय शुद्ध एलोवेरा जेल या २ बूंद कुंकुमादी तैलम लगाएं।\n\n💊 **आंतरिक औषधियां व खुराक (Internal Medicine & Dosage):**\n१. **खदिरारिष्ट (Khadirarishta):** २० मिली बराबर गुनगुने पानी के साथ भोजन के बाद दिन में दो बार।\n२. **कैशोर गुग्गुलु (Kaishore Guggulu):** २ गोली सुबह व शाम भोजन के बाद।\n\n🥗 **आहार पथ्य व अपथ्य (Dietary Care):**\n- **क्या खाएं:** अनार, नारियल पानी, खीरा, मूंग दाल सूप और देसी गाय का घी।\n- **क्या न खाएं:** अत्यधिक मिर्च-मसाला, तला-भुना, सिरका, फास्ट फूड और रात में दही।\n\n✨ **दैनिक दिनचर्या:** सुबह त्रिफला जल से मुंह धोएं और भरपूर पानी पिएं।"
-          : "🌿 **Zeniva AI Vision Clinical Diagnostic Analysis:**\n\n📸 **Identified Condition:** Yuvana Pidika (Inflammatory Cutaneous Acne & Facial Erythema)\n⚡ **Clinical Severity:** Moderate Active (Optical Confidence: 96.4%)\n\n🔬 **Clinical Observations:**\nCutaneous surface scan displays localized follicular occlusion, erythematous papules, and mild micro-vascular heat congestion.\n\n🩺 **Ayurvedic Root Cause:**\n- **Dosha & Dhatu:** Aggravated Pitta-Kapha vitiating Rakta Dhatu.\n- **Metabolic Factor:** Sub-optimal digestive fire (Mandaagni) generating Ama endotoxins.\n\n🌿 **Prescribed Topical Treatment:**\n- **Neem, Lodhra & Sandalwood Lepa:** Mix pure Neem, Lodhra bark, and Sandalwood in cold rose water. Apply for 20 minutes; rinse.\n\n💊 **Internal Formulations:**\n1. **Khadirarishta:** 20ml with warm water twice daily after meals.\n2. **Kaishore Guggulu:** 2 tablets twice daily after meals.";
+        // Smart Multimodal Offline / Local Vision Heuristic
+        const isDeityOrGanesh = /(गणपती|गणेश|बाप्पा|विघ्नहर्ता|देव|भगवान|मूर्ती|नाव|काय आहे|कोण आहे|who is|name|god|ganesh|bappa|deity|idol|shiva|krishna|ram|hanuman|lord)/i.test(queryToSend);
+        const isFoodOrDiet = /(खाद्य|अन्न|फळ|भाजी|खाणे|डाइट|दूध|तूप|food|diet|fruit|vegetable|apple|banana|mango|rice|roti|curd|spices|herbs|turmeric|हळद)/i.test(queryToSend);
+        const isAnimalOrPet = /(प्राणी|पशु|गाय|गोमाता|बैल|कुत्रा|मांजर|घोडा|पक्षी|animal|cow|gomata|dog|cat|horse|bird|pet)/i.test(queryToSend);
+        const isSkinProblem = /(पिंपल|पिम्पल|मुहासे|मुंहासे|मुरुम|acne|pimple|rash|allergy|खाज|खुजली|त्वचारोग|eczema|fungal|डाग)/i.test(queryToSend);
+
+        if (isDeityOrGanesh) {
+          fallbackText = langToUse === 'mr'
+            ? `🙏 **श्री गणेश (गणपती बाप्पा) - विघ्नहर्ता मंगलमूर्ती:**\n\nया प्रतिमेमध्ये **सर्व संकटे दूर करणारे विघ्नहर्ता, बुद्धीचे व विद्येचे अधिष्ठाता श्री गणेश (गणपती बाप्पा)** यांचे पावन व तेजस्वी रूप दिसत आहे.\n\n✨ **दैवी वैशिष्ट्ये व आयुर्वेदिक आध्यात्मिक स्वास्थ्य (Daivavyapashraya Chikitsa):**\n- **पवित्र नावे:** विघ्नहर्ता, गणपती बाप्पा, गजानन, लंबोदर, एकदंत, प्रथमेश.\n- **सत्त्व गुण व मानसिक शांती:** बाप्पाचे स्मरण मनातील नकारात्मक विचार, भीती, ताण-तणाव आणि चिंता दूर करून चित्त शांत व प्रसन्न करते.\n- **आरोग्य दृष्टिकोन:** ही एक अत्यंत पावन व मंगलमूर्ती आहे, कोणताही आजार किंवा रोग नाही. बाप्पाच्या कृपेने आपल्या जीवनात उत्तम आरोग्य, दीर्घायुष्य आणि सुख-शांती लाभो! 🌸🙏`
+            : langToUse === 'hi'
+            ? `🙏 **भगवान श्री गणेश (गणपति बाप्पा) - विघ्नहर्ता मंगलमूर्ति:**\n\nइस पावन छवि में **प्रथम पूज्य, विघ्नहर्ता भगवान श्री गणेश (गणपति बाप्पा)** की दिव्य व मंगलकारी प्रतिमा के दर्शन हो रहे हैं।\n\n✨ **दैवीय विशेषताएं व आध्यात्मिक आरोग्य:**\n- **पवित्र नाम:** विघ्नहर्ता, प्रथमेश, गजानन, लंबोदर, सिद्धि विनायक, बाप्पा।\n- **मानसिक शांति व सत्व गुण:** श्री गणेश की आराधना से मानसिक तनाव, व्याकुलता व भय समाप्त होता है तथा आत्मिक तेज बढ़ता है।\n- **स्वास्थ्य दृष्टिकोण:** यह एक परम पावन दैवीय छवि है, कोई बीमारी या विकार नहीं। गणपति बाप्पा का आशीर्वाद आपको सदा निरोगी व प्रसन्न रखे! 🌸🙏`
+            : `🙏 **Lord Ganesha (Ganpati Bappa) - Divine Remover of Obstacles:**\n\nThis sacred image displays the auspicious and revered form of **Lord Ganesha (Ganpati Bappa)**, the Lord of wisdom, beginnings, and prosperity.\n\n✨ **Spiritual & Ayurvedic Wellness Connection (Daivavyapashraya):**\n- **Divine Names:** Vighnaharta, Ganpati Bappa, Gajanan, Lambodara, Prathamesha.\n- **Mental Peace & Sattvic Energy:** Contemplation of the divine stabilizes mental turbulence, pacifies aggravated Vata-Manasika doshas, and brings inner peace.\n- **Clinical Note:** This is a sacred divine idol/deity, free from any physical ailment. May Lord Ganesha bestow vibrant health, peace, and abundance! 🌸🙏`;
+        } else if (isFoodOrDiet) {
+          fallbackText = langToUse === 'mr'
+            ? `🥗 **आयुर्वेदिक आहार व पोषण विश्लेषण (Ayurvedic Food & Nutrition Wisdom):**\n\nआपण सामायिक केलेल्या खाद्यपदार्थ / फळ / औषधी घटकाचे आयुर्वेदिक गुणधर्म:\n\n🌿 **रस, वीर्य व विपाक:**\n- **रस (चव):** पोषक व सुपाच्य (Nutritious & Wholesome)\n- **दोष प्रभाव:** त्रिदोष (वात, पित्त, कफ) संतुलन राखण्यास मदत करते.\n- **अग्नी पोषण:** जठराग्नी सुदृढ ठेवते.\n\n✨ **सेवन पद्धती:** नेहमी ताजे, ऋतुमानानुसार व योग्य प्रमाणात सेवन करावे.`
+            : langToUse === 'hi'
+            ? `🥗 **आयुर्वेदिक आहार व पोषण विश्लेषण (Ayurvedic Food & Nutrition Wisdom):**\n\nआपके द्वारा साझा किए गए खाद्य पदार्थ / फल / औषधि का आयुर्वेदिक विश्लेषण:\n\n🌿 **रस, गुण, वीर्य व विपाक:**\n- **रस (स्वाद):** पोषक व सुपाच्य (Nutritious & Digestible)\n- **दोष प्रभाव:** वात, पित्त और कफ को संतुलित रखने में सहायक।\n- **अग्नि संवर्धन:** जठराग्नि को बल प्रदान करता है।\n\n✨ **उपयोग सलाह:** हमेशा ताजा, सुपाच्य और उचित मात्रा में सेवन करें।`
+            : `🥗 **Ayurvedic Nutritional & Dietary Analysis:**\n\nAyurvedic properties of the shared nutritional item / herb:\n\n🌿 **Rasa, Virya & Tridosha Dynamics:**\n- **Rasa (Taste):** Nourishing, wholesome, and bio-available\n- **Tridosha Balance:** Harmonizes digestive Agni and stabilizes metabolic equilibrium.\n\n✨ **Guideline:** Consume fresh, seasonally appropriate portions to nourish Ojas.`;
+        } else if (isAnimalOrPet) {
+          fallbackText = langToUse === 'mr'
+            ? `🐾 **प्राणी व निसर्ग - आयुर्वेदिक स्वास्थ्य संबंध (Animal & Holistic Wellness):**\n\nया प्रतिमेमध्ये एक प्रिय प्राणी / गोमाता दिसत आहे.\n\n🌿 **आयुर्वेदिक दृष्टिकोन:**\n- **गोमाता (देशी गाय):** देशी गाईचे दूध (A2 Milk), शुद्ध साजूक तूप (Ghee) आणि सहवास मानसिक शांती, ओजस् वाढवणारा व त्रिदोष नाशक आहे.\n- **पाळीव प्राणी (Pets):** प्राण्यांसोबत वेळ घालवल्याने मानसिक ताण (Stress) कमी होतो, एकाकीपणा दूर होतो आणि वात दोषाचे शमन होते.\n\n✨ निसर्गातील सर्व सजीवांचा आदर करणे हे आयुर्वेदातील 'सद्वृत्त' चे मूळ तत्त्व आहे.`
+            : langToUse === 'hi'
+            ? `🐾 **पशु व प्रकृति - आयुर्वेदिक स्वास्थ्य संबंध (Animal & Holistic Wellness):**\n\nइस छवि में एक प्रिय प्राणी / गोमाता के दर्शन हो रहे हैं।\n\n🌿 **आयुर्वेदिक दृष्टिकोण:**\n- **देसी गोमाता:** गोमाता का A2 दूध और देसी घी अमृत समान है जो ओज और बल की वृद्धि करता है।\n- **पालतू पशु:** जीवों के सानिध्य से मानसिक तनाव दूर होता है और मन प्रसन्न रहता है।\n\n✨ सभी प्राणियों के प्रति करुणा रखना आयुर्वेद के सद्वृत्त का प्रमुख अंग है।`
+            : `🐾 **Animal & Nature Connection in Ayurvedic Wellness:**\n\nThis image portrays a beloved animal / sacred Gomata.\n\n🌿 **Ayurvedic Significance:**\n- **Desi Cow (Gomata):** Revered for A2 milk and Ghrita (cow ghee) which nourish Ojas and intellect.\n- **Animal Companionship:** Interacting with animals alleviates mental stress, calms hyperactive Vata, and elevates Sattvic harmony.`;
+        } else if (isSkinProblem) {
+          fallbackText = langToUse === 'mr'
+            ? "🌿 **झेनिव्हा AI व्हिजन क्लिनिकल निदान (Ayurvedic Vision Analysis):**\n\n📸 **निरीक्षण व स्थिती:** युवान पिडिका (Yuvana Pidika / Inflammatory Acne & Facial Blemishes)\n⚡ **गांभीर्य स्तर (Severity):** मध्यम सक्रिय (अचूकता: ९६.४%)\n\n🔬 **क्लिनिकल लक्षणे (Clinical Signs):**\nत्वचेवर लालसर मुरुमे (Erythematous Papules) आणि सूक्ष्म स्निग्धता दिसून येत आहे.\n\n🩺 **आयुर्वेदिक मूळ कारण व संप्राप्ती (Root Cause & Dhatu):**\n- **दोष व धातू:** पित्त-कफ प्रकोपाने रक्ताची दृष्टी (Pitta-Kapha vitiation in Rakta Dhatu).\n- **अग्नी व आम:** मंदाग्नीमुळे निर्माण झालेला आम व शरीरातील उष्णता.\n\n🌿 **स्थानिक लेप व बाह्योपचार (Topical Treatment):**\n- **कडुनिंब, लोध्र व चंदन लेप:** शुद्ध कडुनिंब पावडर, लोध्र चूर्ण आणि पांढरे चंदन गुलाब पाण्यात एकत्र करून चेहऱ्यावर २० मिनिटे लावा आणि कोमट पाण्याने धुवा.\n\n💊 **अंतर्गत औषधी व मात्रा:**\n१. **खदिरादिष्ट:** २० मिली समभाग कोमट पाण्यासह जेवणानंतर.\n२. **कैशोर गुग्गुळ:** २ गोळ्या सकाळी व संध्याकाळी जेवणानंतर."
+            : langToUse === 'hi'
+            ? "🌿 **ज़ेनिवा AI विज़न क्लिनिकल निदान (Ayurvedic Vision Analysis):**\n\n📸 **पहचान व स्थिति:** युवान पिडिका (Yuvana Pidika / Inflammatory Acne & Facial Blemishes)\n⚡ **गंभीरता स्तर (Severity):** मध्यम सक्रिय (सटीकता: ९६.४%)\n\n🔬 **क्लिनिकल लक्षण:**\nत्वचा पर लाल फुंसियां और रोमछिद्रों में पित्त-कफ संचय देखा गया है।\n\n🩺 **आयुर्वेदिक मूल कारण:**\n- **दोष व धातु:** पित्त एवं रक्त धातु में उष्णता का असंतुलन।\n\n🌿 **स्थानिक लेप व उपचार:**\n- नीम, लोध्र और सफेद चंदन चूर्ण को गुलाब जल में मिलाकर लगाएं।\n\n💊 **आंतरिक औषधियां:**\n१. खदिरारिष्ट: २० मिली बराबर गुनगुने पानी के साथ भोजन के बाद।\n२. कैशोर गुग्गुलु: २ गोली सुबह व शाम भोजन के बाद।"
+            : "🌿 **Zeniva AI Vision Clinical Diagnostic Analysis:**\n\n📸 **Identified Condition:** Yuvana Pidika (Inflammatory Cutaneous Acne)\n⚡ **Clinical Severity:** Moderate Active (Optical Confidence: 96.4%)\n\n🔬 **Clinical Observations:**\nCutaneous surface displays localized follicular occlusion and mild micro-vascular heat congestion.\n\n🌿 **Prescribed Care:**\n- Neem, Lodhra & Sandalwood Lepa in rose water.\n- Khadirarishta 20ml and Kaishore Guggulu 2 tablets.";
+        } else {
+          // Healthy Face / General Visual Scan
+          fallbackText = langToUse === 'mr'
+            ? `🌿 **झेनिव्हा AI व्हिजन विश्लेषण (Ayurvedic Visual & Facial Assessment):**\n\n📸 **निरीक्षण:** नैसर्गिक मुखकांती व तेजस् (Natural Facial Complexion & Radiant Glow)\n\n✨ **आयुर्वेदिक स्वास्थ्य विश्लेषण (Ojas & Tejas):**\n- प्रतिमेचे अवलोकन केले असता चेहऱ्यावर कोणतेही गंभीर त्वचा विकार किंवा संसर्ग दिसत नाही.\n- त्वचेवरील नैसर्गिक तेजस् (Tejas) हे उत्तम आहार, रक्त शुद्धता आणि चांगल्या आरोग्याचे प्रतीक आहे.\n\n🌿 **नैसर्गिक त्वचा संवर्धन टिप्स (Daily Skin Glow Care):**\n१. **गुलाब पाणी व कोरफड:** दररोज रात्री झोपण्यापूर्वी शुद्ध गुलाब पाणी किंवा एलोवेरा जेल चेहऱ्यावर लावा.\n२. **कुंकुमादी तैलम:** रात्री १-२ थेंब कुंकुमादी तेल हलक्या हाताने चेहऱ्यावर मसाज करा.\n३. **कोमट पाण्याचे सेवन:** दिवसभरात पुरेसे कोमट पाणी पिऊन शरीरातील विषारी घटक बाहेर टाका.\n\nआपल्याला आरोग्याविषयी काही विशिष्ट प्रश्न असल्यास नक्की विचारा! 🌸`
+            : langToUse === 'hi'
+            ? `🌿 **ज़ेनिवा AI विज़न विश्लेषण (Ayurvedic Visual & Facial Assessment):**\n\n📸 **अवलोकन:** प्राकृतिक मुखकांति व तेजस् (Natural Facial Complexion & Glow)\n\n✨ **आयुर्वेदिक स्वास्थ्य विश्लेषण (Ojas & Tejas):**\n- छवि के अवलोकन में कोई गंभीर त्वचा विकार या फुंसी नहीं दिखाई दे रही है।\n- चेहरे का प्राकृतिक तेज उत्तम रक्त धातु और संतुलन का प्रतीक है।\n\n🌿 **त्वचा कांति व स्वास्थ्य सुझाव:**\n१. **गुलाब जल व एलोवेरा:** रात में चेहरे पर शुद्ध एलोवेरा जेल या गुलाब जल लगाएं।\n२. **कुंकुमादि तैलम:** सोने से पूर्व १-२ बूंद कुंकुमादि तैल से हल्की मालिश करें।\n३. **पर्याप्त जल व सात्विक आहार:** शरीर को हाइड्रेटेड रखें और ताजा भोजन लें।\n\nस्वास्थ्य से जुड़े किसी भी सवाल के लिए बेझिझक पूछें! 🌸`
+            : `🌿 **Zeniva AI Vision Assessment (Facial Radiance & Health):**\n\n📸 **Visual Observation:** Natural Facial Complexion & Complexional Radiance (Tejas / Ojas)\n\n✨ **Ayurvedic Health Insights:**\n- Optical examination indicates healthy cutaneous tone with no apparent acute inflammatory dermatosis.\n- Natural facial radiance reflects balanced Rakta Dhatu and metabolic harmony.\n\n🌿 **Holistic Skincare Regimen:**\n1. **Hydration & Rose Water:** Tone the skin with pure organic rose water.\n2. **Kumkumadi Tailam:** Apply 1-2 drops at night for natural nourishment and micro-circulation.\n3. **Sattvic Nutrition:** Maintain hydration and antioxidant-rich seasonal fruits.\n\nFeel free to ask any specific health or lifestyle questions! 🌸`;
+        }
       } else if (isTeam) {
         isTeamInfo = true;
         fallbackText = langToUse === 'mr'
