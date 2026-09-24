@@ -278,6 +278,7 @@ export const AdminDashboard = ({
   // 1.1 Zeniva Core Team Management State (Persistent Sync)
   const [teamConfig, setTeamConfig] = useState(getTeamData);
   const [editingMember, setEditingMember] = useState(null);
+  const [isSavingMember, setIsSavingMember] = useState(false);
   const [memberFormData, setMemberFormData] = useState({
     id: '',
     name: '',
@@ -347,71 +348,89 @@ export const AdminDashboard = ({
   };
 
   const handleSaveMember = async (e) => {
-    e.preventDefault();
+    if (e && e.preventDefault) e.preventDefault();
     if (!editingMember) return;
 
-    const isFounder = editingMember.isFounder || editingMember.id === 'founder';
-    const lines = memberFormData.contributionsText.split('\n').map(l => l.trim()).filter(Boolean);
-    const tagsList = memberFormData.skillsText.split(',').map(s => s.trim()).filter(Boolean);
-
-    let updatedConfig = { ...teamConfig };
-
-    if (isFounder) {
-      updatedConfig.founder = {
-        ...updatedConfig.founder,
-        name: memberFormData.name,
-        title: memberFormData.title,
-        roleTag: memberFormData.roleTag || memberFormData.badge,
-        bio: memberFormData.bio,
-        email: memberFormData.email,
-        linkedin: memberFormData.linkedin,
-        avatar: memberFormData.avatar,
-        college: memberFormData.college,
-        keyResponsibilities: lines.length > 0 ? lines : updatedConfig.founder.keyResponsibilities,
-        skills: tagsList.length > 0 ? tagsList : updatedConfig.founder.skills
-      };
-    } else if (editingMember.isNew) {
-      const newMember = {
-        id: memberFormData.id || `member_${Date.now().toString(36)}`,
-        name: memberFormData.name || 'Team Member',
-        role: memberFormData.role || memberFormData.title || 'Ayurvedic AI Software Engineer',
-        badge: memberFormData.badge || memberFormData.roleTag || 'Core Contributor',
-        category: memberFormData.category || 'ai',
-        bio: memberFormData.bio || '',
-        email: memberFormData.email || '',
-        linkedin: memberFormData.linkedin || '',
-        avatar: memberFormData.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300',
-        college: memberFormData.college || 'TGPCET Nagpur (IT Dept)',
-        contributions: lines.length > 0 ? lines : ['Developed clinical Ayurvedic software modules'],
-        tags: tagsList.length > 0 ? tagsList : ['Software Engineering', 'Ayurveda']
-      };
-      updatedConfig.members = [...(updatedConfig.members || []), newMember];
-    } else {
-      updatedConfig.members = updatedConfig.members.map(m => {
-        if (m.id === editingMember.id) {
-          return {
-            ...m,
-            name: memberFormData.name,
-            role: memberFormData.role || memberFormData.title,
-            badge: memberFormData.badge || memberFormData.roleTag,
-            category: memberFormData.category,
-            bio: memberFormData.bio,
-            email: memberFormData.email,
-            linkedin: memberFormData.linkedin,
-            avatar: memberFormData.avatar,
-            college: memberFormData.college,
-            contributions: lines.length > 0 ? lines : m.contributions,
-            tags: tagsList.length > 0 ? tagsList : m.tags
-          };
-        }
-        return m;
-      });
+    if (!memberFormData.name || !memberFormData.name.trim()) {
+      showToast('⚠️ Please enter the member\'s full name.');
+      return;
     }
 
-    setTeamConfig(updatedConfig);
-    await saveTeamData(updatedConfig);
-    showToast(`✓ Member "${memberFormData.name}" saved! Live sync updated across mobile & web.`);
-    setEditingMember(null);
+    setIsSavingMember(true);
+    try {
+      const isFounder = editingMember.isFounder || editingMember.id === 'founder';
+      const lines = (memberFormData.contributionsText || '').split('\n').map(l => l.trim()).filter(Boolean);
+      const tagsList = (memberFormData.skillsText || '').split(',').map(s => s.trim()).filter(Boolean);
+
+      let cleanLinkedin = (memberFormData.linkedin || '').trim();
+      if (cleanLinkedin && !cleanLinkedin.startsWith('http://') && !cleanLinkedin.startsWith('https://')) {
+        cleanLinkedin = `https://${cleanLinkedin}`;
+      }
+
+      let updatedConfig = { ...teamConfig };
+
+      if (isFounder) {
+        updatedConfig.founder = {
+          ...updatedConfig.founder,
+          name: memberFormData.name.trim(),
+          title: (memberFormData.title || updatedConfig.founder.title).trim(),
+          roleTag: (memberFormData.roleTag || memberFormData.badge || updatedConfig.founder.roleTag).trim(),
+          bio: (memberFormData.bio || updatedConfig.founder.bio).trim(),
+          email: (memberFormData.email || updatedConfig.founder.email).trim(),
+          linkedin: cleanLinkedin || updatedConfig.founder.linkedin,
+          avatar: memberFormData.avatar || updatedConfig.founder.avatar || '/team/bhupesh.jpg',
+          college: (memberFormData.college || updatedConfig.founder.college).trim(),
+          keyResponsibilities: lines.length > 0 ? lines : updatedConfig.founder.keyResponsibilities,
+          skills: tagsList.length > 0 ? tagsList : updatedConfig.founder.skills
+        };
+      } else if (editingMember.isNew) {
+        const newMember = {
+          id: memberFormData.id || `member_${Date.now().toString(36)}`,
+          name: memberFormData.name.trim(),
+          role: (memberFormData.role || memberFormData.title || 'Ayurvedic AI Software Engineer').trim(),
+          badge: (memberFormData.badge || memberFormData.roleTag || 'Core Contributor').trim(),
+          category: memberFormData.category || 'ai',
+          bio: (memberFormData.bio || '').trim(),
+          email: (memberFormData.email || '').trim(),
+          linkedin: cleanLinkedin || 'https://linkedin.com',
+          avatar: memberFormData.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300',
+          college: (memberFormData.college || 'TGPCET Nagpur (IT Dept)').trim(),
+          contributions: lines.length > 0 ? lines : ['Developed clinical Ayurvedic software modules'],
+          tags: tagsList.length > 0 ? tagsList : ['Software Engineering', 'Ayurveda']
+        };
+        updatedConfig.members = [...(updatedConfig.members || []), newMember];
+      } else {
+        updatedConfig.members = (updatedConfig.members || []).map(m => {
+          if (m.id === editingMember.id) {
+            return {
+              ...m,
+              name: memberFormData.name.trim(),
+              role: (memberFormData.role || memberFormData.title || m.role).trim(),
+              badge: (memberFormData.badge || memberFormData.roleTag || m.badge).trim(),
+              category: memberFormData.category || m.category,
+              bio: (memberFormData.bio || m.bio).trim(),
+              email: (memberFormData.email || m.email).trim(),
+              linkedin: cleanLinkedin || m.linkedin,
+              avatar: memberFormData.avatar || m.avatar,
+              college: (memberFormData.college || m.college).trim(),
+              contributions: lines.length > 0 ? lines : m.contributions,
+              tags: tagsList.length > 0 ? tagsList : m.tags
+            };
+          }
+          return m;
+        });
+      }
+
+      setTeamConfig(updatedConfig);
+      await saveTeamData(updatedConfig);
+      showToast(`✓ Member "${memberFormData.name}" saved! Live sync updated across mobile & web.`);
+      setEditingMember(null);
+    } catch (err) {
+      console.error('Save member error:', err);
+      showToast('⚠️ Could not save member. Please try again.');
+    } finally {
+      setIsSavingMember(false);
+    }
   };
 
   const handleResetTeam = async () => {
@@ -4286,7 +4305,7 @@ export const AdminDashboard = ({
       {/* 20. EDIT TEAM MEMBER MODAL                                                */}
       {/* ========================================================================= */}
       {editingMember && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/65 backdrop-blur-xs animate-in fade-in select-none">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/65 backdrop-blur-xs animate-in fade-in">
           <div className="bg-white rounded-3xl max-w-xl w-full border border-stone-200 shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
             <div className="bg-stone-900 text-white px-6 py-4 flex items-center justify-between shrink-0 border-b border-stone-800">
               <div className="flex items-center gap-2.5">
@@ -4306,7 +4325,7 @@ export const AdminDashboard = ({
               </button>
             </div>
 
-            <form onSubmit={handleSaveMember} className="p-6 overflow-y-auto space-y-4 text-xs font-sans">
+            <form noValidate onSubmit={handleSaveMember} className="p-6 overflow-y-auto space-y-4 text-xs font-sans">
               <div className="flex items-center gap-4 p-3.5 rounded-2xl bg-[#FAF8F5] border border-stone-200">
                 <img
                   src={memberFormData.avatar || (editingMember.isFounder ? '/team/bhupesh.jpg' : `/team/${editingMember.id}.jpg`)}
@@ -4370,8 +4389,7 @@ export const AdminDashboard = ({
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold text-stone-600 uppercase">Email Address</label>
                   <input
-                    type="email"
-                    required
+                    type="text"
                     value={memberFormData.email}
                     onChange={(e) => setMemberFormData({ ...memberFormData, email: e.target.value })}
                     className="w-full px-3 py-2 rounded-xl border border-stone-200 text-stone-900"
@@ -4381,9 +4399,10 @@ export const AdminDashboard = ({
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold text-stone-600 uppercase">LinkedIn Profile URL</label>
                   <input
-                    type="url"
+                    type="text"
                     value={memberFormData.linkedin}
                     onChange={(e) => setMemberFormData({ ...memberFormData, linkedin: e.target.value })}
+                    placeholder="https://linkedin.com/in/... or linkedin.com/in/..."
                     className="w-full px-3 py-2 rounded-xl border border-stone-200 text-stone-900"
                   />
                 </div>
@@ -4457,11 +4476,26 @@ export const AdminDashboard = ({
                   Cancel
                 </button>
                 <button
-                  type="submit"
-                  className="px-5 py-2 rounded-xl bg-purple-700 hover:bg-purple-800 text-white font-bold cursor-pointer shadow-md flex items-center gap-1.5"
+                  type="button"
+                  onClick={handleSaveMember}
+                  disabled={isSavingMember}
+                  className={`px-5 py-2.5 rounded-xl text-white font-bold cursor-pointer shadow-md flex items-center gap-1.5 transition-all ${
+                    isSavingMember 
+                      ? 'bg-purple-900 opacity-70 cursor-not-allowed' 
+                      : 'bg-purple-700 hover:bg-purple-800 active:scale-95'
+                  }`}
                 >
-                  <Save className="w-4 h-4" />
-                  <span>Save Member Changes</span>
+                  {isSavingMember ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span>Saving Member...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4" />
+                      <span>Save Member Changes</span>
+                    </>
+                  )}
                 </button>
               </div>
             </form>
