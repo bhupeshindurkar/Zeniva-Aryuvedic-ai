@@ -389,18 +389,30 @@ export const DoctorDashboard = ({
 
   // State for Quick Actions Modal
   const [isPrescriptionModalOpen, setIsPrescriptionModalOpen] = useState(false);
-  const [selectedPatientForRx, setSelectedPatientForRx] = useState('Aarav Patil');
+  const [selectedPatientForRx, setSelectedPatientForRx] = useState(() => {
+    try {
+      const pat = localStorage.getItem('zeniva_patient_user');
+      if (pat) {
+        const p = JSON.parse(pat);
+        if (p?.name) return p.name.replace(/^Dr\.\s*/i, '');
+      }
+    } catch (e) {}
+    return 'Kamlesh Indurkar';
+  });
   const [rxFormulation, setRxFormulation] = useState('Triphala Churna (3g at bedtime with warm water)');
   const [rxDietAdvice, setRxDietAdvice] = useState('Warm freshly cooked meals, avoid fermented and cold foods.');
 
-  // State for Schedule & Appointments
-  const [scheduleList, setScheduleList] = useState([
-    { id: 1, time: '09:30 AM', name: 'Aarav Patil', condition: '⚡ Joint Mobility & Stamina', type: 'Consultation', status: 'Completed', avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120' },
-    { id: 2, time: '11:00 AM', name: 'Neha Kulkarni', condition: '🔥 Digestion & Acidity Relief', type: 'Follow-up', status: 'In-Progress', avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=120' },
-    { id: 3, time: '12:30 PM', name: 'Rohan Deshmukh', condition: '🍃 Immunity & Cold Defense', type: 'Consultation', status: 'Upcoming', avatar: 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?w=120' },
-    { id: 4, time: '03:00 PM', name: 'Sneha Gawande', condition: '🌙 Stress & Sleep Wellness', type: 'Follow-up', status: 'Upcoming', avatar: 'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=120' },
-    { id: 5, time: '04:30 PM', name: 'Mahesh Jadhav', condition: '🍃 Immunity & Energy Recharge', type: 'Consultation', status: 'Upcoming', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=120' },
-  ]);
+  // State for Schedule & Appointments (Real appointments from patient bookings)
+  const [scheduleList, setScheduleList] = useState(() => {
+    try {
+      const saved = localStorage.getItem('zeniva_doctor_appointments') || localStorage.getItem('zeniva_appointments');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {}
+    return [];
+  });
 
   // Real-Time Patient AI Chatbot & Speak Voice Triage Sessions (Synced with Supabase Cloud & AIChatModal)
   const [aiChatSessions, setAiChatSessions] = useState(() => {
@@ -583,14 +595,47 @@ export const DoctorDashboard = ({
     };
   }, []);
 
-  // Patients Roster for Doctor (Live real-time synced from Supabase profiles)
-  const [patientsRoster, setPatientsRoster] = useState([
-    { id: 'PAT-201', name: 'Aarav Patil', age: 34, gender: 'Male', phone: '9876543210', dosha: '⚡ Joint & Stamina Care', visits: 4, lastVisit: '28 Aug 2025', diagnosis: 'Joint Mobility & Digestive Support' },
-    { id: 'PAT-202', name: 'Neha Kulkarni', age: 29, gender: 'Female', phone: '9822011223', dosha: '🔥 Digestion & Acidity', visits: 2, lastVisit: '28 Aug 2025', diagnosis: 'Hyperacidity & Heartburn Relief' },
-    { id: 'PAT-203', name: 'Rohan Deshmukh', age: 42, gender: 'Male', phone: '9833044556', dosha: '🍃 Immunity & Respiratory', visits: 6, lastVisit: '27 Aug 2025', diagnosis: 'Seasonal Cough & Congestion' },
-    { id: 'PAT-204', name: 'Sneha Gawande', age: 38, gender: 'Female', phone: '9844066778', dosha: '🌙 Stress & Sleep Wellness', visits: 3, lastVisit: '26 Aug 2025', diagnosis: 'Stress Overthinking & Mild Joint Stiffness' },
-    { id: 'PAT-205', name: 'Mahesh Jadhav', age: 48, gender: 'Male', phone: '9855088990', dosha: '⚡ Energy & Detox Care', visits: 5, lastVisit: '25 Aug 2025', diagnosis: 'Chronic Fatigue & Sluggish Digestion' }
-  ]);
+  // Patients Roster for Doctor (Strictly REAL registered & logged-in patients only - No fake mock data)
+  const [patientsRoster, setPatientsRoster] = useState(() => {
+    try {
+      const cached = localStorage.getItem('zeniva_cached_real_patients');
+      const mockNames = ['aarav patil', 'neha kulkarni', 'rohan deshmukh', 'sneha gawande', 'mahesh jadhav'];
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        const cleanList = Array.isArray(parsed) ? parsed.filter(p => !mockNames.includes((p.name || '').toLowerCase())) : [];
+        if (cleanList.length > 0) return cleanList;
+      }
+      const localPat = localStorage.getItem('zeniva_patient_user') || localStorage.getItem('zeniva_current_user');
+      if (localPat) {
+        const lp = JSON.parse(localPat);
+        if (lp && lp.name && (lp.role === 'patient' || !lp.password)) {
+          const cleanName = lp.name.replace(/^Dr\.\s*/i, '');
+          if (!mockNames.includes(cleanName.toLowerCase())) {
+            return [{
+              id: lp.id ? `PAT-${String(lp.id).slice(-4).toUpperCase()}` : 'PAT-LIVE',
+              rawId: lp.id,
+              name: cleanName,
+              phone: lp.phone || '—',
+              email: lp.email || '',
+              age: lp.age || '—',
+              gender: lp.gender || '—',
+              dosha: lp.prakriti || lp.dosha || 'Constitutional Health Balance',
+              prakriti: lp.prakriti || lp.dosha || 'Constitutional Health Balance',
+              city: lp.city || lp.location || 'Maharashtra',
+              bloodGroup: lp.bloodGroup || lp.blood_group || '—',
+              diet: lp.diet || 'Ayurvedic Whole Foods',
+              status: 'Active (Logged In)',
+              visits: 1,
+              lastVisit: 'Today',
+              registeredAt: 'Today',
+              avatar: lp.avatar || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150'
+            }];
+          }
+        }
+      }
+    } catch (e) {}
+    return [];
+  });
   const [isFetchingPatients, setIsFetchingPatients] = useState(false);
   const [patientSearchQuery, setPatientSearchQuery] = useState('');
   const [selectedDoshaFilter, setSelectedDoshaFilter] = useState('ALL');
@@ -598,7 +643,7 @@ export const DoctorDashboard = ({
   const fetchRegisteredPatients = async () => {
     setIsFetchingPatients(true);
     try {
-      // 1. Fetch all registered patient accounts from Supabase profiles table
+      // 1. Fetch all real registered patient accounts from Supabase profiles table
       const { data: sbData, error: sbErr } = await supabase
         .from('profiles')
         .select('*')
@@ -606,25 +651,30 @@ export const DoctorDashboard = ({
         .order('created_at', { ascending: false });
 
       let list = [];
+      const mockNames = ['aarav patil', 'neha kulkarni', 'rohan deshmukh', 'sneha gawande', 'mahesh jadhav'];
+
       if (sbData && sbData.length > 0) {
-        list = sbData.map((p, idx) => {
+        sbData.forEach((p, idx) => {
+          const rawName = (p.full_name || 'Zeniva Patient').replace(/^Dr\.\s*/i, '');
+          if (mockNames.includes(rawName.toLowerCase())) return;
+
           const registeredDate = p.created_at
             ? new Date(p.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
             : 'Recent';
 
           const shortId = p.id ? `PAT-${String(p.id).replace(/\D/g, '').slice(-4) || String(p.id).slice(-4).toUpperCase()}` : `PAT-${300 + idx}`;
 
-          return {
+          list.push({
             id: shortId,
             rawId: p.id,
-            name: (p.full_name || 'Zeniva Patient').replace(/^Dr\.\s*/i, ''),
-            phone: p.phone || '9011942126',
+            name: rawName,
+            phone: p.phone || '—',
             email: p.email || '',
             age: p.age || '—',
             gender: p.gender || '—',
-            dosha: p.prakriti || 'Stress & Sleep Wellness Profile',
-            prakriti: p.prakriti || 'Stress & Sleep Wellness Profile',
-            city: p.city || p.location || 'Nagpur, Maharashtra',
+            dosha: p.prakriti || 'Constitutional Health Balance',
+            prakriti: p.prakriti || 'Constitutional Health Balance',
+            city: p.city || p.location || 'Maharashtra',
             bloodGroup: p.blood_group || '—',
             diet: p.diet || 'Ayurvedic Sattvic Whole Foods',
             status: p.status || 'Active',
@@ -632,47 +682,59 @@ export const DoctorDashboard = ({
             lastVisit: registeredDate,
             registeredAt: registeredDate,
             avatar: p.avatar_url || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150'
-          };
+          });
         });
       }
 
-      // 2. Also check local storage patient (e.g. Kamlesh Indurkar)
+      // 2. Also check real active local storage patient (e.g. Kamlesh Indurkar / currently logged in patient)
       try {
-        const localPatStr = localStorage.getItem('zeniva_patient_user');
+        const localPatStr = localStorage.getItem('zeniva_patient_user') || localStorage.getItem('zeniva_current_user');
         if (localPatStr) {
           const lp = JSON.parse(localPatStr);
-          if (lp && lp.name) {
-            const alreadyExists = list.some(
-              item => (lp.email && item.email === lp.email) || (lp.phone && item.phone === lp.phone) || (item.name.toLowerCase() === lp.name.toLowerCase())
-            );
-            if (!alreadyExists) {
-              list.unshift({
-                id: lp.id ? `PAT-${String(lp.id).slice(-4).toUpperCase()}` : 'PAT-LIVE',
-                rawId: lp.id,
-                name: lp.name.replace(/^Dr\.\s*/i, ''),
-                phone: lp.phone || '9011942126',
-                email: lp.email || '',
-                age: lp.age || '48',
-                gender: lp.gender || 'Male',
-                dosha: lp.prakriti || lp.dosha || 'Stress & Sleep Wellness Profile',
-                prakriti: lp.prakriti || lp.dosha || 'Stress & Sleep Wellness Profile',
-                city: lp.city || lp.location || 'Nagpur, Maharashtra',
-                bloodGroup: lp.bloodGroup || lp.blood_group || 'B+',
-                diet: lp.diet || 'Vegan Whole Plant Foods',
-                status: 'Active',
-                visits: 1,
-                lastVisit: 'Today',
-                registeredAt: 'Today',
-                avatar: lp.avatar || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150'
-              });
+          if (lp && lp.name && (lp.role === 'patient' || !lp.password)) {
+            const cleanLpName = lp.name.replace(/^Dr\.\s*/i, '');
+            if (!mockNames.includes(cleanLpName.toLowerCase())) {
+              const existingIdx = list.findIndex(
+                item => (lp.email && item.email && item.email.toLowerCase() === lp.email.toLowerCase()) || 
+                        (lp.phone && item.phone && item.phone.replace(/\D/g, '').slice(-10) === lp.phone.replace(/\D/g, '').slice(-10)) || 
+                        (item.name.toLowerCase() === cleanLpName.toLowerCase())
+              );
+              if (existingIdx >= 0) {
+                // Pin active user to top and tag as Logged In
+                list[existingIdx].status = 'Active (Logged In)';
+                const [activePat] = list.splice(existingIdx, 1);
+                list.unshift(activePat);
+              } else {
+                list.unshift({
+                  id: lp.id ? `PAT-${String(lp.id).slice(-4).toUpperCase()}` : 'PAT-LIVE',
+                  rawId: lp.id,
+                  name: cleanLpName,
+                  phone: lp.phone || '—',
+                  email: lp.email || '',
+                  age: lp.age || '—',
+                  gender: lp.gender || '—',
+                  dosha: lp.prakriti || lp.dosha || 'Constitutional Health Balance',
+                  prakriti: lp.prakriti || lp.dosha || 'Constitutional Health Balance',
+                  city: lp.city || lp.location || 'Maharashtra',
+                  bloodGroup: lp.bloodGroup || lp.blood_group || '—',
+                  diet: lp.diet || 'Ayurvedic Sattvic Whole Foods',
+                  status: 'Active (Logged In)',
+                  visits: 1,
+                  lastVisit: 'Today',
+                  registeredAt: 'Today',
+                  avatar: lp.avatar || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150'
+                });
+              }
             }
           }
         }
       } catch (e) {}
 
-      if (list.length > 0) {
-        setPatientsRoster(list);
-      }
+      // Update state and persistence
+      setPatientsRoster(list);
+      try {
+        localStorage.setItem('zeniva_cached_real_patients', JSON.stringify(list));
+      } catch (e) {}
     } catch (err) {
       console.warn('Doctor patients roster fetch notice:', err);
     } finally {
