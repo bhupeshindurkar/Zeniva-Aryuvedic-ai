@@ -2,62 +2,88 @@
 
 > **Zeniva AI** — Blending Ancient Ayurvedic Wisdom with Modern Neural AI Clinical Care.
 
+Zeniva-Ayurvedic-AI
+│
+├── 🚀 Overview
+├── ✨ Features
+├── 🛠️ Technology Stack
+├── 🏗️ Architecture
+├── 📸 Screenshots
+├── ⚙️ Installation
+├── 🔐 Environment Variables
+├── ▶️ Running Locally
+├── 🌐 Live Demo
+├── 📦 Download
+└── 👨‍💻 Author
+
+# 🌿 Zeniva Ayurvedic AI
+
+> AI-powered Ayurvedic wellness platform combining traditional Ayurvedic principles with modern Artificial Intelligence.
+
+## 🚀 Live Demo
+
+🌐 **Live Website:** https://zeniva-ayurvedic-ai.vercel.app
+
+## 📌 Overview
+
+Zeniva Ayurvedic AI is an AI-powered clinical and wellness platform designed to combine Ayurvedic principles with modern AI technologies.
+
+The platform provides personalized wellness insights, lifestyle recommendations, AI-assisted health information, doctor portals, and digital patient health records.
+
+## ✨ Features
+
+- 🤖 AI-powered health insights
+- 🌿 Ayurvedic wellness guidance
+- 🧠 AI / LLM integration
+- 🔎 RAG-based information retrieval
+- 👨‍⚕️ Doctor portal
+- 👤 Patient dashboard
+- 📋 Electronic Health Records
+- 🔐 Authentication
+- 🗄️ Supabase PostgreSQL database
+- 📱 Responsive user interface
+- ☁️ Vercel deployment
+
+## 🛠️ Technology Stack
+
+### Frontend
+- React
+- Vite
+- Tailwind CSS
+- Lucide Icons
+
+### Backend
+- Python
+- FastAPI
+- SQLite
+
+### AI
+- LLM
+- RAG
+- Llama-based AI
+
+### Database & Authentication
+- Supabase
+- PostgreSQL
+- Supabase Auth
+
+### Deployment
+- Vercel
+
+## 🌐 Live Demo
+
+👉 https://zeniva-ayurvedic-ai.vercel.app
+
+## 📦 Download
+
+You can download the complete project from the **Releases** section.
+
+## 👨‍💻 Author
+
+**Bhupesh Indurkar**
+
+B.Tech – Information Technology
+
 ---
 
-## 🌿 Overview
-Zeniva AI is an advanced clinical and wellness platform that combines Classical Ayurvedic Samhita principles (Vata, Pitta, Kapha) with AI diagnostics, personalized lifestyle planners, authenticated doctor portals, and patient Electronic Health Records (EHR).
-
----
-
-## 🚀 Technology Stack
-- **Frontend**: React 19, Vite, TailwindCSS, Lucide Icons, Canvas Confetti
-- **Backend**: FastAPI (Python), SQLite, RAG LLM Engine (Llama 3.3 70B)
-- **Authentication & Database**: Supabase PostgreSQL & Auth, Encrypted Sessions
-- **Deployment**: Vercel-ready with Single Page Application rewrites
-
----
-
-## 📦 Project Structure
-```
-zeniva-ai/
-├── frontend/             # React + Vite Frontend
-│   ├── src/
-│   │   ├── components/   # UI Modals, Sidebar, Header, LLM Widget
-│   │   ├── views/        # Doctor, Patient, and Admin Dashboards
-│   │   └── lib/          # Supabase and API utilities
-│   └── package.json
-├── backend/              # FastAPI Backend API
-│   ├── main.py           # Core FastAPI API Routes
-│   ├── rag_engine.py     # Ayurvedic RAG Knowledge Engine
-│   ├── database.py       # SQLite Database Layer
-│   └── requirements.txt
-├── vercel.json           # Vercel Deployment Configuration
-└── package.json          # Root workspace scripts
-```
-
----
-
-## 🛠️ Local Development
-
-### 1. Frontend
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-### 2. Backend
-```bash
-cd backend
-pip install -r requirements.txt
-uvicorn main:app --reload --port 8000
-```
-
----
-
-## 🌐 Deploy to Vercel
-1. Import this repository into [Vercel](https://vercel.com).
-2. Set Build Command: `npm run build`
-3. Set Output Directory: `frontend/dist`
-4. Configure environment variables (`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`).
-#
+⭐ If you find this project useful, consider giving the repository a star.
