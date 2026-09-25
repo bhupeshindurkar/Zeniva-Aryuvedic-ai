@@ -339,8 +339,8 @@ Namaste ${targetDoctor} & Zeniva Clinical Care Team, I would like to consult wit
                     1-on-1 Direct Doctor & AI Chat
                   </span>
                 </div>
-                <span className="text-[11px] font-mono font-bold text-stone-500">
-                  Official: +91 {officialDoctorPhone}
+                <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
+                  24x7 Verified Clinical Desk
                 </span>
               </div>
 
@@ -483,8 +483,8 @@ Namaste ${targetDoctor} & Zeniva Clinical Care Team, I would like to consult wit
               <span>{isConnectingWhatsApp ? 'Connecting...' : 'Chat with Doctor'}</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </button>
-            <p className="text-[10px] text-stone-500 text-center mt-1.5 font-mono">
-              Official: +91 {officialDoctorPhone}
+            <p className="text-[10px] text-emerald-700 font-semibold text-center mt-1.5">
+              24x7 Ayurvedic Clinical Desk
             </p>
           </div>
         </div>

@@ -2013,7 +2013,7 @@ def create_whatsapp_session(req: WhatsAppSessionRequest):
         # Load official verified Zeniva number from server environment (default: +91 8766903403)
         raw_number = os.getenv("ZENIVA_OFFICIAL_WHATSAPP", "918766903403")
         official_wa_number = raw_number.replace("+", "").replace(" ", "").replace("-", "")
-        wa_display = os.getenv("ZENIVA_WHATSAPP_DISPLAY", "+91 8766903403")
+        wa_display = os.getenv("ZENIVA_WHATSAPP_DISPLAY", "Zeniva 24x7 Clinical Desk")
 
         # Unique session reference
         session_ref = f"ZEN-WA-{random.randint(100000, 999999)}"

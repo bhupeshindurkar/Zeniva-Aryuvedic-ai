@@ -67,10 +67,10 @@ export const AdminDashboard = ({
 
   const [patientsList, setPatientsList] = useState([
     {
-      id: 'usr_8766903403',
-      name: 'Bhupesh Indurkar',
-      phone: '8766903403',
-      email: 'bhupesh.indurkar@zeniva.ai',
+      id: 'usr_patient_demo_01',
+      name: 'Ayurvedic Patient',
+      phone: '+91 98••••••01',
+      email: 'patient.care@zeniva.ai',
       age: 21,
       gender: 'Male',
       prakriti: '⚡ Joint Mobility & Stamina Care Profile',
@@ -160,7 +160,7 @@ export const AdminDashboard = ({
 
   // Assessment History
   const [assessmentHistoryList, setAssessmentHistoryList] = useState([
-    { id: 'ASM-101', patient: 'Bhupesh Indurkar', phone: '8766903403', prakriti: '⚡ Joint Mobility & Stamina', vikriti: 'Muscle & Joint Fatigue', agni: 'Optimal', nadi: 'Steady Rhythm (72 bpm)', score: '96% Match', date: '03 Sep 2026', time: '11:30 AM', status: 'Active' },
+    { id: 'ASM-101', patient: 'Kiran Verma', phone: '+91 98••••••01', prakriti: '⚡ Joint Mobility & Stamina', vikriti: 'Muscle & Joint Fatigue', agni: 'Optimal', nadi: 'Steady Rhythm (72 bpm)', score: '96% Match', date: '03 Sep 2026', time: '11:30 AM', status: 'Active' },
     { id: 'ASM-102', patient: 'Aarav Patil', phone: '9876543210', prakriti: '🔥 Digestion & Acidity Care', vikriti: 'Acid Reflux & Gastric Heat', agni: 'High Acid', nadi: 'Active Rhythm (82 bpm)', score: '94% Match', date: '02 Sep 2026', time: '04:15 PM', status: 'Prescribed' },
     { id: 'ASM-103', patient: 'Neha Kulkarni', phone: '9822011223', prakriti: '🍃 Immunity & Cold Defense', vikriti: 'Seasonal Sluggishness', agni: 'Sluggish', nadi: 'Calm Rhythm (68 bpm)', score: '98% Match', date: '01 Sep 2026', time: '02:00 PM', status: 'Follow-up' },
     { id: 'ASM-104', patient: 'Rohan Deshmukh', phone: '9833455667', prakriti: '🍃 Respiratory Health Shield', vikriti: 'Chest Congestion & Cough', agni: 'Variable', nadi: 'Steady Rhythm (70 bpm)', score: '92% Match', date: '31 Aug 2026', time: '10:45 AM', status: 'Resolved' },
@@ -169,7 +169,7 @@ export const AdminDashboard = ({
 
   // Recommendation History
   const [recommendationHistoryList, setRecommendationHistoryList] = useState([
-    { id: 'REC-201', patient: 'Bhupesh Indurkar', doctor: 'Dr. Priya Sharma', formulation: 'Triphala Churna (3g) + Ashwagandha Arishta (15ml)', diet: 'Warm freshly prepared grains, ghee, avoid dry items', lifestyle: 'Abhyanga with sesame oil, Nadi Shodhana Pranayama', date: '03 Sep 2026', status: 'Active' },
+    { id: 'REC-201', patient: 'Kiran Verma', doctor: 'Dr. Priya Sharma', formulation: 'Triphala Churna (3g) + Ashwagandha Arishta (15ml)', diet: 'Warm freshly prepared grains, ghee, avoid dry items', lifestyle: 'Abhyanga with sesame oil, Nadi Shodhana Pranayama', date: '03 Sep 2026', status: 'Active' },
     { id: 'REC-202', patient: 'Aarav Patil', doctor: 'Dr. Rajesh Joshi', formulation: 'Avipattikar Churna (3g before meals) + Kamadudha Ras', diet: 'Cooling non-acidic wholesome meals, coconut water', lifestyle: 'Sheetali Pranayama, avoid midday sun exposure', date: '02 Sep 2026', status: 'Completed' },
     { id: 'REC-203', patient: 'Neha Kulkarni', doctor: 'Dr. Bhupesh Indurkar', formulation: 'Trikatu Churna (1g with honey) + Kanchanar Guggulu', diet: 'Light warm barley soup, dry ginger tea, low dairy', lifestyle: 'Surya Namaskar 12 rounds, brisk morning walk', date: '01 Sep 2026', status: 'Ongoing' },
     { id: 'REC-204', patient: 'Rohan Deshmukh', doctor: 'Dr. Ananya Deshmukh', formulation: 'Sitopaladi Churna (2g with ghee & honey) + Vasavaleha', diet: 'Warm turmeric milk with black pepper, hot liquids', lifestyle: 'Steam inhalation with eucalyptus, Kapalabhati', date: '31 Aug 2026', status: 'Completed' }
@@ -195,7 +195,7 @@ export const AdminDashboard = ({
 
   // Appointments Lists
   const [appointmentsList, setAppointmentsList] = useState([
-    { id: 'APT-501', time: 'Today, 10:00 AM', patient: 'Bhupesh Indurkar', phone: '8766903403', doctor: 'Dr. Priya Sharma', type: 'Video Tele-Consultation', condition: '⚡ Joint Mobility & Stamina Care', status: 'upcoming' },
+    { id: 'APT-501', time: 'Today, 10:00 AM', patient: 'Kiran Verma', phone: '+91 98••••••01', doctor: 'Dr. Priya Sharma', type: 'Video Tele-Consultation', condition: '⚡ Joint Mobility & Stamina Care', status: 'upcoming' },
     { id: 'APT-502', time: 'Today, 11:30 AM', patient: 'Aarav Patil', phone: '9876543210', doctor: 'Dr. Bhupesh Indurkar', type: 'In-Clinic Consultation', condition: '🔥 Digestion & Acidity Assessment', status: 'upcoming' },
     { id: 'APT-503', time: 'Today, 02:00 PM', patient: 'Neha Kulkarni', phone: '9822011223', doctor: 'Dr. Rajesh Joshi', type: 'Video Tele-Consultation', condition: '🍃 Immunity & Metabolic Detox Protocol', status: 'upcoming' },
     { id: 'APT-504', time: 'Yesterday, 04:30 PM', patient: 'Rohan Deshmukh', phone: '9833455667', doctor: 'Dr. Ananya Deshmukh', type: 'In-Clinic Consultation', condition: '🍃 Respiratory & Cold Relief', status: 'completed' },
@@ -980,7 +980,7 @@ export const AdminDashboard = ({
       event: 'Patient Health Assessment Completed',
       category: 'AI Assessment',
       actor: 'Zeniva AI Diagnostic Core',
-      user: 'usr_8766903403',
+      user: 'usr_patient_demo_01',
       ip: '127.0.0.1 (Localhost)',
       token: 'sha256_a10f92cd33b451',
       severity: 'Info',

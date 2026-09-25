@@ -1188,7 +1188,7 @@ export const DoctorDashboard = ({
               </span>
               <div>
                 <p className="text-[11px] font-bold text-stone-200">MESSAGES • WhatsApp & SMS</p>
-                <p className="text-[9px] text-stone-400">To: +91 {currentUser.phone || '8766903403'}</p>
+                <p className="text-[9px] text-stone-400">To: {currentUser.phone ? `+91 ${currentUser.phone}` : 'Registered Phone'}</p>
               </div>
             </div>
             <div className="flex items-center gap-1">
@@ -1266,7 +1266,7 @@ export const DoctorDashboard = ({
               <div>
                 <span className="font-bold">Instant Notification Dispatched:</span>
                 <p className="text-stone-600 mt-0.5">
-                  An instant SMS alert with resolution link has been delivered to your mobile: <strong className="font-mono text-stone-900">+91 {currentUser.phone || '8766903403'}</strong>.
+                  An instant SMS alert with resolution link has been delivered to your mobile: <strong className="font-mono text-stone-900">{currentUser.phone ? `+91 ${currentUser.phone}` : 'Registered Mobile'}</strong>.
                 </p>
               </div>
             </div>
@@ -2104,7 +2104,7 @@ export const DoctorDashboard = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
             <div className="p-4 rounded-2xl bg-stone-50 border border-stone-200 space-y-1">
               <span className="font-bold text-stone-400 uppercase text-[10px]">Registered Phone</span>
-              <p className="font-bold text-stone-900">+91 {currentUser.phone || '8766903403'}</p>
+              <p className="font-bold text-stone-900">{currentUser.phone ? `+91 ${currentUser.phone}` : '—'}</p>
             </div>
             <div className="p-4 rounded-2xl bg-stone-50 border border-stone-200 space-y-1">
               <span className="font-bold text-stone-400 uppercase text-[10px]">Clinical Organization</span>
@@ -2387,7 +2387,7 @@ export const DoctorDashboard = ({
                       required
                       value={chamberDetails.phone}
                       onChange={(e) => setChamberDetails({ ...chamberDetails, phone: e.target.value })}
-                      placeholder="e.g. 8766903403"
+                      placeholder="e.g. 9876543210"
                       className="w-full p-2.5 rounded-xl border border-stone-200 bg-white text-stone-900 font-mono focus:ring-2 focus:ring-purple-600/30 outline-none"
                     />
                   </div>
@@ -3564,7 +3564,7 @@ export const DoctorDashboard = ({
                     required
                     value={profileForm.phone}
                     onChange={(e) => setProfileForm({ ...profileForm, phone: e.target.value })}
-                    placeholder="e.g. 8766903403"
+                    placeholder="e.g. 9876543210"
                     className="w-full p-2.5 rounded-xl border border-stone-200 bg-white text-stone-900 font-mono focus:ring-2 focus:ring-purple-600/30 outline-none"
                   />
                 </div>
