@@ -371,7 +371,7 @@ Namaste ${targetDoctor} & Zeniva Clinical Care Team, I would like to consult wit
                     type="text"
                     value={guestName}
                     onChange={(e) => setGuestName(e.target.value)}
-                    placeholder="e.g. Bhupesh Indurkar"
+                    placeholder="Enter your name (उदा. राहुल शर्मा)"
                     className="w-full px-3 py-2 rounded-xl bg-white border border-stone-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-xs font-medium"
                   />
                 </div>
@@ -592,7 +592,7 @@ Namaste ${targetDoctor} & Zeniva Clinical Care Team, I would like to consult wit
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Bhupesh Indurkar"
+                  placeholder="Enter your full name (उदा. राहुल शर्मा)"
                   value={formData.fullName}
                   onChange={(e) => setFormData(prev => ({ ...prev, fullName: e.target.value }))}
                   className="w-full px-3.5 py-2.5 rounded-xl bg-[#FAF7F2] border border-[#E5DAC6] focus:outline-none focus:ring-2 focus:ring-purple-600 text-xs sm:text-sm font-medium"
