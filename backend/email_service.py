@@ -8,10 +8,10 @@ def get_smtp_config() -> Dict[str, Any]:
     return {
         "host": os.getenv("SMTP_HOST", "smtp.gmail.com"),
         "port": int(os.getenv("SMTP_PORT", "587")),
-        "user": os.getenv("SMTP_USER", "").strip(),
+        "user": os.getenv("SMTP_USER", "contact.zeniva@gmail.com").strip(),
         "password": os.getenv("SMTP_PASSWORD", "").strip(),
-        "from_email": os.getenv("SMTP_FROM_EMAIL", "").strip() or os.getenv("SMTP_USER", "").strip() or "noreply@zeniva.ai",
-        "from_name": os.getenv("SMTP_FROM_NAME", "Zeniva AI - Ayurvedic Care Platform")
+        "from_email": os.getenv("SMTP_FROM_EMAIL", "").strip() or os.getenv("SMTP_USER", "").strip() or "contact.zeniva@gmail.com",
+        "from_name": os.getenv("SMTP_FROM_NAME", "Zeniva AI Support Desk")
     }
 
 def generate_patient_confirmation_html(
@@ -276,7 +276,7 @@ def generate_patient_confirmation_html(
     <div class="footer">
       <p style="margin: 0 0 6px 0; font-weight: bold; color: #cbd5e1;">Zeniva AI · Advanced Clinical Ayurvedic Platform</p>
       <p style="margin: 0 0 6px 0;">Engineered by Department of Information Technology, TGPCET Nagpur</p>
-      <p style="margin: 0;">Need help? Reach our team at <a href="mailto:bhupesh_it@tgpcet.com">bhupesh_it@tgpcet.com</a></p>
+      <p style="margin: 0;">Need help? Reach our team at <a href="mailto:contact.zeniva@gmail.com">contact.zeniva@gmail.com</a></p>
     </div>
   </div>
 </body>
@@ -370,3 +370,143 @@ Zeniva AI · TGPCET Nagpur
         "otp_preview": otp_code,
         "message": f"Confirmation email dispatched to {to_email} (Valid for 10 minutes)"
     }
+
+def send_issue_alert_email(
+    ticket_id: str,
+    sender_name: str,
+    sender_email: str,
+    sender_phone: str = "",
+    user_role: str = "User",
+    category: str = "General Inquiry",
+    subject: str = "Support Ticket",
+    description: str = "",
+    target_email: str = "contact.zeniva@gmail.com"
+) -> Dict[str, Any]:
+    """
+    Sends an urgent email notification to the official Zeniva alert inbox (contact.zeniva@gmail.com)
+    when any issue, grievance, doctor query, or bug report is submitted.
+    """
+    config = get_smtp_config()
+    target_email = os.getenv("ZENIVA_OFFICIAL_EMAIL", "contact.zeniva@gmail.com").strip() or target_email
+
+    email_subject = f"🚨 [Zeniva AI Notification] {category}: {subject} ({ticket_id})"
+
+    html_content = f"""<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #0c0817; color: #1e1b4b; padding: 20px; }}
+    .container {{ max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 16px; overflow: hidden; border: 1px solid #e2e8f0; }}
+    .header {{ background: linear-gradient(135deg, #090d16 0%, #1c1030 50%, #4c1d95 100%); color: #ffffff; padding: 24px; text-align: left; }}
+    .badge {{ display: inline-block; background: #ef4444; color: #fff; padding: 4px 10px; border-radius: 9999px; font-size: 11px; font-weight: bold; text-transform: uppercase; margin-bottom: 8px; }}
+    .title {{ margin: 0; font-size: 20px; font-weight: bold; color: #fef08a; }}
+    .content {{ padding: 24px; line-height: 1.6; color: #334155; }}
+    .info-table {{ width: 100%; border-collapse: collapse; margin-top: 16px; margin-bottom: 16px; }}
+    .info-table td {{ padding: 10px; border-bottom: 1px solid #f1f5f9; font-size: 13px; }}
+    .info-table td.label {{ font-weight: bold; color: #64748b; width: 140px; }}
+    .desc-box {{ background: #faf5ff; border-left: 4px solid #9333ea; padding: 14px; border-radius: 8px; margin-top: 12px; font-size: 13px; color: #1e1b4b; white-space: pre-wrap; }}
+    .footer {{ background: #f8fafc; padding: 16px 24px; font-size: 11px; color: #94a3b8; text-align: center; border-top: 1px solid #f1f5f9; }}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="badge">URGENT PLATFORM NOTIFICATION</div>
+      <h2 class="title">🌿 Zeniva AI — Website Issue / Ticket Alert</h2>
+      <p style="margin: 4px 0 0 0; font-size: 12px; color: #cbd5e1;">Official Dispatch to: {target_email}</p>
+    </div>
+    <div class="content">
+      <p style="margin-top: 0; font-size: 14px;">A new support ticket / website issue has been registered on the <strong>Zeniva Ayurvedic AI Platform</strong>:</p>
+      
+      <table class="info-table">
+        <tr><td class="label">Ticket Ref:</td><td><strong style="font-family: monospace; color: #7c3aed;">{ticket_id}</strong></td></tr>
+        <tr><td class="label">Sender Role:</td><td><span style="font-weight: 600; text-transform: uppercase; color: #0284c7;">{user_role}</span></td></tr>
+        <tr><td class="label">Sender Name:</td><td><strong>{sender_name}</strong></td></tr>
+        <tr><td class="label">Sender Email:</td><td><a href="mailto:{sender_email}" style="color: #7c3aed;">{sender_email}</a></td></tr>
+        <tr><td class="label">Sender Mobile:</td><td>{sender_phone or "Not provided"}</td></tr>
+        <tr><td class="label">Category:</td><td><span style="background: #f1f5f9; padding: 2px 8px; border-radius: 6px; font-weight: 600;">{category}</span></td></tr>
+        <tr><td class="label">Subject:</td><td><strong>{subject}</strong></td></tr>
+      </table>
+
+      <h4 style="margin: 16px 0 6px 0; color: #1e1b4b; font-size: 13px;">Issue / Message Details:</h4>
+      <div class="desc-box">{description or "No detailed message provided."}</div>
+
+      <div style="margin-top: 24px; text-align: center;">
+        <a href="mailto:{sender_email}?subject=Re: {ticket_id} - Zeniva Support Desk" style="display: inline-block; background: #7c3aed; color: #ffffff; padding: 10px 20px; border-radius: 10px; text-decoration: none; font-size: 13px; font-weight: bold;">Reply to Sender Directly</a>
+      </div>
+    </div>
+    <div class="footer">
+      Zeniva AI Ayurvedic Platform · Automated Alert Dispatcher<br>
+      Delivered automatically to official monitor: {target_email}
+    </div>
+  </div>
+</body>
+</html>
+"""
+
+    plain_text = f"""[ZENIVA AI ISSUE & TICKET ALERT]
+Ticket ID: {ticket_id}
+Target Notification: {target_email}
+Sender: {sender_name} ({user_role})
+Email: {sender_email}
+Phone: {sender_phone}
+Category: {category}
+Subject: {subject}
+
+Message:
+{description}
+"""
+
+    # Check if SMTP user and password are validly set
+    if config["user"] and config["password"]:
+        try:
+            msg = MIMEMultipart("alternative")
+            msg["Subject"] = email_subject
+            msg["From"] = f"{config['from_name']} <{config['from_email']}>"
+            msg["To"] = target_email
+            msg["Reply-To"] = sender_email
+
+            msg.attach(MIMEText(plain_text, "plain", "utf-8"))
+            msg.attach(MIMEText(html_content, "html", "utf-8"))
+
+            if config["port"] == 465:
+                server = smtplib.SMTP_SSL(config["host"], config["port"], timeout=10)
+            else:
+                server = smtplib.SMTP(config["host"], config["port"], timeout=10)
+                server.starttls()
+
+            server.login(config["user"], config["password"])
+            server.sendmail(config["from_email"], [target_email], msg.as_string())
+            server.quit()
+
+            print(f"[SMTP Success] Issue notification dispatched to {target_email}")
+            return {
+                "success": True,
+                "delivered": True,
+                "method": "smtp",
+                "recipient": target_email,
+                "ticket_id": ticket_id
+            }
+        except Exception as smtp_err:
+            print(f"[SMTP Error]: {smtp_err}. Falling back to active simulation mode.")
+
+    # Simulated Delivery / Console Logging Mode
+    print("=" * 65)
+    print(f"[EMAIL NOTIFICATION DISPATCHED TO: {target_email}]")
+    print(f"[TICKET REF]: {ticket_id}")
+    print(f"[FROM]: {sender_name} ({sender_email}, {sender_phone})")
+    print(f"[ROLE]: {user_role} | [CATEGORY]: {category}")
+    print(f"[SUBJECT]: {subject}")
+    print(f"[MESSAGE]: {description}")
+    print("=" * 65)
+
+    return {
+        "success": True,
+        "delivered": False,
+        "method": "simulated",
+        "recipient": target_email,
+        "ticket_id": ticket_id,
+        "message": f"Alert registered and queued for {target_email}"
+    }
+

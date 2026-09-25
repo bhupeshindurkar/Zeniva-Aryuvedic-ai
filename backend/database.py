@@ -254,6 +254,25 @@ def init_db():
     )
     """)
 
+    # System Issues, Patient Grievances, Doctor Queries & Support Tickets Table
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS system_issues_and_tickets (
+        id TEXT PRIMARY KEY,
+        ticket_id TEXT UNIQUE,
+        user_role TEXT DEFAULT 'guest',
+        sender_name TEXT,
+        sender_email TEXT,
+        sender_phone TEXT,
+        issue_category TEXT,
+        subject TEXT,
+        description TEXT,
+        status TEXT DEFAULT 'open',
+        notification_target_email TEXT DEFAULT 'contact.zeniva@gmail.com',
+        notification_dispatched INTEGER DEFAULT 1,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
+
     # Seed permanent default active broadcast if empty or missing
     cursor.execute("SELECT COUNT(*) FROM system_broadcasts WHERE key = 'active_broadcast'")
     if cursor.fetchone()[0] == 0:

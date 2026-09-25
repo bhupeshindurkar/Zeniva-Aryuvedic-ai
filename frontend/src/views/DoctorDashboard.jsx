@@ -3188,12 +3188,16 @@ export const DoctorDashboard = ({
             <div className="p-5 rounded-2xl bg-[#FAF8F5] border border-stone-200 space-y-2">
               <h3 className="font-bold text-stone-900">Clinical Technical Helpline</h3>
               <p className="text-stone-600">For issues regarding OPD appointments, digital prescriptions, or live AI diagnostics.</p>
-              <p className="text-purple-900 font-mono font-bold">support@zeniva.ai · Toll Free: 1800-892-ZEN</p>
+              <a href="mailto:contact.zeniva@gmail.com" className="text-purple-700 hover:text-purple-900 font-mono font-bold hover:underline block">
+                contact.zeniva@gmail.com · Toll Free: 1800-892-ZEN
+              </a>
             </div>
             <div className="p-5 rounded-2xl bg-[#FAF8F5] border border-stone-200 space-y-2">
               <h3 className="font-bold text-stone-900">State Medical Council Compliance</h3>
               <p className="text-stone-600">Guidance on state licensing renewal, digital telemedicine statutory norms.</p>
-              <p className="text-purple-900 font-mono font-bold">compliance@zeniva.ai</p>
+              <a href="mailto:contact.zeniva@gmail.com" className="text-purple-700 hover:text-purple-900 font-mono font-bold hover:underline block">
+                contact.zeniva@gmail.com
+              </a>
             </div>
           </div>
         </div>

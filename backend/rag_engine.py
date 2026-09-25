@@ -62,6 +62,10 @@ Zeniva AI was conceptualized, designed, and engineered by the Zeniva Group under
    - LinkedIn: https://www.linkedin.com/in/sachin-limbule-21b04b3a2/
    - Key Focus: Comprehensive website testing, cross-browser compatibility audits, web security barrier verification, usability testing, and performance optimization.
 
+### Official Zeniva Support & Helpdesk:
+- Official Support & Notification Email: contact.zeniva@gmail.com
+- Available 24/7 for patient health consultations, doctor verification support, technical glitches, bug reports, and administrative queries.
+
 ### Navigation on Dashboard:
 To view the team and their detailed contributions directly on the Zeniva Dashboard, users can navigate to the 'Zeniva Creators & Team' tab in the navigation menu or open '#overview/team' directly.
 """

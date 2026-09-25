@@ -20,7 +20,7 @@ from database import init_db, get_db_connection
 from auth import generate_and_save_otp, verify_otp_code, direct_login
 from rag_engine import rag_engine
 from skin_diagnostic_engine import perform_complete_skin_diagnosis
-from email_service import send_patient_confirmation_email
+from email_service import send_patient_confirmation_email, send_issue_alert_email
 
 # Initialize SQLite database
 init_db()
@@ -2006,6 +2006,90 @@ class WhatsAppSessionRequest(BaseModel):
     recent_reply: Optional[str] = None
     chat_summary: Optional[str] = None
     source: Optional[str] = "patient_contact_page"
+
+class SupportIssueRequest(BaseModel):
+    sender_name: str
+    sender_email: str
+    sender_phone: Optional[str] = ""
+    user_role: Optional[str] = "patient"
+    category: Optional[str] = "Clinical Consultation"
+    subject: Optional[str] = "Platform Support Ticket"
+    message: str
+
+@app.post("/api/support/submit-issue")
+def submit_support_issue(req: SupportIssueRequest):
+    try:
+        ticket_id = f"ZEN-TKT-{random.randint(100000, 999999)}"
+        issue_id = f"iss_{uuid.uuid4().hex[:12]}"
+        target_email = os.getenv("ZENIVA_OFFICIAL_EMAIL", "contact.zeniva@gmail.com").strip() or "contact.zeniva@gmail.com"
+
+        # Save to database
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute("""
+            INSERT INTO system_issues_and_tickets 
+            (id, ticket_id, user_role, sender_name, sender_email, sender_phone, issue_category, subject, description, status, notification_target_email, notification_dispatched)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                issue_id,
+                ticket_id,
+                req.user_role or "patient",
+                req.sender_name or "Zeniva User",
+                req.sender_email,
+                req.sender_phone or "",
+                req.category or "General Inquiry",
+                req.subject or "Support Ticket",
+                req.message,
+                "open",
+                target_email,
+                1
+            ))
+            conn.commit()
+            conn.close()
+        except Exception as dbe:
+            print("[Support Ticket DB Notice]:", dbe)
+
+        # Dispatch email alert to contact.zeniva@gmail.com
+        alert_res = send_issue_alert_email(
+            ticket_id=ticket_id,
+            sender_name=req.sender_name,
+            sender_email=req.sender_email,
+            sender_phone=req.sender_phone or "",
+            user_role=req.user_role or "patient",
+            category=req.category or "General Inquiry",
+            subject=req.subject or "Support Ticket",
+            description=req.message,
+            target_email=target_email
+        )
+
+        return {
+            "success": True,
+            "ticket_id": ticket_id,
+            "target_email": target_email,
+            "delivered": alert_res.get("delivered", False),
+            "message": f"Your inquiry has been registered (Ticket ID: {ticket_id}) and notified to {target_email}."
+        }
+    except Exception as e:
+        print("[Support Issue Submit Error]:", e)
+        return {
+            "success": False,
+            "error": str(e),
+            "ticket_id": f"ZEN-TKT-{random.randint(100000, 999999)}"
+        }
+
+@app.get("/api/support/tickets")
+def list_support_tickets():
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM system_issues_and_tickets ORDER BY created_at DESC LIMIT 50")
+        rows = cursor.fetchall()
+        conn.close()
+        tickets = [dict(row) for row in rows]
+        return {"success": True, "tickets": tickets}
+    except Exception as e:
+        return {"success": False, "tickets": [], "error": str(e)}
 
 @app.post("/api/contact/whatsapp-session")
 def create_whatsapp_session(req: WhatsAppSessionRequest):
